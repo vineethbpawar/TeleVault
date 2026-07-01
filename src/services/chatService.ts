@@ -269,22 +269,25 @@ export const chatService = {
     return insertedMessage as ChatMessage;
   },
 
-  /**
-   * Subscribe to new messages in a conversation.
-   */
-  subscribeToMessages(conversationId: string, callback: (message: ChatMessage) => void) {
+  subscribeToMessages(
+    conversationId: string,
+    callback: (message: ChatMessage) => void,
+    statusCallback?: (status: string, err?: any) => void
+  ) {
     return supabase
-      .channel(`chat_messages:${conversationId}`)
+      .channel(`chat:${conversationId}`)
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'chat_messages',
           filter: `conversation_id=eq.${conversationId}`,
         },
         async (payload) => {
-          // If insert/update has a snap_id, fetch the snap details so it's joined
+          if (__DEV__) {
+            console.log('[Realtime] New message inserted:', payload);
+          }
           const msg = payload.new as ChatMessage;
           if (msg.snap_id) {
             const { data: snap } = await supabase
@@ -297,7 +300,14 @@ export const chatService = {
           callback(msg);
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (__DEV__) {
+          console.log(`[Realtime] Subscription status for chat:${conversationId} is: ${status}`, err || '');
+        }
+        if (statusCallback) {
+          statusCallback(status, err);
+        }
+      });
   },
 
   /**

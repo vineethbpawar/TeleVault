@@ -24,6 +24,7 @@ import GroupsScreen from '../screens/GroupsScreen';
 import GroupChatScreen from '../screens/GroupChatScreen';
 import CreateGroupScreen from '../screens/CreateGroupScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
+import ChunkManagerScreen from '../screens/ChunkManagerScreen';
 import { Session } from '@supabase/supabase-js';
 import { authEvents } from '../utils/authEvent';
 
@@ -137,6 +138,7 @@ export const AppNavigator: React.FC = () => {
             <Stack.Screen name="GroupChat" component={GroupChatScreen} />
             <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
             <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+            <Stack.Screen name="ChunkManager" component={ChunkManagerScreen} />
           </>
         )
       ) : (

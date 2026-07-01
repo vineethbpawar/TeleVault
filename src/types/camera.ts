@@ -55,6 +55,10 @@ export interface UploadQueueItem {
   error_message: string | null;
   created_at: string;
   updated_at: string;
+  upload_mode?: 'normal' | 'chunked';
+  large_file_id?: string | null;
+  chunk_progress?: string;
+  stage?: string;
 }
 
 export interface OptimizedMedia {

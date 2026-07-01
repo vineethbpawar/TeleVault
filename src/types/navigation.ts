@@ -51,6 +51,7 @@ export type AppStackParamList = {
   GroupChat: { groupId: string; groupName: string };
   CreateGroup: undefined;
   AdminDashboard: undefined;
+  ChunkManager: undefined;
 };
 
 

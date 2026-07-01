@@ -27,5 +27,7 @@ export interface TeleVaultFile {
   memory_date?: string;
   caption?: string | null;
   overlay_metadata?: any;
+  is_chunked?: boolean;
+  large_file_id?: string | null;
 }
 

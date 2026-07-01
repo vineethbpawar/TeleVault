@@ -19,7 +19,7 @@ This version introduces the official, custom-designed TeleVault logo. Designed a
 3. **Snapchat-style Lens & Overlay System:** Add overlays to your media on the Preview screen, including Time (`08:11 PM`), Date (`30 Jun 2026`), combined Time & Date, Location coordinates or geocoded address, floating emojis (😎, 😂, ❤️, 🔥, etc.), and sticker filters (Crown, Sunglasses, Heart Eyes, Fire) that can be dragged and repositioned directly on the screen.
 4. **Photo Optimization:** Automatically resizes and compresses captured images (down to 1600px width and 75% quality) to speed up cloud upload times without losing quality (can be toggled in settings).
 5. **Robust Background Upload Queue:** Media captures and Explorer uploads are sent to a local persistent queue. It uploads files sequentially, updates staged progress bars in the UI (Preparing -> Uploading -> Saving Metadata), and automatically resumes any pending/failed syncs when the app opens or returns to the foreground. Includes background synchronization support for Android using Expo Background Tasks and Task Manager.
-6. **Strict 50 MB Upload Limits:** Since Telegram's Bot API limits uploads to 50 MB, the app automatically checks sizes and safely blocks oversized files, warning the user before initiating failed requests.
+6. **Large File Mode (Chunked Uploads):** Supports files larger than the 50 MB normal Telegram Bot API limit by splitting them into smaller parts (45 MB chunks) and uploading them to Telegram sequentially. Files between 50 MB and 500 MB are supported. The app saves chunk metadata in Supabase, tracks individual chunk statuses, supports cancelling ongoing uploads, and resumes failed uploads by skipping chunks already uploaded.
 7. **Telegram Cloud Storage Bot:** Upload media to a private Telegram channel via your custom bot. Files are stored directly in Telegram's cloud for free, with no storage limits.
 8. **Encrypted Security PIN Locks:** Keep your normal Drive or Private Vault secure with optional local 4-digit PIN locks stored in SecureStore.
 9. **Dark Mode File Explorer:** A beautiful Google Drive-style file manager for organizing folders and uploading any document (PDFs, docs, text files) directly to Telegram.
@@ -88,6 +88,8 @@ Use Expo Go on your physical Android/iOS device or run on an emulator by pressin
 - **View-Once Snaps / Story Expiry:** Hides viewed snaps and expired stories inside the app. However, the original files are not deleted from the backing private Telegram channel logs automatically. Do not falsely assume snaps are permanently destroyed on Telegram.
 - **Bot API Database Limitations:** The Telegram Bot API cannot query past channel messages reliably to serve as an in-app database. Therefore, Supabase is used to index message history and power realtime updates, while Telegram holds the backing media files and chat logs copy.
 - **Security features:** End-to-end encryption (E2EE), screenshot prevention/detection, and auto-purging Telegram backups are not supported in the MVP and can be added later.
+- **Large File Mode Chunking:** Files over 50 MB and up to 500 MB are split into 45 MB chunks and uploaded as Telegram documents. Supabase indexes the chunk order and Telegram message/file IDs.
+- **Download & Rebuild:** On-device downloading and merging of chunks is currently in beta. For full 2 GB uploads without client-side chunking, a future roadmap option is connecting to a self-hosted Telegram Bot API server.
 
 ## Telegram Private Cloud Storage Setup
 
@@ -167,9 +169,68 @@ To keep the release APK footprint as small as possible:
 
 ## Troubleshooting
 
-- **Expo Camera / Permission Errors:** Ensure you grant camera and gallery permissions when prompted. In emulator runs, you might need to enable virtual camera settings or test on a real device.
-- **Telegram Upload Fails:** Double check that your bot is added as an administrator in the private channel, and that the channel ID is entered correctly with the `-100` prefix. Ensure your file size is under 50 MB.
-- **Supabase Session Missing:** Ensure `.env` is loaded. If variables are missing, clear cache and restart expo with: `npx expo start -c`.
-- **Gradle Compilation Fails:** If you face Gradle compilation issues during `./gradlew assembleDebug`, verify that your `JAVA_HOME` environment variable points to JDK 17.
+---
+
+## Upgrades in TeleVault v2.1.0 (Fix and Polish Update)
+
+This update focuses on performance, speed perception, and media capabilities:
+
+1. **Robust Realtime Messaging:** Realtime chat is powered by Supabase Realtime Channels. It automatically falls back to 5-second polling if connection drops, implements optimistic UI for instant message display, and updates conversation previews instantly.
+2. **Staged Upload Progress:** Displays detailed stage feedback: Queued -> Preparing -> Optimizing -> Uploading -> Saving Metadata -> Completed. Shows warning labels for large videos and upload modes (Normal vs. Chunked) for documents.
+3. **Upload Concurrency Settings:** Choose between `Stable` (1 concurrent upload) and `Fast` (2 concurrent normal uploads) under Settings. Chunked uploads remain sequential for reliability.
+4. **Real Chunk Manager:** Manage large chunked files (50 MB - 500 MB) split into 45 MB chunks. The Chunk Manager Screen allows you to monitor parts, view chunk logs, resume uploading, retry failed chunks, and delete metadata.
+5. **Natively Embedded MP4 Player:** Natively stream or play MP4 videos from Snap Viewer, Preview, and File Details screens using the native `expo-video` SDK module.
+6. **Universal Document Viewer:** Download PDF, Office, ZIP, and text files to cache, then open or share them externally using native `expo-sharing` sheets.
+7. **Telegram file URL / Download Helpers:** Securely query Telegram `getFile` endpoints and construct short-lived file download URLs without exposing bot tokens.
+
+---
+
+## Realtime Messaging Database Migration (Required)
+
+To use realtime chat, you MUST enable Supabase Realtime on the corresponding public tables. Run the contents of [supabase/migration_realtime_fix.sql](file:///home/vini/TeleVault/supabase/migration_realtime_fix.sql) in the **Supabase SQL Editor**.
+
+This query adds the following tables to the `supabase_realtime` publication:
+- `chat_messages`
+- `conversations`
+- `notifications`
+- `snaps`
+- `group_messages`
+
+It also locks down RLS policies so conversations, messages, and notifications are only readable by their respective owners or participants.
+
+---
+
+## Android APK Production Builds
+
+To compile local native APKs of your TeleVault app:
+
+1. **Prebuild Native Folders:**
+   Ensure your local system has Java Development Kit (JDK 17) and Android SDK configured, then prebuild the Android folders:
+   ```bash
+   npx expo prebuild
+   ```
+
+2. **Compile Debug APK:**
+   ```bash
+   cd android
+   ./gradlew assembleDebug
+   ```
+   *APK Location:* `android/app/build/outputs/apk/debug/app-debug.apk`
+
+3. **Compile Release APK:**
+   ```bash
+   cd android
+   ./gradlew assembleRelease
+   ```
+   *APK Location:* `android/app/build/outputs/apk/release/app-release.apk` (unsigned) or `app-release-signed.apk` if keystore is configured.
+
+---
+
+## Troubleshooting
+
+- **Realtime Chat Preview Not Updating:** Make sure you ran the `migration_realtime_fix.sql` script to enable postgres replication on your tables. If replication is disabled, Chat List and Room will automatically fallback to 5-second polling.
+- **Telegram Upload Fails:** Double check that your bot is added as an administrator in the private channel, and that the channel ID is entered correctly with the `-100` prefix. Ensure your normal file size is under 50 MB (or use Large File Mode up to 500 MB).
+- **Video Playback Error:** Make sure native player dependencies are compiled correctly. If testing on emulator, verify that H.264/MP4 hardware decoding is supported.
 - **Biometric Unlock Inoperative:** Biometrics toggling is enabled only after setting a local app security PIN. Verify your physical device supports biometrics and has enrolled fingerprints or face data.
+
 

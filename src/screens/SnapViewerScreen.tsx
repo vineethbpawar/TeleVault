@@ -8,11 +8,14 @@ import {
   SafeAreaView,
   Linking,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { X, Play, Video, MessageSquare } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
 import { snapService } from '../services/snapService';
+
+import VideoPlayer from '../components/VideoPlayer';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'SnapViewer'>;
 
@@ -65,17 +68,12 @@ export const SnapViewerScreen: React.FC<Props> = ({ navigation, route }) => {
       <View style={styles.mediaContainer}>
         {mediaType === 'image' && mediaUrl ? (
           <Image source={{ uri: mediaUrl }} style={styles.media} resizeMode="contain" />
+        ) : mediaType === 'video' && mediaUrl ? (
+          <VideoPlayer source={mediaUrl} style={styles.media} />
         ) : (
           <View style={styles.videoContainer}>
-            <View style={styles.iconRing}>
-              <Video size={48} color="#FFFC00" />
-            </View>
-            <Text style={styles.videoTitle}>Secure Video Snap</Text>
-            <Text style={styles.videoSub}>Stored on private Telegram backup logs</Text>
-            <TouchableOpacity style={styles.playBtn} onPress={handlePlayVideo}>
-              <Play size={20} color="#000000" fill="#000000" />
-              <Text style={styles.playBtnText}>Play Video</Text>
-            </TouchableOpacity>
+            <ActivityIndicator size="large" color="#FFFC00" />
+            <Text style={[styles.videoTitle, { marginTop: 12 }]}>Loading Video Snap...</Text>
           </View>
         )}
       </View>

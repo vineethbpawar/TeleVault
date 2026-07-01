@@ -22,6 +22,7 @@ import { uploadQueueService } from '../services/uploadQueueService';
 import { locationService } from '../services/locationService';
 import { snapService } from '../services/snapService';
 import UploadProgress from '../components/UploadProgress';
+import VideoPlayer from '../components/VideoPlayer';
 import { MediaOverlayItem } from '../types/camera';
 import * as FileSystem from 'expo-file-system/legacy';
 
@@ -452,12 +453,16 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         style={[styles.previewContainer, { transform: [{ rotate: `${rotation}deg` }] }]}
         onLayout={handleLayout}
       >
-        <Image
-          source={{ uri }}
-          style={styles.previewImage}
-          resizeMode="cover"
-          blurRadius={blurActive ? 20 : 0}
-        />
+        {type === 'video' ? (
+          <VideoPlayer source={uri} style={styles.previewImage} />
+        ) : (
+          <Image
+            source={{ uri }}
+            style={styles.previewImage}
+            resizeMode="cover"
+            blurRadius={blurActive ? 20 : 0}
+          />
+        )}
 
         {/* Filters Overlay */}
         <View style={[StyleSheet.absoluteFill, { backgroundColor: selectedFilter.color }]} pointerEvents="none" />

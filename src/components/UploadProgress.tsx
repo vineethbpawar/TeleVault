@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, Modal, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { RotateCw, Trash2, X, CloudUpload, CheckCircle, AlertCircle, Clock } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
 import { uploadQueueService } from '../services/uploadQueueService';
 import { UploadQueueItem } from '../types/camera';
 
@@ -11,6 +12,7 @@ interface UploadProgressProps {
 
 export const UploadProgress: React.FC<UploadProgressProps> = ({ visible, onClose }) => {
   const [queue, setQueue] = useState<UploadQueueItem[]>([]);
+  const navigation = useNavigation<any>();
 
   useEffect(() => {
     if (!visible) return;
@@ -33,6 +35,21 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ visible, onClose
     uploadQueueService.removeUploadQueueItem(id);
   };
 
+  const handleCancel = async (item: UploadQueueItem) => {
+    if (item.large_file_id) {
+      try {
+        const { largeFileService } = require('../services/largeFileService');
+        await largeFileService.cancelLargeFileUpload(item.large_file_id);
+      } catch (err) {
+        console.error('Error cancelling large file upload:', err);
+      }
+    }
+    await uploadQueueService.updateUploadQueueItem(item.id, {
+      status: 'failed',
+      error_message: 'Upload cancelled by user',
+    });
+  };
+
   const handleClearCompleted = () => {
     uploadQueueService.clearCompletedUploads();
   };
@@ -50,18 +67,36 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ visible, onClose
     }
   };
 
+  const formatSize = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
   const getStatusText = (item: UploadQueueItem) => {
     if (item.status === 'uploading') {
+      if (item.stage) {
+        return `${item.stage} (${item.progress}%)`;
+      }
+      if (item.upload_mode === 'chunked' && item.chunk_progress) {
+        return `Uploading (${item.chunk_progress} - ${item.progress}%)`;
+      }
       return `Uploading (${item.progress}%)`;
     }
     if (item.status === 'failed') {
       return item.error_message || 'Failed';
+    }
+    if (item.status === 'pending') {
+      return item.stage || 'Queued';
     }
     return item.status.charAt(0).toUpperCase() + item.status.slice(1);
   };
 
   const totalCount = queue.length;
   const activeCount = queue.filter((i) => i.status === 'uploading' || i.status === 'pending').length;
+  const hasChunkedUpload = queue.some((i) => i.upload_mode === 'chunked');
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -114,6 +149,29 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ visible, onClose
                         </Text>
                       </View>
                       
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 26, marginBottom: 4 }}>
+                        <Text style={styles.itemSizeText}>
+                          {formatSize(item.file_size)}
+                        </Text>
+                        {item.upload_mode === 'chunked' && (
+                          <View style={styles.chunkBadge}>
+                            <Text style={styles.chunkBadgeText}>Large File</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {item.file_type === 'video' && (
+                        <Text style={[styles.warningText, { marginLeft: 26, marginBottom: 4 }]}>
+                          Large videos may take longer depending on network.
+                        </Text>
+                      )}
+
+                      {item.file_type === 'document' && (
+                        <Text style={[styles.modeText, { marginLeft: 26, marginBottom: 4 }]}>
+                          Mode: {item.upload_mode === 'chunked' ? 'Chunked Upload' : 'Normal Upload'}
+                        </Text>
+                      )}
+                      
                       <Text style={[
                         styles.itemStatusText,
                         isUploading && { color: '#FFFC00' },
@@ -132,6 +190,17 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ visible, onClose
                     </View>
 
                     <View style={styles.itemActions}>
+                      {isUploading && item.upload_mode === 'chunked' && (
+                        <TouchableOpacity
+                          style={styles.cancelBtn}
+                          onPress={() => handleCancel(item)}
+                          activeOpacity={0.7}
+                        >
+                          <X size={14} color="#FF9500" />
+                          <Text style={styles.cancelBtnText}>Cancel</Text>
+                        </TouchableOpacity>
+                      )}
+
                       {isFailed && (
                         <TouchableOpacity
                           style={[styles.actionBtn, styles.actionBtnRetry]}
@@ -139,7 +208,9 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ visible, onClose
                           activeOpacity={0.7}
                         >
                           <RotateCw size={14} color="#000000" />
-                          <Text style={styles.actionBtnTextRetry}>Retry</Text>
+                          <Text style={styles.actionBtnTextRetry}>
+                            {item.upload_mode === 'chunked' ? 'Resume' : 'Retry'}
+                          </Text>
                         </TouchableOpacity>
                       )}
 
@@ -158,6 +229,20 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ visible, onClose
               })
             )}
           </ScrollView>
+
+          {/* Manage Large Uploads Button if chunked upload exists */}
+          {hasChunkedUpload && (
+            <TouchableOpacity
+              style={styles.manageLargeBtn}
+              onPress={() => {
+                onClose();
+                navigation.navigate('ChunkManager');
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.manageLargeBtnText}>Manage Large Uploads</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Close Button / Bottom Info */}
           <View style={styles.footer}>
@@ -286,6 +371,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginLeft: 26,
   },
+  itemSizeText: {
+    color: '#8E8E93',
+    fontSize: 11,
+  },
+  chunkBadge: {
+    backgroundColor: '#FF9500',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  chunkBadgeText: {
+    color: '#000000',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  cancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    marginRight: 8,
+    backgroundColor: 'rgba(255, 149, 0, 0.1)',
+  },
+  cancelBtnText: {
+    color: '#FF9500',
+    fontSize: 11,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
   progressBarContainer: {
     height: 4,
     backgroundColor: '#2C2C2E',
@@ -349,6 +465,32 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 15,
     fontWeight: '700',
+  },
+  manageLargeBtn: {
+    backgroundColor: 'rgba(255, 252, 0, 0.1)',
+    borderWidth: 1,
+    borderColor: '#FFFC00',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 20,
+    marginBottom: 12,
+  },
+  manageLargeBtnText: {
+    color: '#FFFC00',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  warningText: {
+    color: '#FF9500',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  modeText: {
+    color: '#8E8E93',
+    fontSize: 10,
   },
 });
 

@@ -15,7 +15,7 @@ const getImageSize = (uri: string): Promise<{ width: number; height: number }> =
 };
 
 export const mediaOptimizationService = {
-  async optimizeImageForUpload(uri: string): Promise<OptimizedMedia> {
+  async optimizeImageForUpload(uri: string, maxWidth = 1600, quality = 0.75): Promise<OptimizedMedia> {
     try {
       // 1. Get original file info
       const fileInfo = await FileSystem.getInfoAsync(uri);
@@ -34,20 +34,20 @@ export const mediaOptimizationService = {
 
       const actions: ImageManipulator.Action[] = [];
       
-      // If we got dimensions, resize only if width is greater than 1600px
-      if (dimensions && dimensions.width > 1600) {
-        actions.push({ resize: { width: 1600 } });
+      // If we got dimensions, resize only if width is greater than maxWidth
+      if (dimensions && dimensions.width > maxWidth) {
+        actions.push({ resize: { width: maxWidth } });
       } else if (!dimensions) {
-        // If we couldn't get dimensions, resize to 1600px anyway as a safe default
-        actions.push({ resize: { width: 1600 } });
+        // If we couldn't get dimensions, resize to maxWidth anyway as a safe default
+        actions.push({ resize: { width: maxWidth } });
       }
 
-      // 3. Perform image manipulation (resize and compress to 0.75 JPEG)
+      // 3. Perform image manipulation (resize and compress to quality)
       const result = await ImageManipulator.manipulateAsync(
         uri,
         actions,
         {
-          compress: 0.75,
+          compress: quality,
           format: ImageManipulator.SaveFormat.JPEG,
         }
       );

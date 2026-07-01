@@ -33,6 +33,51 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
+  const pollingIntervalRef = useRef<any>(null);
+  const isRealtimeSubscribed = useRef<boolean>(false);
+
+  const startPolling = (convId: string) => {
+    if (pollingIntervalRef.current) return;
+    if (__DEV__) {
+      console.log(`[ChatRoom] Starting fallback polling for conversation ${convId}`);
+    }
+    pollingIntervalRef.current = setInterval(async () => {
+      try {
+        const latestMessages = await chatService.getMessages(convId);
+        setMessages((prev) => {
+          const merged = [...prev];
+          latestMessages.forEach((msg) => {
+            const idx = merged.findIndex((m) => m.id === msg.id);
+            if (idx !== -1) {
+              merged[idx] = msg;
+            } else {
+              const tempIndex = merged.findIndex(
+                (m) => m.id.startsWith('temp-') && m.message_text === msg.message_text
+              );
+              if (tempIndex !== -1) {
+                merged[tempIndex] = msg;
+              } else {
+                merged.push(msg);
+              }
+            }
+          });
+          return merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        });
+      } catch (pollErr) {
+        console.error('[ChatRoom] Fallback polling fetch error:', pollErr);
+      }
+    }, 5000);
+  };
+
+  const stopPolling = () => {
+    if (pollingIntervalRef.current) {
+      if (__DEV__) {
+        console.log('[ChatRoom] Stopping fallback polling');
+      }
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  };
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -45,6 +90,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
   useEffect(() => {
     let activeId = conversationId;
     let subscription: any = null;
+    let subscriptionTimeout: any = null;
 
     const initChat = async () => {
       if (!activeId) {
@@ -69,40 +115,104 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         setLoading(false);
       }
 
-      subscription = chatService.subscribeToMessages(activeId, (newMsg) => {
-        setMessages((prev) => {
-          const exists = prev.some((m) => m.id === newMsg.id);
-          if (exists) {
-            return prev.map((m) => (m.id === newMsg.id ? newMsg : m));
+      subscription = chatService.subscribeToMessages(
+        activeId,
+        (newMsg) => {
+          setMessages((prev) => {
+            const exists = prev.some((m) => m.id === newMsg.id);
+            if (exists) {
+              return prev.map((m) => (m.id === newMsg.id ? newMsg : m));
+            }
+            if (newMsg.sender_id === currentUserId) {
+              const tempIndex = prev.findIndex(
+                (m) => m.id.startsWith('temp-') && m.message_text === newMsg.message_text
+              );
+              if (tempIndex !== -1) {
+                const updated = [...prev];
+                updated[tempIndex] = newMsg;
+                return updated;
+              }
+            }
+            return [...prev, newMsg];
+          });
+          if (currentUserId && newMsg.receiver_id === currentUserId) {
+            chatService.markMessagesRead(activeId!);
           }
-          return [...prev, newMsg];
-        });
-        if (currentUserId && newMsg.receiver_id === currentUserId) {
-          chatService.markMessagesRead(activeId!);
+        },
+        (status) => {
+          if (__DEV__) {
+            console.log(`[ChatRoom] Subscription status: ${status}`);
+          }
+          if (status === 'SUBSCRIBED') {
+            isRealtimeSubscribed.current = true;
+            stopPolling();
+          } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            isRealtimeSubscribed.current = false;
+            if (activeId) startPolling(activeId);
+          }
         }
-      });
+      );
     };
 
     initChat();
 
-    return () => {
-      if (subscription) {
-        subscription.unsubscribe();
+    subscriptionTimeout = setTimeout(() => {
+      if (!isRealtimeSubscribed.current && activeId) {
+        if (__DEV__) {
+          console.log('[ChatRoom] Subscription timeout reached, starting fallback polling');
+        }
+        startPolling(activeId);
       }
+    }, 3000);
+
+    return () => {
+      if (subscriptionTimeout) {
+        clearTimeout(subscriptionTimeout);
+      }
+      if (subscription) {
+        if (__DEV__) {
+          console.log('[ChatRoom] Cleaning up subscription channel');
+        }
+        supabase.removeChannel(subscription);
+      }
+      stopPolling();
     };
   }, [conversationId, currentUserId, otherUserId]);
 
   const handleSend = async () => {
     const text = inputText.trim();
-    if (!text || !conversationId) return;
+    if (!text || !conversationId || !currentUserId) return;
 
     setInputText('');
     setSending(true);
 
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMsg: ChatMessage = {
+      id: tempId,
+      conversation_id: conversationId,
+      sender_id: currentUserId,
+      receiver_id: otherUserId,
+      message_type: 'text',
+      message_text: text,
+      status: 'sent',
+      created_at: new Date().toISOString(),
+    };
+
+    // Add optimistic message instantly to UI
+    setMessages((prev) => [...prev, optimisticMsg]);
+
     try {
-      await chatService.sendMessage(conversationId, otherUserId, text);
+      const realMsg = await chatService.sendMessage(conversationId, otherUserId, text);
+      setMessages((prev) => {
+        const exists = prev.some((m) => m.id === realMsg.id);
+        if (exists) {
+          return prev.filter((m) => m.id !== tempId);
+        }
+        return prev.map((m) => (m.id === tempId ? realMsg : m));
+      });
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to send message.');
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
     } finally {
       setSending(false);
     }

@@ -16,6 +16,7 @@ export interface AppSettings {
   backgroundUpload: boolean;
   defaultSnapViewOnce: boolean;
   saveSentSnapsToMemories: boolean;
+  uploadMode: 'Stable' | 'Fast';
 }
 
 const SETTINGS_KEY = 'televault_app_settings';
@@ -35,6 +36,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   backgroundUpload: true,
   defaultSnapViewOnce: true,
   saveSentSnapsToMemories: true,
+  uploadMode: 'Stable',
 };
 
 export const settingsService = {

@@ -33,6 +33,7 @@ import {
   Users,
   Mail,
   Globe,
+  Clock,
 } from 'lucide-react-native';
 import { CompositeScreenProps, useIsFocused } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -42,6 +43,7 @@ import { supabase } from '../lib/supabase';
 import { securityService } from '../services/securityService';
 import { telegramService } from '../services/telegramService';
 import { settingsService, AppSettings } from '../services/settingsService';
+import { largeFileService } from '../services/largeFileService';
 import { exportHelper } from '../utils/exportHelper';
 import * as LocalAuthentication from 'expo-local-authentication';
 import PinLockModal from '../components/PinLockModal';
@@ -101,6 +103,12 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [maxPhotoWidth, setMaxPhotoWidth] = useState(1600);
   const [jpegQuality, setJpegQuality] = useState(0.75);
   const [backgroundUpload, setBackgroundUpload] = useState(true);
+  const [uploadMode, setUploadMode] = useState<'Stable' | 'Fast'>('Stable');
+  const [largeFileStats, setLargeFileStats] = useState({
+    active: 0,
+    failed: 0,
+    completed: 0,
+  });
 
   // Queue Modal State
   const [queueModalVisible, setQueueModalVisible] = useState(false);
@@ -184,6 +192,14 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     setBackgroundUpload(appSettings.backgroundUpload);
     setDefaultSnapViewOnce(appSettings.defaultSnapViewOnce ?? true);
     setSaveSentSnapsToMemories(appSettings.saveSentSnapsToMemories ?? true);
+    setUploadMode(appSettings.uploadMode || 'Stable');
+
+    try {
+      const stats = await largeFileService.getLargeFileStats();
+      setLargeFileStats(stats);
+    } catch (statsErr) {
+      console.error('Failed to load large file stats in SettingsScreen:', statsErr);
+    }
   };
 
   const updateSetting = async (key: keyof AppSettings, value: any) => {
@@ -480,6 +496,87 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 {testingConnection ? <ActivityIndicator size="small" color="#FFFC00" /> : <ChevronRight size={18} color="#8E8E93" />}
               </TouchableOpacity>
             )}
+          </View>
+        </View>
+
+        {/* Large File Mode */}
+        <View style={styles.section}>
+          <Text style={styles.sectionHeader}>Large File Mode</Text>
+          <View style={styles.card}>
+            <View style={styles.itemRow}>
+              <View style={styles.itemLeft}>
+                <Database size={20} color="#FFFC00" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Normal Upload Limit</Text>
+                  <Text style={styles.itemSubtitle}>50 MB</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.itemRow}>
+              <View style={styles.itemLeft}>
+                <Database size={20} color="#FF9500" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Chunk Size</Text>
+                  <Text style={styles.itemSubtitle}>45 MB chunks</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.itemRow}>
+              <View style={styles.itemLeft}>
+                <Database size={20} color="#FF9500" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Max Chunked Upload</Text>
+                  <Text style={styles.itemSubtitle}>500 MB</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.itemRow}>
+              <View style={styles.itemLeft}>
+                <CheckCircle size={20} color="#30D158" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Resume Failed Uploads</Text>
+                  <Text style={styles.itemSubtitle}>Supported</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.itemRow}>
+              <View style={styles.itemLeft}>
+                <Clock size={20} color="#FFFC00" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Download / Rebuild</Text>
+                  <Text style={styles.itemSubtitle}>Beta</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={[styles.itemRowNoPress, { paddingVertical: 12 }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-around', width: '100%', paddingHorizontal: 10 }}>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ color: '#FFFC00', fontWeight: '800', fontSize: 16 }}>{largeFileStats.active}</Text>
+                  <Text style={{ color: '#8E8E93', fontSize: 11, marginTop: 2 }}>Active</Text>
+                </View>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ color: '#FF453A', fontWeight: '800', fontSize: 16 }}>{largeFileStats.failed}</Text>
+                  <Text style={{ color: '#8E8E93', fontSize: 11, marginTop: 2 }}>Failed</Text>
+                </View>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ color: '#30D158', fontWeight: '800', fontSize: 16 }}>{largeFileStats.completed}</Text>
+                  <Text style={{ color: '#8E8E93', fontSize: 11, marginTop: 2 }}>Completed</Text>
+                </View>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.openManagerBtn}
+              onPress={() => navigation.navigate('ChunkManager')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.openManagerBtnText}>Open Chunk Manager</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -785,21 +882,38 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
               />
             </View>
 
+            <View style={styles.itemRowNoPress}>
+              <View style={styles.itemLeft}>
+                <Upload size={20} color="#FFFC00" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Upload Mode</Text>
+                  <Text style={styles.itemSubtitle}>Stable (1 upload) or Fast (2 uploads)</Text>
+                </View>
+              </View>
+              <View style={styles.segmentContainer}>
+                {(['Stable', 'Fast'] as const).map((mode) => (
+                  <TouchableOpacity
+                    key={mode}
+                    style={[styles.segmentBtn, uploadMode === mode && styles.segmentBtnActive]}
+                    onPress={() => updateSetting('uploadMode', mode)}
+                  >
+                    <Text style={[styles.segmentBtnText, uploadMode === mode && styles.segmentBtnTextActive]}>
+                      {mode}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
             <TouchableOpacity
               style={styles.itemRow}
-              onPress={() => {
-                Alert.alert(
-                  'Large File Mode Info',
-                  'Telegram Bot API enforces a strict 50 MB upload limit for standard bots. To upload files larger than 50 MB, TeleVault will support connecting to a locally hosted Telegram Bot API server in the future. Video compression and chunk uploading placeholders are currently being tested.',
-                  [{ text: 'Got it' }]
-                );
-              }}
+              onPress={() => navigation.navigate('ChunkManager')}
             >
               <View style={styles.itemLeft}>
-                <Upload size={20} color="#8E8E93" />
+                <Database size={20} color="#FFFC00" />
                 <View style={styles.itemMeta}>
-                  <Text style={[styles.itemTitle, { color: '#8E8E93' }]}>Large File Mode (Coming Soon)</Text>
-                  <Text style={styles.itemSubtitle}>Upload {'>'} 50 MB files via local Bot servers (Learn More)</Text>
+                  <Text style={styles.itemTitle}>Open Chunk Manager</Text>
+                  <Text style={styles.itemSubtitle}>View upload parts and resume failed chunks</Text>
                 </View>
               </View>
               <ChevronRight size={18} color="#8E8E93" />
@@ -1171,6 +1285,22 @@ const styles = StyleSheet.create({
     color: '#4f5370',
     fontSize: 10,
     marginTop: 8,
+  },
+  openManagerBtn: {
+    backgroundColor: 'rgba(255, 252, 0, 0.1)',
+    borderWidth: 1,
+    borderColor: '#FFFC00',
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginVertical: 12,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  openManagerBtnText: {
+    color: '#FFFC00',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
 

@@ -17,6 +17,8 @@ import { AppStackParamList } from '../types/navigation';
 import { telegramService } from '../services/telegramService';
 import { fileService } from '../services/fileService';
 import { friendService } from '../services/friendService';
+import { fileOpenService } from '../services/fileOpenService';
+import VideoPlayer from '../components/VideoPlayer';
 import AppHeader from '../components/AppHeader';
 import AppCard from '../components/AppCard';
 import AppButton from '../components/AppButton';
@@ -30,6 +32,7 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isFavorite, setIsFavorite] = useState(file.is_favorite || false);
+  const [openingDoc, setOpeningDoc] = useState(false);
 
   useEffect(() => {
     const fetchTelegramUrl = async () => {
@@ -296,6 +299,19 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
       );
     }
 
+    if (file.is_chunked) {
+      return (
+        <View style={styles.previewPlaceholder}>
+          <Video size={56} color="#FF9500" />
+          <Text style={styles.placeholderText}>Chunked File (Large Upload)</Text>
+          <Text style={styles.docSubtitle}>{file.file_name}</Text>
+          <Text style={[styles.docSubtitle, { color: '#FF9500', fontWeight: 'bold', marginTop: 12 }]}>
+            Download / rebuild is beta. Upload and chunk tracking are available in the Chunk Manager.
+          </Text>
+        </View>
+      );
+    }
+
     if (file.file_type === 'image' && mediaUrl) {
       return (
         <Image
@@ -306,14 +322,15 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
       );
     }
 
-    if (file.file_type === 'video') {
+    if (file.file_type === 'video' && mediaUrl) {
+      return (
+        <VideoPlayer source={mediaUrl} style={styles.fullImage} />
+      );
+    } else if (file.file_type === 'video') {
       return (
         <View style={styles.previewPlaceholder}>
-          <Video size={56} color="#FFFC00" />
-          <Text style={styles.placeholderText}>Video Encrypted & Stored</Text>
-          <TouchableOpacity style={styles.playButton} onPress={handleOpenInBrowser}>
-            <Text style={styles.playButtonText}>Stream / Play External</Text>
-          </TouchableOpacity>
+          <ActivityIndicator size="large" color="#FFFC00" />
+          <Text style={styles.placeholderText}>Loading video stream from Telegram...</Text>
         </View>
       );
     }
@@ -321,7 +338,7 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
     return (
       <View style={styles.previewPlaceholder}>
         <FileText size={56} color="#FFFC00" />
-        <Text style={styles.placeholderText}>Document Encrypted & Stored</Text>
+        <Text style={styles.placeholderText}>Document Stored on Telegram</Text>
         <Text style={styles.docSubtitle}>{file.file_name}</Text>
       </View>
     );
@@ -373,14 +390,55 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
 
         {/* Media Actions */}
         <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={[styles.primaryActionBtn, !mediaUrl && styles.disabledBtn]}
-            onPress={handleOpenInBrowser}
-            disabled={!mediaUrl}
-          >
-            <ExternalLink size={20} color="#000000" />
-            <Text style={styles.primaryActionBtnText}>Open / Download Link</Text>
-          </TouchableOpacity>
+          {file.file_type !== 'document' ? (
+            <TouchableOpacity
+              style={[styles.primaryActionBtn, !mediaUrl && styles.disabledBtn]}
+              onPress={handleOpenInBrowser}
+              disabled={!mediaUrl}
+            >
+              <ExternalLink size={20} color="#000000" />
+              <Text style={styles.primaryActionBtnText}>Open / Download Link</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: '100%' }}>
+              <TouchableOpacity
+                style={[styles.primaryActionBtn, styles.docBtn]}
+                onPress={async () => {
+                  try {
+                    setOpeningDoc(true);
+                    await fileOpenService.openDocument(file);
+                  } catch (err: any) {
+                    Alert.alert('Error', err.message || 'No app found to open this document.');
+                  } finally {
+                    setOpeningDoc(false);
+                  }
+                }}
+                disabled={openingDoc}
+              >
+                {openingDoc ? <ActivityIndicator size="small" color="#000000" /> : <ExternalLink size={20} color="#000000" />}
+                <Text style={styles.primaryActionBtnText}>Open Document</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.primaryActionBtn, styles.docBtnOutline, { marginTop: 12 }]}
+                onPress={async () => {
+                  try {
+                    setOpeningDoc(true);
+                    const path = await fileOpenService.downloadToCache(file);
+                    Alert.alert('Saved to Cache', `File downloaded to cache at:\n${path}`);
+                  } catch (e: any) {
+                    Alert.alert('Download Failed', e.message);
+                  } finally {
+                    setOpeningDoc(false);
+                  }
+                }}
+                disabled={openingDoc}
+              >
+                <Download size={20} color="#FFFC00" />
+                <Text style={[styles.primaryActionBtnText, { color: '#FFFC00' }]}>Download to Cache</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Metadata Details Card */}
@@ -430,6 +488,31 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
             <Text style={styles.metaLabel}>Telegram Msg ID</Text>
             <Text style={styles.metaValue} numberOfLines={1}>{file.telegram_message_id || 'N/A'}</Text>
           </View>
+
+          {file.is_chunked && (
+            <View style={styles.chunkedMetadata}>
+              <View style={styles.chunkDivider} />
+              
+              <Text style={styles.chunkHeader}>Chunked Upload Info</Text>
+              
+              <View style={styles.metaRow}>
+                <Text style={styles.metaLabel}>Large File ID</Text>
+                <Text style={styles.metaValue} numberOfLines={1}>{file.large_file_id || 'N/A'}</Text>
+              </View>
+
+              <Text style={styles.chunkNote}>
+                Download/rebuild is beta. Upload and chunk tracking are available.
+              </Text>
+
+              <TouchableOpacity
+                style={styles.openManagerBtnInline}
+                onPress={() => navigation.navigate('ChunkManager')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.openManagerBtnInlineText}>Open Chunk Manager</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </AppCard>
       </ScrollView>
     </SafeAreaView>
@@ -580,6 +663,55 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     width: '60%',
     textAlign: 'right',
+  },
+  docBtn: {
+    backgroundColor: '#FFFC00',
+  },
+  docBtnOutline: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#FFFC00',
+  },
+  docBtnText: {
+    color: '#000000',
+    fontWeight: '700',
+    fontSize: 15,
+    marginLeft: 8,
+  },
+  chunkedMetadata: {
+    marginTop: 16,
+  },
+  chunkDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 252, 0, 0.2)',
+    marginVertical: 12,
+  },
+  chunkHeader: {
+    color: '#FFFC00',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  chunkNote: {
+    color: '#FF9500',
+    fontSize: 12,
+    marginVertical: 8,
+    fontStyle: 'italic',
+  },
+  openManagerBtnInline: {
+    backgroundColor: 'rgba(255, 252, 0, 0.1)',
+    borderWidth: 1,
+    borderColor: '#FFFC00',
+    paddingVertical: 10,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  openManagerBtnInlineText: {
+    color: '#FFFC00',
+    fontWeight: '700',
+    fontSize: 13,
   },
 });
 

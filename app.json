@@ -25,7 +25,8 @@
     },
     "plugins": [
       "expo-background-task",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-video"
     ]
   }
 }

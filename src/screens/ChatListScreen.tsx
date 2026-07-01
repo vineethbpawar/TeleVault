@@ -16,6 +16,7 @@ import { MainTabParamList, AppStackParamList } from '../types/navigation';
 import { MessageSquarePlus, MessageCircle, ArrowLeft } from 'lucide-react-native';
 import { chatService } from '../services/chatService';
 import { Conversation } from '../types/chat';
+import { supabase } from '../lib/supabase';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, any>,
@@ -45,6 +46,72 @@ export const ChatListScreen: React.FC<Props> = ({ navigation }) => {
       fetchConversations();
     }
   }, [isFocused]);
+
+  useEffect(() => {
+    let channel: any = null;
+
+    const setupSubscription = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      channel = supabase
+        .channel('conversations_realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'conversations',
+          },
+          (payload) => {
+            if (__DEV__) {
+              console.log('[Realtime] Conversations event:', payload);
+            }
+            if (payload.eventType === 'INSERT') {
+              const newConv = payload.new as Conversation;
+              if (newConv.participant_a === user.id || newConv.participant_b === user.id) {
+                fetchConversations();
+              }
+            } else if (payload.eventType === 'UPDATE') {
+              const updatedConv = payload.new as Conversation;
+              if (updatedConv.participant_a === user.id || updatedConv.participant_b === user.id) {
+                setConversations((prev) => {
+                  const idx = prev.findIndex((c) => c.id === updatedConv.id);
+                  if (idx !== -1) {
+                    const updatedList = [...prev];
+                    updatedList[idx] = {
+                      ...updatedList[idx],
+                      ...updatedConv,
+                    };
+                    return updatedList.sort((a, b) => {
+                      const timeA = new Date(a.last_message_at || 0).getTime();
+                      const timeB = new Date(b.last_message_at || 0).getTime();
+                      return timeB - timeA;
+                    });
+                  } else {
+                    fetchConversations();
+                    return prev;
+                  }
+                });
+              }
+            }
+          }
+        )
+        .subscribe((status) => {
+          if (__DEV__) {
+            console.log(`[Realtime] ChatListScreen subscription status: ${status}`);
+          }
+        });
+    };
+
+    setupSubscription();
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, []);
 
   const handleRefresh = () => {
     setRefreshing(true);

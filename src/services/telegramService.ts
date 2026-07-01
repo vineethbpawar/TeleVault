@@ -283,6 +283,115 @@ export const telegramService = {
       return null;
     }
   },
+
+  async sendFileChunkToTelegram(
+    chunkUri: string,
+    caption: string
+  ): Promise<{ telegramMessageId: string; telegramFileId: string }> {
+    const { botToken, channelId } = await this.getTelegramConfig();
+
+    if (!botToken || !channelId) {
+      throw new Error('Telegram configuration is missing. Please set your Bot Token and Channel ID in Settings.');
+    }
+
+    const fileInfo = await FileSystem.getInfoAsync(chunkUri);
+    if (!fileInfo.exists) {
+      throw new Error('Chunk file does not exist locally.');
+    }
+
+    const url = `https://api.telegram.org/bot${botToken}/sendDocument`;
+
+    try {
+      const uploadResult = await FileSystem.uploadAsync(url, chunkUri, {
+        fieldName: 'document',
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        parameters: {
+          chat_id: channelId,
+          caption: caption,
+        },
+      });
+
+      if (uploadResult.status < 200 || uploadResult.status >= 300) {
+        let errorMsg = `HTTP Error ${uploadResult.status}`;
+        try {
+          const bodyJson = JSON.parse(uploadResult.body);
+          if (bodyJson.description) {
+            errorMsg = bodyJson.description;
+          }
+        } catch (_) {}
+        throw new Error(errorMsg);
+      }
+
+      const responseData = JSON.parse(uploadResult.body);
+      if (!responseData.ok) {
+        throw new Error(responseData.description || 'Telegram chunk upload API returned error.');
+      }
+
+      const result = responseData.result;
+      const telegramMessageId = String(result.message_id);
+      let telegramFileId = '';
+
+      if (result.document) {
+        telegramFileId = result.document.file_id;
+      } else {
+        const key = Object.keys(result).find(
+          (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
+        );
+        if (key) {
+          telegramFileId = result[key].file_id;
+        } else {
+          throw new Error('Telegram response did not return a valid file ID for chunk.');
+        }
+      }
+
+      return {
+        telegramMessageId,
+        telegramFileId,
+      };
+    } catch (error: any) {
+      console.error('Telegram Chunk Upload Error:', error);
+      throw new Error(error.message || 'Telegram chunk upload failed.');
+    }
+  },
+
+  async getTelegramFileInfo(fileId: string): Promise<any> {
+    const { botToken } = await this.getTelegramConfig();
+    if (!botToken) {
+      throw new Error('Telegram bot token is not configured.');
+    }
+
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      return data.result;
+    } else {
+      throw new Error(data.description || 'Failed to locate file info on Telegram.');
+    }
+  },
+
+  async getTelegramFileDownloadUrl(fileId: string): Promise<string> {
+    const { botToken } = await this.getTelegramConfig();
+    if (!botToken) {
+      throw new Error('Telegram bot token is not configured.');
+    }
+
+    const fileInfo = await this.getTelegramFileInfo(fileId);
+    return `https://api.telegram.org/file/bot${botToken}/${fileInfo.file_path}`;
+  },
+
+  async downloadTelegramFileToCache(fileId: string, fileName: string): Promise<string> {
+    const downloadUrl = await this.getTelegramFileDownloadUrl(fileId);
+    const safeName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const localUri = `${FileSystem.cacheDirectory}${Date.now()}_${safeName}`;
+
+    const downloadResult = await FileSystem.downloadAsync(downloadUrl, localUri);
+    if (downloadResult.status < 200 || downloadResult.status >= 300) {
+      throw new Error(`Failed to download file: status ${downloadResult.status}`);
+    }
+
+    return downloadResult.uri;
+  },
 };
 
 export default telegramService;

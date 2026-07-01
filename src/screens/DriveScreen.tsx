@@ -239,12 +239,19 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const processUpload = async (uri: string, type: 'image' | 'video' | 'document', name: string, mime: string, size: number) => {
-    if (size > 50 * 1024 * 1024) {
+    if (size > 500 * 1024 * 1024) {
       Alert.alert(
-        'Upload Blocked',
-        'This file is over 50 MB. Normal Telegram Bot API upload is limited in this MVP. Please choose a smaller/compressed file.'
+        'File Too Large',
+        'This file is too large for Large File Mode MVP. Current max is 500 MB.'
       );
       return;
+    }
+
+    if (size > 50 * 1024 * 1024) {
+      Alert.alert(
+        'Large File Detected',
+        'TeleVault will split this into smaller parts (45 MB chunks) and upload to Telegram.'
+      );
     }
 
     try {
