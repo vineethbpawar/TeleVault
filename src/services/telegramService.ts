@@ -158,6 +158,131 @@ export const telegramService = {
       throw new Error(error.message || 'Telegram upload failed.');
     }
   },
+
+  async sendChatLogToTelegram(data: {
+    conversationId: string;
+    senderUsername: string;
+    receiverUsername: string;
+    messageText: string;
+    localTime: string;
+  }): Promise<string | null> {
+    const { botToken, channelId } = await this.getTelegramConfig();
+    if (!botToken || !channelId) {
+      console.warn('Telegram chat backup is not configured.');
+      return null;
+    }
+
+    const message = `💬 TeleVault Chat Log\n\nConversation: ${data.conversationId}\nFrom: @${data.senderUsername}\nTo: @${data.receiverUsername}\nTime: ${data.localTime}\n\nMessage:\n${data.messageText}`;
+
+    try {
+      const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: channelId,
+          text: message,
+        }),
+      });
+
+      const resJson = await response.json();
+      if (response.ok && resJson.ok) {
+        return String(resJson.result.message_id);
+      } else {
+        console.warn('Telegram sendMessage returned error:', resJson.description);
+        return null;
+      }
+    } catch (error) {
+      console.warn('Failed to send chat log to Telegram:', error);
+      return null;
+    }
+  },
+
+  async sendSnapToTelegram(data: {
+    localUri: string;
+    mediaType: 'image' | 'video';
+    snapType: 'direct' | 'story';
+    senderUsername: string;
+    receiverUsername: string;
+    caption?: string | null;
+    localTime: string;
+  }): Promise<{ telegramMessageId: string; telegramFileId: string } | null> {
+    const { botToken, channelId } = await this.getTelegramConfig();
+    if (!botToken || !channelId) {
+      console.warn('Telegram snap backup is not configured.');
+      return null;
+    }
+
+    const formattedCaption = `📸 TeleVault Snap\n\nType: ${
+      data.snapType === 'story' ? 'Story' : 'Direct Snap'
+    }\nFrom: @${data.senderUsername}\nTo: ${
+      data.snapType === 'story' ? 'Story' : '@' + data.receiverUsername
+    }\nTime: ${data.localTime}${
+      data.caption ? `\nCaption: ${data.caption}` : ''
+    }`;
+
+    try {
+      let endpoint = 'sendPhoto';
+      let fieldName = 'photo';
+
+      if (data.mediaType === 'video') {
+        endpoint = 'sendVideo';
+        fieldName = 'video';
+      }
+
+      const url = `https://api.telegram.org/bot${botToken}/${endpoint}`;
+      
+      const uploadResult = await FileSystem.uploadAsync(url, data.localUri, {
+        fieldName: fieldName,
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        parameters: {
+          chat_id: channelId,
+          caption: formattedCaption,
+        },
+      });
+
+      if (uploadResult.status < 200 || uploadResult.status >= 300) {
+        throw new Error(`HTTP Error ${uploadResult.status}`);
+      }
+
+      const responseData = JSON.parse(uploadResult.body);
+      if (!responseData.ok) {
+        throw new Error(responseData.description || 'Telegram upload API returned error.');
+      }
+
+      const result = responseData.result;
+      const telegramMessageId = String(result.message_id);
+      let telegramFileId = '';
+
+      if (data.mediaType === 'image' && result.photo) {
+        const photoArr = result.photo;
+        const largestPhoto = photoArr[photoArr.length - 1];
+        telegramFileId = largestPhoto.file_id;
+      } else if (data.mediaType === 'video' && result.video) {
+        telegramFileId = result.video.file_id;
+      } else {
+        const key = Object.keys(result).find(
+          (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
+        );
+        if (key) {
+          telegramFileId = result[key].file_id;
+        } else {
+          throw new Error('Telegram response did not return a valid file ID.');
+        }
+      }
+
+      return {
+        telegramMessageId,
+        telegramFileId,
+      };
+    } catch (error) {
+      console.warn('Failed to send snap to Telegram:', error);
+      return null;
+    }
+  },
 };
 
 export default telegramService;

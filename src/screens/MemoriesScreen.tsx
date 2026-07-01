@@ -11,15 +11,20 @@ import {
   RefreshControl,
   ActivityIndicator,
   Dimensions,
+  Alert,
 } from 'react-native';
-import { Search, Image as ImageIcon, Video, Calendar, RefreshCw } from 'lucide-react-native';
+import { Search, Image as ImageIcon, Video, Calendar, Star, Lock, Eye, AlertTriangle } from 'lucide-react-native';
 import { CompositeScreenProps, useIsFocused } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MainTabParamList, AppStackParamList } from '../types/navigation';
 import { fileService } from '../services/fileService';
+import { securityService } from '../services/securityService';
+import { supabase } from '../lib/supabase';
 import { TeleVaultFile } from '../types/file';
 import EmptyState from '../components/EmptyState';
+import PinLockModal from '../components/PinLockModal';
+import AppCard from '../components/AppCard';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'MemoriesTab'>,
@@ -39,13 +44,35 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
+  
+  // Tabs: all, image, video, favorites, private
+  const [filterType, setFilterType] = useState<'all' | 'image' | 'video' | 'favorites' | 'private'>('all');
+  
+  // Pin Lock Modal for Private Memories
+  const [pinVisible, setPinVisible] = useState(false);
+  const [isUnlocked, setIsUnlocked] = useState(false);
+
   const isFocused = useIsFocused();
 
   const loadMemories = async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
     try {
-      const data = await fileService.fetchMemories();
+      let data = await fileService.fetchMemories();
+      
+      // If private mode is active and unlocked, load private memories
+      if (filterType === 'private' && isUnlocked) {
+        // Fetch files where is_private = true, is_drive_file = false
+        const { data: privData, error } = await supabase
+          .from('files')
+          .select('*')
+          .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+          .eq('is_private', true)
+          .eq('is_drive_file', false)
+          .order('created_at', { ascending: false });
+        if (!error && privData) {
+          data = privData as TeleVaultFile[];
+        }
+      }
       setFiles(data);
     } catch (error) {
       console.error('Failed to load memories:', error);
@@ -57,55 +84,96 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
 
   useEffect(() => {
     if (isFocused) {
-      loadMemories(true);
+      if (filterType === 'private' && !isUnlocked) {
+        checkPrivateAccess();
+      } else {
+        loadMemories(true);
+      }
     }
-  }, [isFocused]);
+  }, [isFocused, filterType, isUnlocked]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadMemories(false);
-  }, []);
+  }, [filterType, isUnlocked]);
+
+  const checkPrivateAccess = async () => {
+    const hasPin = await securityService.hasPin();
+    if (!hasPin) {
+      Alert.alert(
+        'PIN Setup Required',
+        'Please set up a security PIN in settings to lock your private memories.',
+        [
+          { text: 'Cancel', onPress: () => setFilterType('all'), style: 'cancel' },
+          { text: 'Go to Settings', onPress: () => navigation.navigate('Main', { screen: 'SettingsTab' } as any) }
+        ]
+      );
+      return;
+    }
+    setPinVisible(true);
+  };
+
+  const handlePinSuccess = () => {
+    setPinVisible(false);
+    setIsUnlocked(true);
+  };
+
+  const handlePinClose = () => {
+    setPinVisible(false);
+    setFilterType('all');
+  };
 
   const getFilteredFiles = () => {
     return files.filter((file) => {
-      const matchesSearch = file.file_name.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesType = filterType === 'all' || file.file_type === filterType;
+      const matchesSearch = file.file_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        (file.caption && file.caption.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      const matchesType = 
+        filterType === 'all' || 
+        filterType === 'private' || // Private filters loaded separately
+        (filterType === 'image' && file.file_type === 'image') ||
+        (filterType === 'video' && file.file_type === 'video') ||
+        (filterType === 'favorites' && file.is_favorite === true);
+      
       return matchesSearch && matchesType;
+    });
+  };
+
+  // "On This Day" filtering: memories uploaded on this calendar date in any past year
+  const getOnThisDayMemories = () => {
+    const todayMonth = new Date().getMonth();
+    const todayDate = new Date().getDate();
+    const currentYear = new Date().getFullYear();
+
+    return files.filter((file) => {
+      const fileDate = new Date(file.created_at);
+      const isPastYear = fileDate.getFullYear() < currentYear;
+      const isSameDayMonth = fileDate.getMonth() === todayMonth && fileDate.getDate() === todayDate;
+      return isPastYear && isSameDayMonth;
     });
   };
 
   const getGroupedMemories = () => {
     const filtered = getFilteredFiles();
-    const today: TeleVaultFile[] = [];
-    const yesterday: TeleVaultFile[] = [];
-    const thisMonth: TeleVaultFile[] = [];
-    const older: TeleVaultFile[] = [];
-
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
-    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const sections: Record<string, TeleVaultFile[]> = {};
 
     filtered.forEach((file) => {
-      const fileDate = new Date(file.created_at);
-      if (fileDate >= startOfToday) {
-        today.push(file);
-      } else if (fileDate >= startOfYesterday) {
-        yesterday.push(file);
-      } else if (fileDate >= startOfThisMonth) {
-        thisMonth.push(file);
-      } else {
-        older.push(file);
+      // Group by Date string (e.g., July 1, 2026)
+      const dateString = new Date(file.created_at).toLocaleDateString([], {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+      if (!sections[dateString]) {
+        sections[dateString] = [];
       }
+      sections[dateString].push(file);
     });
 
-    const sections: GroupedMemories[] = [];
-    if (today.length > 0) sections.push({ title: 'Today', data: today });
-    if (yesterday.length > 0) sections.push({ title: 'Yesterday', data: yesterday });
-    if (thisMonth.length > 0) sections.push({ title: 'This Month', data: thisMonth });
-    if (older.length > 0) sections.push({ title: 'Older', data: older });
-
-    return sections;
+    return Object.keys(sections).map((title) => ({
+      title,
+      data: sections[title],
+    }));
   };
 
   const renderGridItem = ({ item }: { item: TeleVaultFile }) => {
@@ -118,13 +186,13 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
         activeOpacity={0.8}
       >
         {item.local_thumbnail_uri ? (
-          <Image source={{ uri: item.local_thumbnail_uri }} style={styles.gridImage} />
+          <Image source={{ uri: item.local_thumbnail_uri }} style={styles.gridImage as any} />
         ) : (
           <View style={styles.placeholderGrid}>
             {isVideo ? (
-              <Video size={28} color="#FFFC00" />
+              <Video size={24} color="#FFFC00" />
             ) : (
-              <ImageIcon size={28} color="#FFFC00" />
+              <ImageIcon size={24} color="#FFFC00" />
             )}
           </View>
         )}
@@ -133,14 +201,21 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.videoBadgeText}>▶</Text>
           </View>
         )}
+        {item.is_favorite && (
+          <View style={styles.starBadge}>
+            <Star size={10} color="#FFFC00" fill="#FFFC00" />
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
 
   const groupedData = getGroupedMemories();
+  const onThisDayData = getOnThisDayMemories();
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Memories</Text>
       </View>
@@ -148,10 +223,10 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
       {/* Search Input */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
-          <Search size={18} color="#8E8E93" style={{ marginRight: 8 }} />
+          <Search size={18} color="#8e92af" style={{ marginRight: 8 }} />
           <TextInput
-            placeholder="Search memories..."
-            placeholderTextColor="#8E8E93"
+            placeholder="Search memories or captions..."
+            placeholderTextColor="#8e92af"
             style={styles.searchInput}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -159,20 +234,65 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
         </View>
       </View>
 
-      {/* Filters (All, Photos, Videos) */}
-      <View style={styles.filterTabs}>
-        {(['all', 'image', 'video'] as const).map((type) => (
-          <TouchableOpacity
-            key={type}
-            style={[styles.filterTab, filterType === type && styles.activeFilterTab]}
-            onPress={() => setFilterType(type)}
-          >
-            <Text style={[styles.filterTabText, filterType === type && styles.activeFilterTabText]}>
-              {type === 'all' ? 'All' : type === 'image' ? 'Photos' : 'Videos'}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      {/* Filter Tabs */}
+      <View style={styles.filterTabsWrapper}>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={['all', 'image', 'video', 'favorites', 'private'] as const}
+          keyExtractor={(item) => item}
+          contentContainerStyle={styles.filterTabs}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[styles.filterTab, filterType === item && styles.activeFilterTab]}
+              onPress={() => {
+                if (item !== 'private') {
+                  setIsUnlocked(false);
+                }
+                setFilterType(item);
+              }}
+            >
+              {item === 'favorites' && <Star size={13} color={filterType === item ? '#000000' : '#8e92af'} style={{ marginRight: 4 }} />}
+              {item === 'private' && <Lock size={13} color={filterType === item ? '#000000' : '#8e92af'} style={{ marginRight: 4 }} />}
+              <Text style={[styles.filterTabText, filterType === item && styles.activeFilterTabText]}>
+                {item === 'all' ? 'All' : item === 'image' ? 'Photos' : item === 'video' ? 'Videos' : item === 'favorites' ? 'Favorites' : 'Private'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        />
       </View>
+
+      {/* On This Day Carousel */}
+      {filterType !== 'private' && onThisDayData.length > 0 && (
+        <View style={styles.onThisDaySection}>
+          <Text style={styles.sectionHeaderTitle}>ON THIS DAY...</Text>
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={onThisDayData}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.onThisDayList}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.onThisDayCard}
+                onPress={() => navigation.navigate('FileDetails', { file: item })}
+              >
+                {item.local_thumbnail_uri ? (
+                  <Image source={{ uri: item.local_thumbnail_uri }} style={styles.onThisDayImg as any} />
+                ) : (
+                  <View style={styles.onThisDayPlaceholder}>
+                    <Calendar size={24} color="#FFFC00" />
+                  </View>
+                )}
+                <View style={styles.onThisDayOverlay}>
+                  <Text style={styles.onThisDayYear}>{new Date(item.created_at).getFullYear()}</Text>
+                  <Text style={styles.onThisDayCaption} numberOfLines={1}>{item.caption || item.file_name}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.centerContainer}>
@@ -185,8 +305,8 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFC00" />}
           ListEmptyComponent={
             <EmptyState
-              title="No Memories Found"
-              description="Capture moments in Camera or upload photos/videos to populate your Snapchat-style Memories."
+              title={filterType === 'private' ? 'Private Vault Empty' : 'No Memories Found'}
+              description={filterType === 'private' ? 'Store your files privately to secure them here behind your lock.' : 'Capture snaps or select media from the camera preview to add memories.'}
             />
           }
         />
@@ -197,9 +317,9 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFC00" />}
           renderItem={({ item }) => (
             <View style={styles.sectionContainer}>
-              <View style={styles.sectionHeader}>
-                <Calendar size={14} color="#8E8E93" style={{ marginRight: 6 }} />
-                <Text style={styles.sectionTitle}>{item.title}</Text>
+              <View style={styles.dateHeader}>
+                <Calendar size={14} color="#8e92af" style={{ marginRight: 6 }} />
+                <Text style={styles.dateTitle}>{item.title}</Text>
               </View>
               <FlatList
                 data={item.data}
@@ -212,6 +332,13 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
           )}
         />
       )}
+
+      <PinLockModal
+        visible={pinVisible}
+        onClose={handlePinClose}
+        onSuccess={handlePinSuccess}
+        mode="verify"
+      />
     </SafeAreaView>
   );
 };
@@ -239,43 +366,98 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     height: 44,
     borderRadius: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
   },
   searchInput: {
     flex: 1,
     color: '#FFFFFF',
     fontSize: 15,
   },
+  filterTabsWrapper: {
+    height: 46,
+    marginBottom: 12,
+  },
   filterTabs: {
-    flexDirection: 'row',
     paddingHorizontal: 16,
-    marginBottom: 16,
+    alignItems: 'center',
   },
   filterTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginRight: 10,
-    backgroundColor: '#1E1E1E',
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    marginRight: 8,
+    backgroundColor: '#0f1123',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
   },
   activeFilterTab: {
     backgroundColor: '#FFFC00',
     borderColor: '#FFFC00',
   },
   filterTabText: {
-    color: '#8E8E93',
+    color: '#8e92af',
     fontSize: 13,
     fontWeight: '600',
   },
   activeFilterTabText: {
     color: '#000000',
+  },
+  onThisDaySection: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  sectionHeaderTitle: {
+    color: '#FFFC00',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 8,
+  },
+  onThisDayList: {
+    paddingRight: 16,
+  },
+  onThisDayCard: {
+    width: 100,
+    height: 120,
+    borderRadius: 16,
+    marginRight: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#1f2444',
+    backgroundColor: '#0f1123',
+  },
+  onThisDayImg: {
+    width: '100%',
+    height: '100%',
+  },
+  onThisDayPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  onThisDayOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    padding: 6,
+  },
+  onThisDayYear: {
+    color: '#FFFC00',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  onThisDayCaption: {
+    color: '#FFFFFF',
+    fontSize: 10,
   },
   centerContainer: {
     flex: 1,
@@ -284,19 +466,18 @@ const styles = StyleSheet.create({
   },
   sectionContainer: {
     paddingHorizontal: 12,
-    marginBottom: 20,
+    marginBottom: 16,
   },
-  sectionHeader: {
+  dateHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
     paddingLeft: 4,
   },
-  sectionTitle: {
-    color: '#8E8E93',
-    fontSize: 13,
+  dateTitle: {
+    color: '#8e92af',
+    fontSize: 12,
     fontWeight: '700',
-    textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   gridItem: {
@@ -305,9 +486,9 @@ const styles = StyleSheet.create({
     margin: 4,
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
   },
   gridImage: {
     width: '100%',
@@ -317,7 +498,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
   },
   videoBadge: {
     position: 'absolute',
@@ -334,6 +515,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 9,
     marginLeft: 1,
+  },
+  starBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 4,
+    borderRadius: 10,
   },
 });
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -9,13 +9,21 @@ import {
   ScrollView,
   Alert,
   Dimensions,
+  ActivityIndicator,
+  TextInput,
+  Modal,
+  PanResponder,
 } from 'react-native';
-import { ArrowLeft, Send, HardDrive, Lock, Image as ImageIcon } from 'lucide-react-native';
+import { ArrowLeft, Send, Sparkles, X, Plus, Type, Edit3, RotateCw, EyeOff, Music, CloudSun, BarChart2, HelpCircle, MapPin, Clock } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
 import { telegramService } from '../services/telegramService';
-import { fileService } from '../services/fileService';
+import { uploadQueueService } from '../services/uploadQueueService';
+import { locationService } from '../services/locationService';
+import { snapService } from '../services/snapService';
 import UploadProgress from '../components/UploadProgress';
+import { MediaOverlayItem } from '../types/camera';
+import * as FileSystem from 'expo-file-system/legacy';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'Preview'>;
 
@@ -23,27 +31,233 @@ const { width } = Dimensions.get('window');
 
 const FILTERS = [
   { name: 'Normal', color: 'transparent' },
-  { name: 'Warm', color: 'rgba(255, 160, 0, 0.15)' },
-  { name: 'Cool', color: 'rgba(0, 120, 255, 0.15)' },
-  { name: 'Bright', color: 'rgba(255, 255, 255, 0.15)' },
-  { name: 'Vintage', color: 'rgba(139, 69, 19, 0.2)' },
-  { name: 'Moody', color: 'rgba(0, 0, 0, 0.35)' },
+  { name: 'Warm', color: 'rgba(255, 160, 0, 0.12)' },
+  { name: 'Cool', color: 'rgba(0, 120, 255, 0.12)' },
+  { name: 'Bright', color: 'rgba(255, 255, 255, 0.12)' },
+  { name: 'Vintage', color: 'rgba(139, 69, 19, 0.15)' },
+  { name: 'Moody', color: 'rgba(0, 0, 0, 0.3)' },
 ];
 
-export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { uri, type, fromGallery } = route.params;
-  const [selectedFilter, setSelectedFilter] = useState(FILTERS[0]);
-  const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState('');
+const EMOJIS = ['😎', '😂', '❤️', '🔥', '✨', '🎉', '😍', '😭', '👍', '👑', '⭐', '💯', '📍', '⏰'];
+const OVERLAY_COLORS = ['#FFFFFF', '#000000', '#FFFC00', '#FF453A', '#30D158', '#0A84FF', '#BF5AF2'];
 
-  const handleUpload = async (destination: 'memories' | 'drive' | 'private_drive') => {
-    // 1. Verify Telegram configuration first
+export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
+  const { uri, type, fromGallery, defaultLens, sendToUserId, sendToUsername, conversationId } = route.params as any;
+
+  const [selectedFilter, setSelectedFilter] = useState(FILTERS[0]);
+  const [overlays, setOverlays] = useState<MediaOverlayItem[]>([]);
+  const [fileSize, setFileSize] = useState<number | null>(null);
+
+  // Rotate & Blur states
+  const [rotation, setRotation] = useState(0);
+  const [blurActive, setBlurActive] = useState(false);
+
+  // Custom text input states
+  const [textModalVisible, setTextModalVisible] = useState(false);
+  const [customText, setCustomText] = useState('');
+  const [selectedColor, setSelectedColor] = useState('#FFFFFF');
+
+  // Drawing tool states
+  const [drawingMode, setDrawingMode] = useState(false);
+  const [drawingLines, setDrawingLines] = useState<Array<{ points: Array<{ x: number; y: number }>; color: string }>>([]);
+  const [currentLine, setCurrentLine] = useState<Array<{ x: number; y: number }>>([]);
+  const [selectedDrawColor, setSelectedDrawColor] = useState('#FFFC00');
+
+  // Stickers selection modal state
+  const [stickersVisible, setStickersVisible] = useState(false);
+
+  // Queue Progress Modal State
+  const [queueVisible, setQueueVisible] = useState(false);
+  const [storyLoading, setStoryLoading] = useState(false);
+  const [sendLoading, setSendLoading] = useState(false);
+
+  // Container layout size to compute coordinates
+  const [containerSize, setContainerSize] = useState({ width: 300, height: 400 });
+
+  // Touch State for Dragging
+  const touchStartRef = useRef({ x: 0, y: 0, overlayX: 0, overlayY: 0 });
+  const activeOverlayIdRef = useRef<string | null>(null);
+
+  // Fetch local file info
+  useEffect(() => {
+    FileSystem.getInfoAsync(uri).then((info) => {
+      if (info.exists) {
+        setFileSize(info.size);
+      }
+    });
+  }, [uri]);
+
+  const handleRotate = () => {
+    setRotation((prev) => (prev + 90) % 360);
+  };
+
+  const handleBlurToggle = () => {
+    setBlurActive((prev) => !prev);
+  };
+
+  const handleTextSubmit = () => {
+    if (!customText.trim()) {
+      setTextModalVisible(false);
+      return;
+    }
+
+    const newOverlay: MediaOverlayItem = {
+      id: 'text_' + Date.now(),
+      type: 'text' as any,
+      text: customText.trim(),
+      emoji: null,
+      x: containerSize.width / 2 - 60,
+      y: containerSize.height / 2 - 20,
+      scale: 1.3,
+      rotation: 0,
+      color: selectedColor,
+      created_at: new Date().toISOString(),
+    };
+
+    setOverlays((prev) => [...prev, newOverlay]);
+    setCustomText('');
+    setTextModalVisible(false);
+  };
+
+  const handleAddSticker = async (stickerType: string) => {
+    setStickersVisible(false);
+    let newOverlay: MediaOverlayItem = {
+      id: 'sticker_' + stickerType + '_' + Date.now(),
+      type: stickerType as any,
+      text: '',
+      emoji: null,
+      x: containerSize.width / 2 - 75,
+      y: containerSize.height / 2 - 30,
+      scale: 1.0,
+      rotation: 0,
+      color: '#FFFFFF',
+      created_at: new Date().toISOString(),
+    };
+
+    if (stickerType === 'location') {
+      try {
+        const loc = await locationService.getCityLocation();
+        newOverlay.text = loc ? loc.text : 'My Location';
+      } catch (err) {
+        newOverlay.text = 'Location Unknown';
+      }
+    } else if (stickerType === 'time') {
+      const d = new Date();
+      newOverlay.text = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (stickerType === 'music') {
+      newOverlay.text = '🎵 Now Playing: TeleVault Beat';
+    } else if (stickerType === 'weather') {
+      newOverlay.text = '☀️ 78°F Sunny';
+    } else if (stickerType === 'poll') {
+      newOverlay.text = '📊 Would you rather? (Yes / No)';
+    } else if (stickerType === 'question') {
+      newOverlay.text = '❓ Ask me anything...';
+    }
+
+    setOverlays((prev) => [...prev, newOverlay]);
+  };
+
+  const handleAddEmoji = (emoji: string) => {
+    setStickersVisible(false);
+    const newOverlay: MediaOverlayItem = {
+      id: 'emoji_' + Math.random().toString(36).substring(2, 9) + Date.now(),
+      type: 'emoji' as any,
+      text: null,
+      emoji: emoji,
+      x: containerSize.width / 2 - 20,
+      y: containerSize.height / 2 - 20,
+      scale: 1.5,
+      rotation: 0,
+      color: null,
+      created_at: new Date().toISOString(),
+    };
+    setOverlays((prev) => [...prev, newOverlay]);
+  };
+
+  const deleteOverlay = (id: string) => {
+    setOverlays((prev) => prev.filter((o) => o.id !== id));
+  };
+
+  // Drag Gesture Responders
+  const handleTouchStart = (id: string, e: any) => {
+    if (drawingMode) return;
+    const overlay = overlays.find((o) => o.id === id);
+    if (!overlay) return;
+    const pageX = e.nativeEvent.pageX;
+    const pageY = e.nativeEvent.pageY;
+    touchStartRef.current = {
+      x: pageX,
+      y: pageY,
+      overlayX: overlay.x,
+      overlayY: overlay.y,
+    };
+    activeOverlayIdRef.current = id;
+  };
+
+  const handleTouchMove = (e: any) => {
+    if (drawingMode) return;
+    const id = activeOverlayIdRef.current;
+    if (!id) return;
+    const pageX = e.nativeEvent.pageX;
+    const pageY = e.nativeEvent.pageY;
+    const dx = pageX - touchStartRef.current.x;
+    const dy = pageY - touchStartRef.current.y;
+
+    setOverlays((prev) =>
+      prev.map((o) => {
+        if (o.id === id) {
+          return {
+            ...o,
+            x: touchStartRef.current.overlayX + dx,
+            y: touchStartRef.current.overlayY + dy,
+          };
+        }
+        return o;
+      })
+    );
+  };
+
+  const handleTouchEnd = () => {
+    activeOverlayIdRef.current = null;
+  };
+
+  // Drawing Tool touch tracking
+  const handleCanvasTouchStart = (e: any) => {
+    if (!drawingMode) return;
+    const { locationX, locationY } = e.nativeEvent;
+    setCurrentLine([{ x: locationX, y: locationY }]);
+  };
+
+  const handleCanvasTouchMove = (e: any) => {
+    if (!drawingMode) return;
+    const { locationX, locationY } = e.nativeEvent;
+    setCurrentLine((prev) => [...prev, { x: locationX, y: locationY }]);
+  };
+
+  const handleCanvasTouchEnd = () => {
+    if (!drawingMode) return;
+    if (currentLine.length > 0) {
+      setDrawingLines((prev) => [...prev, { points: currentLine, color: selectedDrawColor }]);
+      setCurrentLine([]);
+    }
+  };
+
+  const clearDrawing = () => {
+    setDrawingLines([]);
+  };
+
+  const handleLayout = (e: any) => {
+    const { width, height } = e.nativeEvent.layout;
+    setContainerSize({ width, height });
+  };
+
+  const handleQueueUpload = async (destination: 'memories' | 'drive' | 'private_drive') => {
     try {
       const config = await telegramService.getTelegramConfig();
       if (!config.botToken || !config.channelId) {
         Alert.alert(
-          'Storage Sync Required',
-          'You need to configure your Telegram Bot and Channel details first.',
+          'Telegram Configuration Required',
+          'Sync settings are missing. Please configure your Telegram Bot Details.',
           [
             { text: 'Cancel', style: 'cancel' },
             {
@@ -55,157 +269,420 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         return;
       }
     } catch (err) {
-      Alert.alert('Error', 'Failed to check sync credentials.');
+      Alert.alert('Error', 'Failed to retrieve connection parameters.');
       return;
     }
 
-    setUploading(true);
-    setUploadMsg('Uploading media to Telegram cloud...');
+    if (fileSize !== null && fileSize > 50 * 1024 * 1024) {
+      Alert.alert(
+        'Upload Blocked',
+        'This file exceeds 50 MB. Telegram Bot API limits uploads to 50 MB. Try a smaller file.'
+      );
+      return;
+    }
 
     const timestamp = Date.now();
     const extension = type === 'video' ? 'mp4' : 'jpg';
     const fileName = `TV_${destination.toUpperCase()}_${timestamp}.${extension}`;
     const mimeType = type === 'video' ? 'video/mp4' : 'image/jpeg';
 
+    // Package overlays + drawing lines in overlay metadata
+    const packagedMetadata = {
+      overlays,
+      drawing: drawingLines,
+      rotation,
+      blur: blurActive,
+    };
+
     try {
-      // 2. Upload to Telegram
-      const telegramResult = await telegramService.uploadToTelegram(
-        uri,
-        type,
-        fileName,
-        mimeType
-      );
-
-      setUploadMsg('Saving metadata to Supabase...');
-
-      // 3. Save to Supabase
-      const isPrivate = destination === 'private_drive';
-      const isDriveFile = destination !== 'memories';
-
-      await fileService.saveFileMetadata({
-        folder_id: null, // Root folder by default
+      await uploadQueueService.addToUploadQueue({
+        local_uri: uri,
         file_name: fileName,
-        file_type: type,
+        file_type: type === 'video' ? 'video' : 'image',
         mime_type: mimeType,
-        file_size: null, // Handled inside telegramService but can be null in table
-        is_private: isPrivate,
-        is_drive_file: isDriveFile,
-        telegram_message_id: telegramResult.telegramMessageId,
-        telegram_file_id: telegramResult.telegramFileId,
-        telegram_file_unique_id: telegramResult.telegramFileUniqueId,
-        local_thumbnail_uri: type === 'image' ? uri : null,
+        file_size: fileSize || 0,
+        destination: destination === 'private_drive' ? 'private' : destination,
+        folder_id: null,
+        is_private: destination === 'private_drive',
+        is_drive_file: destination !== 'memories',
+        overlay_metadata: packagedMetadata,
       });
 
-      Alert.alert('Success', 'Media uploaded and secured successfully!', [
-        {
-          text: 'OK',
-          onPress: () => {
-            if (destination === 'memories') {
-              navigation.replace('Main', { screen: 'MemoriesTab' });
-            } else if (destination === 'private_drive') {
-              navigation.replace('Main', { screen: 'PrivateDriveTab' });
-            } else {
-              navigation.replace('Main', { screen: 'DriveTab' });
-            }
+      Alert.alert(
+        'Upload Queued',
+        'Secure upload initiated. You can close this screen or wait.',
+        [
+          {
+            text: 'View Queue',
+            onPress: () => setQueueVisible(true),
           },
-        },
-      ]);
+          {
+            text: 'Dismiss',
+            onPress: () => {
+              if (destination === 'memories') {
+                navigation.replace('Main', { screen: 'MemoriesTab' });
+              } else if (destination === 'private_drive') {
+                navigation.replace('Main', { screen: 'PrivateDriveTab' });
+              } else {
+                navigation.replace('Main', { screen: 'DriveTab' });
+              }
+            },
+          },
+        ]
+      );
     } catch (error: any) {
-      console.error('Upload flow error:', error);
-      Alert.alert('Upload Failed', error.message || 'An error occurred during upload.');
-    } finally {
-      setUploading(false);
+      console.error('Queue add failed:', error);
+      Alert.alert('Queue Error', 'Failed to schedule media upload.');
     }
+  };
+
+  const handleSendSnap = async () => {
+    if (fileSize !== null && fileSize > 50 * 1024 * 1024) return;
+
+    const packagedMetadata = {
+      overlays,
+      drawing: drawingLines,
+      rotation,
+      blur: blurActive,
+    };
+
+    if (sendToUserId) {
+      setSendLoading(true);
+      try {
+        await snapService.sendDirectSnap(
+          sendToUserId,
+          uri,
+          type === 'video' ? 'video' : 'image',
+          null, // caption
+          packagedMetadata,
+          conversationId || null
+        );
+
+        Alert.alert('Success', `Snap sent to @${sendToUsername}!`, [
+          {
+            text: 'OK',
+            onPress: () => {
+              navigation.goBack();
+            },
+          },
+        ]);
+      } catch (err: any) {
+        Alert.alert('Error', err.message || 'Failed to send snap.');
+      } finally {
+        setSendLoading(false);
+      }
+    } else {
+      navigation.navigate('UserSearch', {
+        mode: 'snap',
+        mediaUri: uri,
+        mediaType: type === 'video' ? 'video' : 'image',
+      });
+    }
+  };
+
+  const handleAddToStory = async () => {
+    if (fileSize !== null && fileSize > 50 * 1024 * 1024) return;
+    setStoryLoading(true);
+    try {
+      await snapService.addToStory(uri, type === 'video' ? 'video' : 'image');
+      Alert.alert('Success', 'Added to story.', [
+        { text: 'OK', onPress: () => navigation.replace('Main', { screen: 'CameraTab' }) }
+      ]);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to add to story.');
+    } finally {
+      setStoryLoading(false);
+    }
+  };
+
+  const renderOverlays = () => {
+    return overlays.map((o) => {
+      const isEmoji = o.emoji !== null;
+
+      return (
+        <View
+          key={o.id}
+          style={[styles.overlayItem, { left: o.x, top: o.y }]}
+          onTouchStart={(e) => handleTouchStart(o.id, e)}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          {isEmoji ? (
+            <Text style={{ fontSize: 32 * (o.scale || 1) }}>{o.emoji}</Text>
+          ) : o.type === 'text' ? (
+            <Text style={[styles.overlayText, { color: o.color || '#FFFFFF', fontSize: 18 * (o.scale || 1) }]}>
+              {o.text}
+            </Text>
+          ) : (
+            // Sticker design render
+            <View style={styles.stickerCard}>
+              {o.type === 'location' && <MapPin size={14} color="#FFFC00" />}
+              {o.type === 'time' && <Clock size={14} color="#FFFC00" />}
+              {o.type === 'music' && <Music size={14} color="#FFFC00" />}
+              {o.type === 'weather' && <CloudSun size={14} color="#FFFC00" />}
+              {o.type === 'poll' && <BarChart2 size={14} color="#FFFC00" />}
+              {o.type === 'question' && <HelpCircle size={14} color="#FFFC00" />}
+              <Text style={styles.stickerCardText}>{o.text}</Text>
+            </View>
+          )}
+
+          <TouchableOpacity style={styles.deleteOverlayBtn} onPress={() => deleteOverlay(o.id)}>
+            <X size={10} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      );
+    });
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <UploadProgress visible={uploading} message={uploadMsg} />
+      <UploadProgress visible={queueVisible} onClose={() => setQueueVisible(false)} />
 
-      {/* Header back button */}
+      {/* Header Toolbar */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <ArrowLeft size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Preview</Text>
-        <View style={{ width: 44 }} />
+        <Text style={styles.headerTitle}>Edit Snap</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      {/* Main Media Preview */}
-      <View style={styles.previewContainer}>
-        {type === 'image' ? (
-          <Image source={{ uri }} style={styles.media} resizeMode="contain" />
-        ) : (
-          <View style={styles.videoPlaceholder}>
-            <Image source={{ uri }} style={[styles.media, { opacity: 0.5 }]} resizeMode="contain" />
-            <View style={styles.playIconCircle}>
-              <Text style={styles.playText}>▶</Text>
+      {/* Main Preview Container */}
+      <View
+        style={[styles.previewContainer, { transform: [{ rotate: `${rotation}deg` }] }]}
+        onLayout={handleLayout}
+      >
+        <Image
+          source={{ uri }}
+          style={styles.previewImage}
+          resizeMode="cover"
+          blurRadius={blurActive ? 20 : 0}
+        />
+
+        {/* Filters Overlay */}
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: selectedFilter.color }]} pointerEvents="none" />
+
+        {/* Draggable Overlays */}
+        {renderOverlays()}
+
+        {/* Freehand Drawing Canvas */}
+        <View
+          style={StyleSheet.absoluteFill}
+          pointerEvents={drawingMode ? 'auto' : 'none'}
+          onTouchStart={handleCanvasTouchStart}
+          onTouchMove={handleCanvasTouchMove}
+          onTouchEnd={handleCanvasTouchEnd}
+        >
+          {/* Drawing Lines Render using connected point segments */}
+          {drawingLines.map((line, lIdx) =>
+            line.points.map((p, pIdx) => {
+              if (pIdx === 0) return null;
+              const prev = line.points[pIdx - 1];
+              // Render segment mock using absolute positioning
+              const dx = p.x - prev.x;
+              const dy = p.y - prev.y;
+              const distance = Math.sqrt(dx * dx + dy * dy);
+              const steps = Math.ceil(distance / 2);
+              const points = [];
+              for (let i = 0; i <= steps; i++) {
+                points.push({
+                  x: prev.x + (dx * i) / steps,
+                  y: prev.y + (dy * i) / steps,
+                });
+              }
+              return points.map((pt, ptIdx) => (
+                <View
+                  key={`line-${lIdx}-${pIdx}-${ptIdx}`}
+                  style={[
+                    styles.drawPoint,
+                    {
+                      left: pt.x - 3,
+                      top: pt.y - 3,
+                      backgroundColor: line.color,
+                    },
+                  ]}
+                />
+              ));
+            })
+          )}
+
+          {/* Current line mock render */}
+          {currentLine.map((p, pIdx) => (
+            <View
+              key={`curr-pt-${pIdx}`}
+              style={[
+                styles.drawPoint,
+                {
+                  left: p.x - 3,
+                  top: p.y - 3,
+                  backgroundColor: selectedDrawColor,
+                },
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+
+      {/* Editor Controls Bar */}
+      <View style={styles.editorControls}>
+        <TouchableOpacity style={[styles.controlBtn, drawingMode && styles.activeControlBtn]} onPress={() => setDrawingMode(!drawingMode)}>
+          <Edit3 size={20} color={drawingMode ? '#000000' : '#FFFFFF'} />
+          <Text style={[styles.controlText, drawingMode && { color: '#FFFC00' }]}>Draw</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.controlBtn} onPress={() => setTextModalVisible(true)}>
+          <Type size={20} color="#FFFFFF" />
+          <Text style={styles.controlText}>Text</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.controlBtn} onPress={() => setStickersVisible(true)}>
+          <Sparkles size={20} color="#FFFFFF" />
+          <Text style={styles.controlText}>Stickers</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.controlBtn} onPress={handleRotate}>
+          <RotateCw size={20} color="#FFFFFF" />
+          <Text style={styles.controlText}>Rotate</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.controlBtn, blurActive && styles.activeControlBtn]} onPress={handleBlurToggle}>
+          <EyeOff size={20} color={blurActive ? '#000000' : '#FFFFFF'} />
+          <Text style={[styles.controlText, blurActive && { color: '#FFFC00' }]}>Blur</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Draw Colors Selector (only visible in drawing mode) */}
+      {drawingMode && (
+        <View style={styles.colorsRow}>
+          {OVERLAY_COLORS.map((c) => (
+            <TouchableOpacity
+              key={c}
+              style={[styles.colorBubble, { backgroundColor: c }, selectedDrawColor === c && styles.selectedColorBubble]}
+              onPress={() => setSelectedDrawColor(c)}
+            />
+          ))}
+          <TouchableOpacity style={styles.clearDrawBtn} onPress={clearDrawing}>
+            <Text style={styles.clearDrawText}>Clear</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Sync / Send Options */}
+      <View style={styles.actionsBar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.actionsScroll}>
+          <TouchableOpacity style={styles.actionTabBtn} onPress={() => handleQueueUpload('memories')}>
+            <Text style={styles.actionTabBtnText}>Save Memories</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionTabBtn} onPress={() => handleQueueUpload('drive')}>
+            <Text style={styles.actionTabBtnText}>Save Drive</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionTabBtn} onPress={() => handleQueueUpload('private_drive')}>
+            <Text style={styles.actionTabBtnText}>Save Private</Text>
+          </TouchableOpacity>
+        </ScrollView>
+
+        <View style={styles.sendRow}>
+          <TouchableOpacity style={styles.storyBtn} onPress={handleAddToStory} disabled={storyLoading}>
+            {storyLoading ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.storyBtnText}>Add to Story</Text>}
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.sendBtn} onPress={handleSendSnap} disabled={sendLoading}>
+            {sendLoading ? <ActivityIndicator size="small" color="#000000" /> : (
+              <>
+                <Send size={18} color="#000000" />
+                <Text style={styles.sendBtnText}>{sendToUserId ? 'Send Now' : 'Send To...'}</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Custom Text Modal */}
+      <Modal visible={textModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.textModalBox}>
+            <Text style={styles.modalBoxTitle}>Add Text Overlay</Text>
+            <TextInput
+              style={styles.textModalInput}
+              placeholder="Type something..."
+              placeholderTextColor="#8e92af"
+              value={customText}
+              onChangeText={setCustomText}
+              autoFocus
+            />
+            {/* Color selector */}
+            <View style={styles.colorsSelector}>
+              {OVERLAY_COLORS.map((c) => (
+                <TouchableOpacity
+                  key={c}
+                  style={[styles.colorBubble, { backgroundColor: c }, selectedColor === c && styles.selectedColorBubble]}
+                  onPress={() => setSelectedColor(c)}
+                />
+              ))}
+            </View>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel]} onPress={() => setTextModalVisible(false)}>
+                <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, styles.modalBtnSubmit]} onPress={handleTextSubmit}>
+                <Text style={{ color: '#000000', fontWeight: '700' }}>Add</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        )}
-        {/* Filter overlay */}
-        <View style={[styles.filterOverlay, { backgroundColor: selectedFilter.color }]} pointerEvents="none" />
-      </View>
+        </View>
+      </Modal>
 
-      {/* Filter Horizontal Selector */}
-      <View style={styles.filterSection}>
-        <Text style={styles.filterLabel}>Swipe Filter</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterScroll}
-        >
-          {FILTERS.map((filter) => (
-            <TouchableOpacity
-              key={filter.name}
-              style={[
-                styles.filterItem,
-                selectedFilter.name === filter.name && styles.selectedFilterItem,
-              ]}
-              onPress={() => setSelectedFilter(filter)}
-            >
-              <View style={[styles.filterPreview, { backgroundColor: filter.color }]} />
-              <Text style={styles.filterName}>{filter.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+      {/* Stickers and Widget Menu Sheet */}
+      <Modal visible={stickersVisible} transparent animationType="slide">
+        <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={() => setStickersVisible(false)}>
+          <View style={styles.sheetContainer}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Widgets & Stickers</Text>
+            </View>
 
-      {/* Action Buttons */}
-      <View style={styles.actionsContainer}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => handleUpload('memories')}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.iconCircle, { backgroundColor: '#FFFC00' }]}>
-            <ImageIcon size={22} color="#000000" />
+            <View style={styles.stickersGrid}>
+              <TouchableOpacity style={styles.stickerOption} onPress={() => handleAddSticker('location')}>
+                <MapPin size={24} color="#FFFC00" />
+                <Text style={styles.stickerOptionText}>Location</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.stickerOption} onPress={() => handleAddSticker('time')}>
+                <Clock size={24} color="#FFFC00" />
+                <Text style={styles.stickerOptionText}>Time</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.stickerOption} onPress={() => handleAddSticker('music')}>
+                <Music size={24} color="#FFFC00" />
+                <Text style={styles.stickerOptionText}>Music</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.stickerOption} onPress={() => handleAddSticker('weather')}>
+                <CloudSun size={24} color="#FFFC00" />
+                <Text style={styles.stickerOptionText}>Weather</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.stickerOption} onPress={() => handleAddSticker('poll')}>
+                <BarChart2 size={24} color="#FFFC00" />
+                <Text style={styles.stickerOptionText}>Poll</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.stickerOption} onPress={() => handleAddSticker('question')}>
+                <HelpCircle size={24} color="#FFFC00" />
+                <Text style={styles.stickerOptionText}>Question</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.sheetSubtitle}>EMOJIS</Text>
+            <View style={styles.emojisRow}>
+              {EMOJIS.map((e) => (
+                <TouchableOpacity key={e} onPress={() => handleAddEmoji(e)} style={styles.emojiBtn}>
+                  <Text style={{ fontSize: 24 }}>{e}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
-          <Text style={styles.actionText}>Save Memories</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => handleUpload('drive')}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.iconCircle, { backgroundColor: '#1E1E1E', borderColor: '#2C2C2E', borderWidth: 1 }]}>
-            <HardDrive size={22} color="#FFFFFF" />
-          </View>
-          <Text style={styles.actionText}>Save Drive</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => handleUpload('private_drive')}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.iconCircle, { backgroundColor: '#1E1E1E', borderColor: '#FF453A', borderWidth: 1 }]}>
-            <Lock size={22} color="#FF453A" />
-          </View>
-          <Text style={[styles.actionText, { color: '#FF453A' }]}>Private Drive</Text>
-        </TouchableOpacity>
-      </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -222,13 +699,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 56,
   },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#1E1E1E',
-    justifyContent: 'center',
-    alignItems: 'center',
+  backBtn: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#0f1123',
   },
   headerTitle: {
     color: '#FFFFFF',
@@ -237,103 +711,289 @@ const styles = StyleSheet.create({
   },
   previewContainer: {
     flex: 1,
-    marginVertical: 16,
+    backgroundColor: '#121212',
     marginHorizontal: 16,
     borderRadius: 24,
     overflow: 'hidden',
-    backgroundColor: '#121212',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
+    borderWidth: 1,
+    borderColor: '#1f2444',
   },
-  media: {
+  previewImage: {
     width: '100%',
     height: '100%',
   },
-  filterOverlay: {
-    ...StyleSheet.absoluteFill,
+  editorControls: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#121214',
   },
-  videoPlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
+  controlBtn: {
     alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
+    borderRadius: 16,
   },
-  playIconCircle: {
+  activeControlBtn: {
+    backgroundColor: '#FFFC00',
+  },
+  controlText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  colorsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    backgroundColor: '#07080f',
+  },
+  colorBubble: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginHorizontal: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  selectedColorBubble: {
+    borderColor: '#FFFC00',
+    borderWidth: 2,
+    transform: [{ scale: 1.2 }],
+  },
+  clearDrawBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: '#FF453A',
+    borderRadius: 12,
+    marginLeft: 10,
+  },
+  clearDrawText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  drawPoint: {
     position: 'absolute',
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  overlayItem: {
+    position: 'absolute',
+    zIndex: 10,
+    padding: 8,
+  },
+  overlayText: {
+    fontWeight: '800',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
+  stickerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#FFFC00',
+  },
+  stickerCardText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  deleteOverlayBtn: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: 'rgba(255, 69, 58, 0.9)',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionsBar: {
+    paddingTop: 10,
+    paddingBottom: 24,
+    backgroundColor: '#000000',
+  },
+  actionsScroll: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  actionTabBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    backgroundColor: '#0f1123',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#1f2444',
+  },
+  actionTabBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sendRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  storyBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 22,
+    backgroundColor: '#1f2444',
+    width: '45%',
+    alignItems: 'center',
+  },
+  storyBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  sendBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 22,
+    backgroundColor: '#FFFC00',
+    width: '50%',
+  },
+  sendBtnText: {
+    color: '#000000',
+    fontWeight: '700',
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  modalOverlay: {
+    flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
+    padding: 24,
   },
-  playText: {
+  textModalBox: {
+    backgroundColor: '#0f1123',
+    borderRadius: 24,
+    padding: 20,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#1f2444',
+  },
+  modalBoxTitle: {
     color: '#FFFFFF',
-    fontSize: 24,
-    marginLeft: 4,
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+    textAlign: 'center',
   },
-  filterSection: {
+  textModalInput: {
+    backgroundColor: '#151728',
+    borderRadius: 12,
+    padding: 12,
+    color: '#FFFFFF',
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: '#242745',
+    marginBottom: 16,
+  },
+  colorsSelector: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     marginBottom: 20,
   },
-  filterLabel: {
-    color: '#8E8E93',
-    fontSize: 12,
-    fontWeight: '600',
-    paddingHorizontal: 20,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  filterScroll: {
-    paddingHorizontal: 16,
-  },
-  filterItem: {
-    alignItems: 'center',
-    marginRight: 16,
-    width: 64,
-  },
-  selectedFilterItem: {
-    transform: [{ scale: 1.05 }],
-  },
-  filterPreview: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#2C2C2E',
-    marginBottom: 6,
-    backgroundColor: '#1E1E1E',
-  },
-  filterName: {
-    color: '#8E8E93',
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  actionsContainer: {
+  modalButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingBottom: 24,
-    paddingHorizontal: 16,
+    justifyContent: 'space-between',
   },
-  actionButton: {
-    alignItems: 'center',
-    width: 100,
-  },
-  iconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+  modalBtn: {
+    width: '48%',
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
   },
-  actionText: {
+  modalBtnCancel: {
+    backgroundColor: '#242745',
+  },
+  modalBtnSubmit: {
+    backgroundColor: '#FFFC00',
+  },
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  sheetContainer: {
+    backgroundColor: '#0f1123',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#1f2444',
+  },
+  sheetHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  stickersGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  stickerOption: {
+    width: '30%',
+    aspectRatio: 1,
+    backgroundColor: '#151728',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#242745',
+  },
+  stickerOptionText: {
+    color: '#FFFFFF',
+    fontSize: 11,
     fontWeight: '600',
-    textAlign: 'center',
+    marginTop: 6,
+  },
+  sheetSubtitle: {
+    color: '#8e92af',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 10,
+  },
+  emojisRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  emojiBtn: {
+    padding: 8,
+    marginRight: 6,
+    marginBottom: 6,
+    backgroundColor: '#151728',
+    borderRadius: 10,
   },
 });
 

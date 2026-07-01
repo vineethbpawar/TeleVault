@@ -23,4 +23,9 @@ export interface TeleVaultFile {
   local_thumbnail_uri: string | null;
   uploaded_at: string;
   created_at: string;
+  is_favorite?: boolean;
+  memory_date?: string;
+  caption?: string | null;
+  overlay_metadata?: any;
 }
+

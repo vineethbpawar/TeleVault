@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Modal, SafeAreaView, Alert } from 'react-native';
-import { Delete, X, Lock } from 'lucide-react-native';
+import { Delete, X, Lock, Fingerprint } from 'lucide-react-native';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { securityService } from '../services/securityService';
 
 interface PinLockModalProps {
@@ -20,16 +21,55 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
   const [confirmPin, setConfirmPin] = useState('');
   const [step, setStep] = useState<'enter' | 'confirm'>('enter');
   const [error, setError] = useState('');
+  const [biometricsAvailable, setBiometricsAvailable] = useState(false);
 
-  // Reset state when modal opens/closes
+  // Check biometric support
+  useEffect(() => {
+    const checkBiometrics = async () => {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      const isEnabled = await securityService.isBiometricsEnabled();
+      setBiometricsAvailable(hasHardware && isEnrolled && isEnabled);
+    };
+    checkBiometrics();
+  }, [visible]);
+
+  // Reset state and trigger biometrics when modal opens
   useEffect(() => {
     if (visible) {
       setPin('');
       setConfirmPin('');
       setStep('enter');
       setError('');
+
+      if (mode === 'verify') {
+        // Auto trigger biometrics
+        setTimeout(() => {
+          triggerBiometrics();
+        }, 500);
+      }
     }
-  }, [visible]);
+  }, [visible, biometricsAvailable]);
+
+  const triggerBiometrics = async () => {
+    const hasHardware = await LocalAuthentication.hasHardwareAsync();
+    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+    const isEnabled = await securityService.isBiometricsEnabled();
+
+    if (hasHardware && isEnrolled && isEnabled && mode === 'verify') {
+      try {
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Unlock TeleVault',
+          fallbackLabel: 'Enter PIN',
+        });
+        if (result.success) {
+          onSuccess();
+        }
+      } catch (err) {
+        console.warn('Biometric auth error:', err);
+      }
+    }
+  };
 
   const handleKeyPress = (num: string) => {
     setError('');
@@ -173,14 +213,24 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
             {['7', '8', '9'].map(renderKey)}
           </View>
           <View style={styles.keypadRow}>
-            {/* Cancel Button */}
-            <TouchableOpacity
-              style={styles.keypadButton}
-              onPress={onClose}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.keypadText, styles.cancelText]}>Cancel</Text>
-            </TouchableOpacity>
+            {/* Left Button (Biometrics or Cancel) */}
+            {biometricsAvailable && mode === 'verify' ? (
+              <TouchableOpacity
+                style={styles.keypadButton}
+                onPress={triggerBiometrics}
+                activeOpacity={0.7}
+              >
+                <Fingerprint size={28} color="#FFFC00" />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.keypadButton}
+                onPress={onClose}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.keypadText, styles.cancelText]}>Cancel</Text>
+              </TouchableOpacity>
+            )}
 
             {renderKey('0')}
 
@@ -212,7 +262,7 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 8,
     borderRadius: 20,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
   },
   contentContainer: {
     flex: 1,
@@ -224,12 +274,12 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
   },
   heading: {
     color: '#FFFFFF',
@@ -238,7 +288,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   subheading: {
-    color: '#8E8E93',
+    color: '#8e92af',
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 32,
@@ -258,7 +308,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   dotEmpty: {
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
     backgroundColor: 'transparent',
   },
   dotFilled: {
@@ -285,7 +335,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -297,7 +347,7 @@ const styles = StyleSheet.create({
   cancelText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#8E8E93',
+    color: '#8e92af',
   },
 });
 

@@ -24,6 +24,10 @@ import {
   Search,
   ArrowUpDown,
   FileText,
+  HardDrive,
+  Star,
+  Image as ImageIcon,
+  Video,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -34,6 +38,8 @@ import { MainTabParamList, AppStackParamList } from '../types/navigation';
 import { fileService } from '../services/fileService';
 import { telegramService } from '../services/telegramService';
 import { securityService } from '../services/securityService';
+import { supabase } from '../lib/supabase';
+import { uploadQueueService } from '../services/uploadQueueService';
 import { TeleVaultFile, TeleVaultFolder } from '../types/file';
 import FolderCard from '../components/FolderCard';
 import FileCard from '../components/FileCard';
@@ -42,6 +48,7 @@ import PinLockModal from '../components/PinLockModal';
 import UploadProgress from '../components/UploadProgress';
 import AppButton from '../components/AppButton';
 import AppInput from '../components/AppInput';
+import AppCard from '../components/AppCard';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'PrivateDriveTab'>,
@@ -53,10 +60,15 @@ type SortOption = 'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_de
 export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
   const [folders, setFolders] = useState<TeleVaultFolder[]>([]);
   const [files, setFiles] = useState<TeleVaultFile[]>([]);
+  const [recentFiles, setRecentFiles] = useState<TeleVaultFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('date_desc');
+  const [filterType, setFilterType] = useState<'all' | 'image' | 'video' | 'document'>('all');
+
+  // Storage Stats State
+  const [storageUsage, setStorageUsage] = useState({ totalSize: 0, filesCount: 0 });
 
   // Folder navigation state
   const [currentFolder, setCurrentFolder] = useState<TeleVaultFolder | null>(null);
@@ -72,8 +84,7 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
   const [fabMenuVisible, setFabMenuVisible] = useState(false);
 
   // Upload/Progress State
-  const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState('');
+  const [queueModalVisible, setQueueModalVisible] = useState(false);
 
   // Dialog State (Create Folder / Rename)
   const [dialogVisible, setDialogVisible] = useState(false);
@@ -85,7 +96,7 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<{ type: 'folder' | 'file'; id: string; name: string } | null>(null);
 
-  // Check PIN security on focus
+  // PIN verification check
   useEffect(() => {
     if (isFocused) {
       const checkSecurity = async () => {
@@ -99,13 +110,10 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
               {
                 text: 'Skip',
                 style: 'cancel',
-                onPress: () => {
-                  setIsUnlocked(true);
-                  loadContent(true);
-                },
+                onPress: () => navigation.navigate('CameraTab'),
               },
               {
-                text: 'Create PIN',
+                text: 'Set PIN',
                 onPress: () => {
                   setPinModalMode('create');
                   setPinModalVisible(true);
@@ -113,15 +121,11 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
               },
             ]
           );
+        } else if (!isUnlocked) {
+          setPinModalMode('verify');
+          setPinModalVisible(true);
         } else {
-          const lockEnabled = await securityService.isPrivateDriveLockEnabled();
-          if (lockEnabled && !isUnlocked) {
-            setPinModalMode('verify');
-            setPinModalVisible(true);
-          } else {
-            setIsUnlocked(true);
-            loadContent(true);
-          }
+          loadContent(true);
         }
       };
       checkSecurity();
@@ -135,14 +139,33 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
     if (showSpinner) setLoading(true);
     try {
       const parentId = currentFolder ? currentFolder.id : null;
-      const [fetchedFolders, fetchedFiles] = await Promise.all([
+      const [fetchedFolders, fetchedFiles, fetchedRecents, usage] = await Promise.all([
         fileService.fetchPrivateDriveFolders(parentId),
         fileService.fetchPrivateDriveFiles(parentId),
+        // Filter recents for private files
+        supabase
+          .from('files')
+          .select('*')
+          .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+          .eq('is_private', true)
+          .eq('is_drive_file', true)
+          .order('created_at', { ascending: false })
+          .limit(10),
+        supabase
+          .from('files')
+          .select('file_size')
+          .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+          .eq('is_private', true)
       ]);
       setFolders(fetchedFolders);
       setFiles(fetchedFiles);
+      setRecentFiles((fetchedRecents.data || []) as TeleVaultFile[]);
+      
+      const filesCount = usage.data?.length || 0;
+      const totalSize = (usage.data || []).reduce((acc: number, curr: any) => acc + Number(curr.file_size || 0), 0);
+      setStorageUsage({ totalSize, filesCount });
     } catch (error) {
-      console.error('Failed to load private drive content:', error);
+      console.error('Failed to load drive content:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -150,24 +173,19 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   useEffect(() => {
-    if (isUnlocked) {
+    if (isUnlocked || !pinModalVisible) {
       loadContent(true);
     }
-  }, [currentFolder, isUnlocked]);
+  }, [currentFolder]);
 
   const onRefresh = useCallback(() => {
-    if (!isUnlocked) return;
     setRefreshing(true);
     loadContent(false);
-  }, [currentFolder, isUnlocked]);
+  }, [currentFolder]);
 
-  const handlePinSuccess = async () => {
+  const handlePinSuccess = () => {
     setIsUnlocked(true);
     setPinModalVisible(false);
-    if (pinModalMode === 'create') {
-      // Enable Private Drive Lock by default when PIN is created
-      await securityService.setPrivateDriveLockEnabled(true);
-    }
     loadContent(true);
   };
 
@@ -193,7 +211,6 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
   const handleUpload = async (source: 'camera' | 'document') => {
     setFabMenuVisible(false);
 
-    // Verify Telegram Sync config
     try {
       const config = await telegramService.getTelegramConfig();
       if (!config.botToken || !config.channelId) {
@@ -230,7 +247,7 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
           await processUpload(
             asset.uri,
             asset.type === 'video' ? 'video' : 'image',
-            asset.fileName || `TV_PRIVATE_${Date.now()}.jpg`,
+            asset.fileName || `TV_UPLOAD_${Date.now()}.jpg`,
             asset.mimeType || 'image/jpeg',
             asset.fileSize || 0
           );
@@ -259,39 +276,38 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const processUpload = async (uri: string, type: 'image' | 'video' | 'document', name: string, mime: string, size: number) => {
-    setUploading(true);
-    setUploadMsg(`Securing & Uploading ${name} to Telegram...`);
+    if (size > 50 * 1024 * 1024) {
+      Alert.alert(
+        'Upload Blocked',
+        'This file is over 50 MB. Normal Telegram Bot API upload is limited in this MVP. Please choose a smaller/compressed file.'
+      );
+      return;
+    }
 
     try {
-      const telegramResult = await telegramService.uploadToTelegram(uri, type, name, mime);
-
-      setUploadMsg('Saving private metadata to Supabase...');
-
-      await fileService.saveFileMetadata({
-        folder_id: currentFolder ? currentFolder.id : null,
+      await uploadQueueService.addToUploadQueue({
+        local_uri: uri,
         file_name: name,
         file_type: type,
         mime_type: mime,
-        file_size: size || null,
+        file_size: size,
+        destination: 'drive',
+        folder_id: currentFolder ? currentFolder.id : null,
         is_private: true,
         is_drive_file: true,
-        telegram_message_id: telegramResult.telegramMessageId,
-        telegram_file_id: telegramResult.telegramFileId,
-        telegram_file_unique_id: telegramResult.telegramFileUniqueId,
-        local_thumbnail_uri: type === 'image' ? uri : null,
+        overlay_metadata: null,
       });
 
-      Alert.alert('Success', 'Private file uploaded successfully.');
-      loadContent(false);
+      setQueueModalVisible(true);
+      setTimeout(() => {
+        loadContent(false);
+      }, 3000);
     } catch (error: any) {
-      console.error('Private upload failed:', error);
-      Alert.alert('Upload Failed', error.message || 'An error occurred during private upload.');
-    } finally {
-      setUploading(false);
+      console.error('Upload process failed:', error);
+      Alert.alert('Upload Failed', error.message || 'An error occurred during file upload scheduling.');
     }
   };
 
-  // CRUD Operations Dialog Submission
   const handleDialogSubmit = async () => {
     if (!dialogInput.trim()) {
       Alert.alert('Error', 'Please enter a name.');
@@ -305,8 +321,8 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
       const name = dialogInput.trim();
       if (dialogMode === 'create_folder') {
         const parentId = currentFolder ? currentFolder.id : null;
-        await fileService.createFolder(name, parentId, true); // isPrivate = true
-        Alert.alert('Success', 'Private folder created.');
+        await fileService.createFolder(name, parentId, true);
+        Alert.alert('Success', 'Private Folder created.');
       } else if (dialogMode === 'rename_folder' && activeItemId) {
         await fileService.renameFolder(activeItemId, name);
         Alert.alert('Success', 'Folder renamed.');
@@ -321,14 +337,13 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  // Delete Action
   const handleDeleteItem = async () => {
     if (!selectedItem) return;
     setOptionsVisible(false);
 
     Alert.alert(
       'Delete Confirmation',
-      `Are you sure you want to delete ${selectedItem.name}? This will delete the metadata. Telegram file storage remains unaffected.`,
+      `Are you sure you want to delete ${selectedItem.name}? Telegram file storage remains unaffected.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -353,7 +368,6 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  // Rename action trigger
   const handleRenameTrigger = () => {
     if (!selectedItem) return;
     setOptionsVisible(false);
@@ -363,17 +377,27 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
     setDialogVisible(true);
   };
 
-  // Open item menu
   const openItemMenu = (type: 'folder' | 'file', id: string, name: string) => {
     setSelectedItem({ type, id, name });
     setOptionsVisible(true);
   };
 
-  // Sort and Filter computations
+  const formatSize = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
   const getProcessedItems = () => {
     const query = searchQuery.toLowerCase();
     const filteredFolders = folders.filter((f) => f.name.toLowerCase().includes(query));
-    const filteredFiles = files.filter((f) => f.file_name.toLowerCase().includes(query));
+    const filteredFiles = files.filter((f) => {
+      const matchesSearch = f.file_name.toLowerCase().includes(query);
+      const matchesType = filterType === 'all' || f.file_type === filterType;
+      return matchesSearch && matchesType;
+    });
 
     const sortedFolders = [...filteredFolders].sort((a, b) => {
       if (sortBy === 'name_asc') return a.name.localeCompare(b.name);
@@ -396,32 +420,56 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <PinLockModal visible={pinModalVisible} onClose={handlePinCancel} onSuccess={handlePinSuccess} mode={pinModalMode} />
-      <UploadProgress visible={uploading} message={uploadMsg} />
+      <PinLockModal
+        visible={pinModalVisible}
+        onClose={handlePinCancel}
+        onSuccess={handlePinSuccess}
+        mode={pinModalMode}
+      />
+      <UploadProgress visible={queueModalVisible} onClose={() => setQueueModalVisible(false)} />
 
       {/* Header */}
       <View style={styles.header}>
         {currentFolder ? (
           <TouchableOpacity onPress={navigateBack} style={styles.backButton}>
-            <ArrowLeft size={24} color="#FF453A" />
+            <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
         ) : (
           <View style={{ width: 16 }} />
         )}
-        <Text style={[styles.headerTitle, { color: '#FF453A' }]}>
-          {currentFolder ? currentFolder.name : 'Private Drive'}
-        </Text>
-        <Lock size={18} color="#FF453A" style={{ marginLeft: 6 }} />
-        <View style={{ flex: 1 }} />
+        <View style={styles.titleRow}>
+          <Lock size={18} color="#FF453A" style={{ marginRight: 6 }} />
+          <Text style={styles.headerTitle}>{currentFolder ? currentFolder.name : 'Private Vault'}</Text>
+        </View>
+        <TouchableOpacity onPress={() => setQueueModalVisible(true)} style={styles.queueBtn}>
+          <Upload size={20} color="#FFFC00" />
+        </TouchableOpacity>
       </View>
+
+      {/* Storage usage statistics widget */}
+      {!currentFolder && (
+        <AppCard style={styles.storageCard}>
+          <View style={styles.storageHeader}>
+            <HardDrive size={20} color="#FF453A" />
+            <Text style={styles.storageTitle}>PRIVATE STORAGE USAGE</Text>
+          </View>
+          <View style={styles.storageDetails}>
+            <Text style={styles.storageNum}>{formatSize(storageUsage.totalSize)}</Text>
+            <Text style={styles.storageLabel}>Used across {storageUsage.filesCount} private files</Text>
+          </View>
+          <View style={styles.progressBarBg}>
+            <View style={[styles.progressBarFill, { width: `${Math.min(100, (storageUsage.totalSize / (1024 * 1024 * 1024)) * 100)}%` }]} />
+          </View>
+        </AppCard>
+      )}
 
       {/* Search and Sort Toolbar */}
       <View style={styles.toolbar}>
         <View style={styles.searchBar}>
-          <Search size={16} color="#8E8E93" style={{ marginRight: 8 }} />
+          <Search size={16} color="#8e92af" style={{ marginRight: 8 }} />
           <TextInput
-            placeholder="Search private vault..."
-            placeholderTextColor="#8E8E93"
+            placeholder="Search private drive..."
+            placeholderTextColor="#8e92af"
             style={styles.searchInput}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -448,31 +496,75 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
             );
           }}
         >
-          <ArrowUpDown size={18} color="#FF453A" />
+          <ArrowUpDown size={18} color="#FFFC00" />
         </TouchableOpacity>
       </View>
 
+      {/* File Type Filter Tabs */}
+      <View style={styles.typeTabs}>
+        {(['all', 'image', 'video', 'document'] as const).map((type) => (
+          <TouchableOpacity
+            key={type}
+            style={[styles.typeTab, filterType === type && styles.activeTypeTab]}
+            onPress={() => setFilterType(type)}
+          >
+            <Text style={[styles.typeTabText, filterType === type && styles.activeTypeTabText]}>
+              {type === 'all' ? 'All' : type === 'image' ? 'Photos' : type === 'video' ? 'Videos' : 'Files'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Recent Uploads Row (Root level only) */}
+      {!currentFolder && recentFiles.length > 0 && (
+        <View style={styles.recentSection}>
+          <Text style={styles.recentTitle}>RECENT PRIVATE UPLOADS</Text>
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={recentFiles}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.recentList}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.recentCard}
+                onPress={() => navigation.navigate('FileDetails', { file: item })}
+              >
+                {item.file_type === 'image' ? (
+                  <ImageIcon size={22} color="#FFFC00" />
+                ) : item.file_type === 'video' ? (
+                  <Video size={22} color="#FFFC00" />
+                ) : (
+                  <FileText size={22} color="#FFFFFF" />
+                )}
+                <Text style={styles.recentFileName} numberOfLines={1}>{item.file_name}</Text>
+                <Text style={styles.recentFileSize}>{formatSize(item.file_size || 0)}</Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      )}
+
       {/* Main drive list */}
-      {!isUnlocked || loading ? (
+      {loading ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#FF453A" />
+          <ActivityIndicator size="large" color="#FFFC00" />
         </View>
       ) : sortedFolders.length === 0 && sortedFiles.length === 0 ? (
         <ScrollView
           contentContainerStyle={{ flexGrow: 1 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF453A" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFC00" />}
         >
           <EmptyState
-            title="Private Drive is Empty"
-            description="Secure your sensitive files here. Tap the '+' button to add folders or private files."
-            icon={<Lock size={48} color="#FF453A" />}
+            title="Private Vault is Empty"
+            description="Tap the '+' button to create secure folders or upload encrypted documents."
           />
         </ScrollView>
       ) : (
         <FlatList
           data={[...sortedFolders.map((f) => ({ ...f, isFolder: true })), ...sortedFiles.map((f) => ({ ...f, isFolder: false }))]}
           keyExtractor={(item) => item.id}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF453A" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFC00" />}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }: { item: any }) => {
             if (item.isFolder) {
@@ -497,15 +589,13 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
       )}
 
       {/* FAB Floating Menu */}
-      {isUnlocked && (
-        <TouchableOpacity
-          style={[styles.fab, { backgroundColor: '#FF453A' }]}
-          onPress={() => setFabMenuVisible(!fabMenuVisible)}
-          activeOpacity={0.8}
-        >
-          <Plus size={28} color="#FFFFFF" style={fabMenuVisible && { transform: [{ rotate: '45deg' }] }} />
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setFabMenuVisible(!fabMenuVisible)}
+        activeOpacity={0.8}
+      >
+        <Plus size={28} color="#000000" style={fabMenuVisible && { transform: [{ rotate: '45deg' }] }} />
+      </TouchableOpacity>
 
       {/* FAB Option Overlay */}
       {fabMenuVisible && (
@@ -523,21 +613,21 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
               >
                 <Text style={styles.fabMenuText}>New Private Folder</Text>
                 <View style={styles.fabIconCircle}>
-                  <FolderPlus size={20} color="#FF453A" />
+                  <FolderPlus size={20} color="#FFFC00" />
                 </View>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.fabMenuItem} onPress={() => handleUpload('camera')}>
-                <Text style={styles.fabMenuText}>Upload Private Photo/Video</Text>
+                <Text style={styles.fabMenuText}>Upload Secure Gallery</Text>
                 <View style={styles.fabIconCircle}>
-                  <Upload size={20} color="#FF453A" />
+                  <Upload size={20} color="#FFFC00" />
                 </View>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.fabMenuItem} onPress={() => handleUpload('document')}>
-                <Text style={styles.fabMenuText}>Upload Private File</Text>
+                <Text style={styles.fabMenuText}>Upload Secure File</Text>
                 <View style={styles.fabIconCircle}>
-                  <FileText size={20} color="#FF453A" />
+                  <FileText size={20} color="#FFFC00" />
                 </View>
               </TouchableOpacity>
             </View>
@@ -545,7 +635,7 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
         </Modal>
       )}
 
-      {/* Reusable dialog modal for Creating/Renaming */}
+      {/* Reusable dialog modal */}
       <Modal visible={dialogVisible} transparent animationType="fade">
         <View style={styles.dialogOverlay}>
           <View style={styles.dialogBox}>
@@ -621,33 +711,86 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     height: 56,
   },
   backButton: {
     padding: 8,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   headerTitle: {
+    color: '#FFFFFF',
     fontSize: 20,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
+  queueBtn: {
+    padding: 8,
+  },
+  storageCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 14,
+    borderColor: '#3a171d',
+    backgroundColor: '#1c1115',
+  },
+  storageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  storageTitle: {
+    color: '#FF453A',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginLeft: 6,
+  },
+  storageDetails: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 10,
+  },
+  storageNum: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  storageLabel: {
+    color: '#8e92af',
+    fontSize: 12,
+    marginLeft: 8,
+  },
+  progressBarBg: {
+    height: 6,
+    backgroundColor: '#2c1417',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#FF453A',
+  },
   toolbar: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 10,
     alignItems: 'center',
   },
   searchBar: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     height: 40,
     borderRadius: 10,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
     marginRight: 10,
   },
   searchInput: {
@@ -658,12 +801,74 @@ const styles = StyleSheet.create({
   sortButton: {
     width: 40,
     height: 40,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
+  },
+  typeTabs: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  typeTab: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    marginRight: 8,
+    backgroundColor: '#0f1123',
+    borderWidth: 1,
+    borderColor: '#1f2444',
+  },
+  activeTypeTab: {
+    backgroundColor: '#FF453A',
+    borderColor: '#FF453A',
+  },
+  typeTabText: {
+    color: '#8e92af',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  activeTypeTabText: {
+    color: '#FFFFFF',
+  },
+  recentSection: {
+    marginBottom: 16,
+    paddingHorizontal: 16,
+  },
+  recentTitle: {
+    color: '#FF453A',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 8,
+  },
+  recentList: {
+    paddingRight: 16,
+  },
+  recentCard: {
+    width: 110,
+    backgroundColor: '#0f1123',
+    borderRadius: 14,
+    padding: 10,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#1f2444',
+    alignItems: 'center',
+  },
+  recentFileName: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  recentFileSize: {
+    color: '#8e92af',
+    fontSize: 10,
+    marginTop: 2,
   },
   listContent: {
     paddingHorizontal: 16,
@@ -681,6 +886,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
+    backgroundColor: '#FF453A',
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 8,
@@ -711,23 +917,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     marginRight: 12,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
     overflow: 'hidden',
   },
   fabIconCircle: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
   },
   dialogOverlay: {
     flex: 1,
@@ -738,11 +944,11 @@ const styles = StyleSheet.create({
   },
   dialogBox: {
     width: '100%',
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     borderRadius: 24,
     padding: 24,
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
   },
   dialogTitle: {
     color: '#FFFFFF',
@@ -766,18 +972,18 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   bottomSheetContainer: {
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
   },
   bottomSheetHeader: {
     alignItems: 'center',
     marginBottom: 16,
     borderBottomWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
     paddingBottom: 12,
   },
   bottomSheetTitle: {
@@ -789,10 +995,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
   },
   bottomSheetItemDanger: {
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
   },
   bottomSheetItemCancel: {
     borderBottomWidth: 0,
@@ -807,7 +1013,7 @@ const styles = StyleSheet.create({
     color: '#FF453A',
   },
   cancelText: {
-    color: '#8E8E93',
+    color: '#8e92af',
   },
 });
 

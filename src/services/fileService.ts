@@ -14,6 +14,7 @@ export const fileService = {
     telegram_file_id: string;
     telegram_file_unique_id: string;
     local_thumbnail_uri: string | null;
+    overlay_metadata?: any;
   }): Promise<TeleVaultFile> {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
@@ -35,6 +36,7 @@ export const fileService = {
         telegram_file_id: metadata.telegram_file_id,
         telegram_file_unique_id: metadata.telegram_file_unique_id,
         local_thumbnail_uri: metadata.local_thumbnail_uri,
+        overlay_metadata: metadata.overlay_metadata || [],
       })
       .select()
       .single();
@@ -241,6 +243,130 @@ export const fileService = {
       throw new Error(error.message || 'Failed to delete file.');
     }
   },
+
+  async toggleFavoriteFile(id: string, isFavorite: boolean): Promise<TeleVaultFile> {
+    const { data, error } = await supabase
+      .from('files')
+      .update({ is_favorite: isFavorite })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(error.message || 'Failed to toggle favorite status.');
+    }
+    return data as TeleVaultFile;
+  },
+
+  async moveFile(id: string, targetFolderId: string | null): Promise<TeleVaultFile> {
+    const { data, error } = await supabase
+      .from('files')
+      .update({ folder_id: targetFolderId })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(error.message || 'Failed to move file.');
+    }
+    return data as TeleVaultFile;
+  },
+
+  async updateFileCaption(id: string, caption: string): Promise<TeleVaultFile> {
+    const { data, error } = await supabase
+      .from('files')
+      .update({ caption: caption })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(error.message || 'Failed to update file caption.');
+    }
+    return data as TeleVaultFile;
+  },
+
+  async shareFile(file: TeleVaultFile, targetUserId: string): Promise<TeleVaultFile> {
+    const { data, error } = await supabase
+      .from('files')
+      .insert({
+        user_id: targetUserId,
+        file_name: file.file_name,
+        file_type: file.file_type,
+        mime_type: file.mime_type,
+        file_size: file.file_size,
+        is_private: false,
+        is_drive_file: true,
+        telegram_message_id: file.telegram_message_id,
+        telegram_file_id: file.telegram_file_id,
+        telegram_file_unique_id: file.telegram_file_unique_id,
+        local_thumbnail_uri: file.local_thumbnail_uri,
+        caption: file.caption,
+        overlay_metadata: file.overlay_metadata || [],
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(error.message || 'Failed to share file metadata.');
+    }
+    return data as TeleVaultFile;
+  },
+
+  async fetchFavorites(): Promise<TeleVaultFile[]> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not logged in.');
+
+    const { data, error } = await supabase
+      .from('files')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_favorite', true)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new Error(error.message || 'Failed to fetch favorite files.');
+    }
+    return (data || []) as TeleVaultFile[];
+  },
+
+  async fetchRecentDriveFiles(): Promise<TeleVaultFile[]> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not logged in.');
+
+    const { data, error } = await supabase
+      .from('files')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_drive_file', true)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (error) {
+      throw new Error(error.message || 'Failed to fetch recent files.');
+    }
+    return (data || []) as TeleVaultFile[];
+  },
+
+  async getStorageUsage(): Promise<{ totalSize: number; filesCount: number }> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not logged in.');
+
+    const { data, error } = await supabase
+      .from('files')
+      .select('file_size')
+      .eq('user_id', user.id);
+
+    if (error) {
+      throw new Error(error.message || 'Failed to calculate storage.');
+    }
+
+    const filesCount = data?.length || 0;
+    const totalSize = (data || []).reduce((acc, curr) => acc + Number(curr.file_size || 0), 0);
+
+    return { totalSize, filesCount };
+  },
 };
+
 
 export default fileService;

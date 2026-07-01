@@ -1,35 +1,73 @@
 import React from 'react';
 import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
-import { Zap, ZapOff, RotateCw, Settings, Image, Grid } from 'lucide-react-native';
+import { Zap, ZapOff, RotateCw, Settings, Image, Grid, Timer, MessageSquare, Inbox, Sparkles } from 'lucide-react-native';
 
 interface CameraControlsProps {
   onCapture: () => void;
+  onStartRecording: () => void;
+  onStopRecording: () => void;
+  isRecording: boolean;
+  timerOption: 'off' | '3s' | '5s' | '10s';
+  onTimerToggle: () => void;
   onFlip: () => void;
   onFlashToggle: () => void;
   flashMode: 'on' | 'off';
   onGalleryPress: () => void;
   onMemoriesPress: () => void;
   onSettingsPress: () => void;
+  onChatPress: () => void;
+  onStoriesPress: () => void;
+  onInboxPress: () => void;
 }
 
 export const CameraControls: React.FC<CameraControlsProps> = ({
   onCapture,
+  onStartRecording,
+  onStopRecording,
+  isRecording,
+  timerOption,
+  onTimerToggle,
   onFlip,
   onFlashToggle,
   flashMode,
   onGalleryPress,
   onMemoriesPress,
   onSettingsPress,
+  onChatPress,
+  onStoriesPress,
+  onInboxPress,
 }) => {
   return (
     <View style={styles.container}>
       {/* Top Bar Controls */}
       <View style={styles.topBar}>
-        <TouchableOpacity style={styles.iconButton} onPress={onSettingsPress}>
-          <Settings size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity style={styles.iconButton} onPress={onSettingsPress}>
+            <Settings size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={[styles.iconButton, { marginLeft: 10 }]} onPress={onChatPress}>
+            <MessageSquare size={22} color="#FFFC00" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.iconButton, { marginLeft: 10 }]} onPress={onInboxPress}>
+            <Inbox size={22} color="#FFFC00" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.iconButton, { marginLeft: 10 }]} onPress={onStoriesPress}>
+            <Sparkles size={22} color="#FFFC00" />
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.topRightControls}>
+          {/* Timer Toggle */}
+          <TouchableOpacity style={[styles.iconButton, { marginRight: 12 }]} onPress={onTimerToggle}>
+            <Timer size={24} color={timerOption !== 'off' ? '#FFFC00' : '#FFFFFF'} />
+            {timerOption !== 'off' && (
+              <Text style={styles.timerBadgeText}>{timerOption}</Text>
+            )}
+          </TouchableOpacity>
+
           <TouchableOpacity style={[styles.iconButton, { marginRight: 12 }]} onPress={onFlashToggle}>
             {flashMode === 'on' ? (
               <Zap size={24} color="#FFFC00" fill="#FFFC00" />
@@ -51,20 +89,24 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
           style={styles.bottomIconButton}
           onPress={onMemoriesPress}
           activeOpacity={0.7}
+          disabled={isRecording}
         >
-          <View style={styles.bottomIconCircle}>
+          <View style={[styles.bottomIconCircle, isRecording && { opacity: 0.3 }]}>
             <Grid size={22} color="#FFFFFF" />
           </View>
-          <Text style={styles.bottomButtonText}>Memories</Text>
+          <Text style={[styles.bottomButtonText, isRecording && { opacity: 0.3 }]}>Memories</Text>
         </TouchableOpacity>
 
         {/* Capture Button */}
         <TouchableOpacity
-          style={styles.captureOuterCircle}
+          style={[styles.captureOuterCircle, isRecording && styles.captureOuterCircleRecording]}
           onPress={onCapture}
+          onLongPress={onStartRecording}
+          onPressOut={onStopRecording}
+          delayLongPress={300}
           activeOpacity={0.9}
         >
-          <View style={styles.captureInnerCircle} />
+          <View style={[styles.captureInnerCircle, isRecording && styles.captureInnerCircleRecording]} />
         </TouchableOpacity>
 
         {/* Gallery / Drive Button */}
@@ -72,11 +114,12 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
           style={styles.bottomIconButton}
           onPress={onGalleryPress}
           activeOpacity={0.7}
+          disabled={isRecording}
         >
-          <View style={styles.bottomIconCircle}>
+          <View style={[styles.bottomIconCircle, isRecording && { opacity: 0.3 }]}>
             <Image size={22} color="#FFFFFF" />
           </View>
-          <Text style={styles.bottomButtonText}>Gallery</Text>
+          <Text style={[styles.bottomButtonText, isRecording && { opacity: 0.3 }]}>Gallery</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -157,11 +200,27 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 6,
   },
+  captureOuterCircleRecording: {
+    borderColor: '#FF453A', // Red border when recording
+  },
   captureInnerCircle: {
     width: 64,
     height: 64,
     borderRadius: 32,
     backgroundColor: '#FFFC00', // Yellow core
+  },
+  captureInnerCircleRecording: {
+    backgroundColor: '#FF453A', // Red core when recording
+    width: 48,
+    height: 48,
+    borderRadius: 24, // Smaller and circular red dot
+  },
+  timerBadgeText: {
+    color: '#FFFC00',
+    fontSize: 9,
+    fontWeight: '800',
+    position: 'absolute',
+    bottom: 2,
   },
 });
 

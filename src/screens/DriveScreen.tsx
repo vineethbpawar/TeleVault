@@ -24,6 +24,10 @@ import {
   Search,
   ArrowUpDown,
   FileText,
+  HardDrive,
+  Star,
+  Image as ImageIcon,
+  Video,
   FileCode,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -35,6 +39,7 @@ import { MainTabParamList, AppStackParamList } from '../types/navigation';
 import { fileService } from '../services/fileService';
 import { telegramService } from '../services/telegramService';
 import { securityService } from '../services/securityService';
+import { uploadQueueService } from '../services/uploadQueueService';
 import { TeleVaultFile, TeleVaultFolder } from '../types/file';
 import FolderCard from '../components/FolderCard';
 import FileCard from '../components/FileCard';
@@ -43,6 +48,7 @@ import PinLockModal from '../components/PinLockModal';
 import UploadProgress from '../components/UploadProgress';
 import AppButton from '../components/AppButton';
 import AppInput from '../components/AppInput';
+import AppCard from '../components/AppCard';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'DriveTab'>,
@@ -54,10 +60,15 @@ type SortOption = 'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_de
 export const DriveScreen: React.FC<Props> = ({ navigation }) => {
   const [folders, setFolders] = useState<TeleVaultFolder[]>([]);
   const [files, setFiles] = useState<TeleVaultFile[]>([]);
+  const [recentFiles, setRecentFiles] = useState<TeleVaultFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('date_desc');
+  const [filterType, setFilterType] = useState<'all' | 'image' | 'video' | 'document'>('all');
+
+  // Storage Stats State
+  const [storageUsage, setStorageUsage] = useState({ totalSize: 0, filesCount: 0 });
 
   // Folder navigation state
   const [currentFolder, setCurrentFolder] = useState<TeleVaultFolder | null>(null);
@@ -72,8 +83,7 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
   const [fabMenuVisible, setFabMenuVisible] = useState(false);
 
   // Upload/Progress State
-  const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState('');
+  const [queueModalVisible, setQueueModalVisible] = useState(false);
 
   // Dialog State (Create Folder / Rename)
   const [dialogVisible, setDialogVisible] = useState(false);
@@ -107,12 +117,16 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
     if (showSpinner) setLoading(true);
     try {
       const parentId = currentFolder ? currentFolder.id : null;
-      const [fetchedFolders, fetchedFiles] = await Promise.all([
+      const [fetchedFolders, fetchedFiles, fetchedRecents, usage] = await Promise.all([
         fileService.fetchDriveFolders(parentId),
         fileService.fetchDriveFiles(parentId),
+        fileService.fetchRecentDriveFiles(),
+        fileService.getStorageUsage(),
       ]);
       setFolders(fetchedFolders);
       setFiles(fetchedFiles);
+      setRecentFiles(fetchedRecents);
+      setStorageUsage(usage);
     } catch (error) {
       console.error('Failed to load drive content:', error);
     } finally {
@@ -160,7 +174,6 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
   const handleUpload = async (source: 'camera' | 'document') => {
     setFabMenuVisible(false);
 
-    // Verify Telegram Sync config
     try {
       const config = await telegramService.getTelegramConfig();
       if (!config.botToken || !config.channelId) {
@@ -226,39 +239,38 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const processUpload = async (uri: string, type: 'image' | 'video' | 'document', name: string, mime: string, size: number) => {
-    setUploading(true);
-    setUploadMsg(`Uploading ${name} to Telegram...`);
+    if (size > 50 * 1024 * 1024) {
+      Alert.alert(
+        'Upload Blocked',
+        'This file is over 50 MB. Normal Telegram Bot API upload is limited in this MVP. Please choose a smaller/compressed file.'
+      );
+      return;
+    }
 
     try {
-      const telegramResult = await telegramService.uploadToTelegram(uri, type, name, mime);
-
-      setUploadMsg('Saving metadata to Supabase...');
-
-      await fileService.saveFileMetadata({
-        folder_id: currentFolder ? currentFolder.id : null,
+      await uploadQueueService.addToUploadQueue({
+        local_uri: uri,
         file_name: name,
         file_type: type,
         mime_type: mime,
-        file_size: size || null,
+        file_size: size,
+        destination: 'drive',
+        folder_id: currentFolder ? currentFolder.id : null,
         is_private: false,
         is_drive_file: true,
-        telegram_message_id: telegramResult.telegramMessageId,
-        telegram_file_id: telegramResult.telegramFileId,
-        telegram_file_unique_id: telegramResult.telegramFileUniqueId,
-        local_thumbnail_uri: type === 'image' ? uri : null,
+        overlay_metadata: null,
       });
 
-      Alert.alert('Success', 'File uploaded successfully.');
-      loadContent(false);
+      setQueueModalVisible(true);
+      setTimeout(() => {
+        loadContent(false);
+      }, 3000);
     } catch (error: any) {
       console.error('Upload process failed:', error);
-      Alert.alert('Upload Failed', error.message || 'An error occurred during file upload.');
-    } finally {
-      setUploading(false);
+      Alert.alert('Upload Failed', error.message || 'An error occurred during file upload scheduling.');
     }
   };
 
-  // CRUD Operations Dialog Submission
   const handleDialogSubmit = async () => {
     if (!dialogInput.trim()) {
       Alert.alert('Error', 'Please enter a name.');
@@ -288,7 +300,6 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  // Delete Action
   const handleDeleteItem = async () => {
     if (!selectedItem) return;
     setOptionsVisible(false);
@@ -320,7 +331,6 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  // Rename action trigger
   const handleRenameTrigger = () => {
     if (!selectedItem) return;
     setOptionsVisible(false);
@@ -330,20 +340,33 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
     setDialogVisible(true);
   };
 
-  // Open item menu
   const openItemMenu = (type: 'folder' | 'file', id: string, name: string) => {
     setSelectedItem({ type, id, name });
     setOptionsVisible(true);
   };
 
-  // Sort and Filter computations
-  const getProcessedItems = () => {
-    // 1. Search filter
-    const query = searchQuery.toLowerCase();
-    const filteredFolders = folders.filter((f) => f.name.toLowerCase().includes(query));
-    const filteredFiles = files.filter((f) => f.file_name.toLowerCase().includes(query));
+  const formatSize = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
 
-    // 2. Sorting
+  const getProcessedItems = () => {
+    const query = searchQuery.toLowerCase();
+    
+    // Filter folders
+    const filteredFolders = folders.filter((f) => f.name.toLowerCase().includes(query));
+    
+    // Filter files (by search query and file type tab)
+    const filteredFiles = files.filter((f) => {
+      const matchesSearch = f.file_name.toLowerCase().includes(query);
+      const matchesType = filterType === 'all' || f.file_type === filterType;
+      return matchesSearch && matchesType;
+    });
+
+    // Sorting
     const sortedFolders = [...filteredFolders].sort((a, b) => {
       if (sortBy === 'name_asc') return a.name.localeCompare(b.name);
       if (sortBy === 'name_desc') return b.name.localeCompare(a.name);
@@ -355,7 +378,7 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
       if (sortBy === 'name_desc') return b.file_name.localeCompare(a.file_name);
       if (sortBy === 'date_asc') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       if (sortBy === 'size_desc') return (b.file_size || 0) - (a.file_size || 0);
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); // date_desc
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
 
     return { sortedFolders, sortedFiles };
@@ -366,7 +389,7 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <PinLockModal visible={pinModalVisible} onClose={handlePinCancel} onSuccess={handlePinSuccess} mode="verify" />
-      <UploadProgress visible={uploading} message={uploadMsg} />
+      <UploadProgress visible={queueModalVisible} onClose={() => setQueueModalVisible(false)} />
 
       {/* Header */}
       <View style={styles.header}>
@@ -378,16 +401,36 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
           <View style={{ width: 16 }} />
         )}
         <Text style={styles.headerTitle}>{currentFolder ? currentFolder.name : 'Cloud Drive'}</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity onPress={() => setQueueModalVisible(true)} style={styles.queueBtn}>
+          <Upload size={20} color="#FFFC00" />
+        </TouchableOpacity>
       </View>
+
+      {/* Storage usage statistics widget */}
+      {!currentFolder && (
+        <AppCard style={styles.storageCard}>
+          <View style={styles.storageHeader}>
+            <HardDrive size={20} color="#FFFC00" />
+            <Text style={styles.storageTitle}>DRIVE STORAGE USAGE</Text>
+          </View>
+          <View style={styles.storageDetails}>
+            <Text style={styles.storageNum}>{formatSize(storageUsage.totalSize)}</Text>
+            <Text style={styles.storageLabel}>Used across {storageUsage.filesCount} files</Text>
+          </View>
+          <View style={styles.progressBarBg}>
+            {/* Standard progress bar representation */}
+            <View style={[styles.progressBarFill, { width: `${Math.min(100, (storageUsage.totalSize / (1024 * 1024 * 1024)) * 100)}%` }]} />
+          </View>
+        </AppCard>
+      )}
 
       {/* Search and Sort Toolbar */}
       <View style={styles.toolbar}>
         <View style={styles.searchBar}>
-          <Search size={16} color="#8E8E93" style={{ marginRight: 8 }} />
+          <Search size={16} color="#8e92af" style={{ marginRight: 8 }} />
           <TextInput
-            placeholder="Search drive..."
-            placeholderTextColor="#8E8E93"
+            placeholder="Search files..."
+            placeholderTextColor="#8e92af"
             style={styles.searchInput}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -417,6 +460,51 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
           <ArrowUpDown size={18} color="#FFFC00" />
         </TouchableOpacity>
       </View>
+
+      {/* File Type Filter Tabs */}
+      <View style={styles.typeTabs}>
+        {(['all', 'image', 'video', 'document'] as const).map((type) => (
+          <TouchableOpacity
+            key={type}
+            style={[styles.typeTab, filterType === type && styles.activeTypeTab]}
+            onPress={() => setFilterType(type)}
+          >
+            <Text style={[styles.typeTabText, filterType === type && styles.activeTypeTabText]}>
+              {type === 'all' ? 'All' : type === 'image' ? 'Photos' : type === 'video' ? 'Videos' : 'Files'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Recent Uploads Row (Root level only) */}
+      {!currentFolder && recentFiles.length > 0 && (
+        <View style={styles.recentSection}>
+          <Text style={styles.recentTitle}>RECENT UPLOADS</Text>
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={recentFiles}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.recentList}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.recentCard}
+                onPress={() => navigation.navigate('FileDetails', { file: item })}
+              >
+                {item.file_type === 'image' ? (
+                  <ImageIcon size={22} color="#FFFC00" />
+                ) : item.file_type === 'video' ? (
+                  <Video size={22} color="#FFFC00" />
+                ) : (
+                  <FileText size={22} color="#FFFFFF" />
+                )}
+                <Text style={styles.recentFileName} numberOfLines={1}>{item.file_name}</Text>
+                <Text style={styles.recentFileSize}>{formatSize(item.file_size || 0)}</Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      )}
 
       {/* Main drive list */}
       {loading ? (
@@ -508,7 +596,7 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
         </Modal>
       )}
 
-      {/* Reusable dialog modal for Creating/Renaming */}
+      {/* Reusable dialog modal */}
       <Modal visible={dialogVisible} transparent animationType="fade">
         <View style={styles.dialogOverlay}>
           <View style={styles.dialogBox}>
@@ -597,22 +685,67 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
   },
+  queueBtn: {
+    padding: 8,
+  },
+  storageCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 14,
+  },
+  storageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  storageTitle: {
+    color: '#8e92af',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginLeft: 6,
+  },
+  storageDetails: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 10,
+  },
+  storageNum: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  storageLabel: {
+    color: '#8e92af',
+    fontSize: 12,
+    marginLeft: 8,
+  },
+  progressBarBg: {
+    height: 6,
+    backgroundColor: '#1f2444',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#FFFC00',
+  },
   toolbar: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 10,
     alignItems: 'center',
   },
   searchBar: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     height: 40,
     borderRadius: 10,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
     marginRight: 10,
   },
   searchInput: {
@@ -623,12 +756,74 @@ const styles = StyleSheet.create({
   sortButton: {
     width: 40,
     height: 40,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
+  },
+  typeTabs: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  typeTab: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    marginRight: 8,
+    backgroundColor: '#0f1123',
+    borderWidth: 1,
+    borderColor: '#1f2444',
+  },
+  activeTypeTab: {
+    backgroundColor: '#FFFC00',
+    borderColor: '#FFFC00',
+  },
+  typeTabText: {
+    color: '#8e92af',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  activeTypeTabText: {
+    color: '#000000',
+  },
+  recentSection: {
+    marginBottom: 16,
+    paddingHorizontal: 16,
+  },
+  recentTitle: {
+    color: '#FFFC00',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 8,
+  },
+  recentList: {
+    paddingRight: 16,
+  },
+  recentCard: {
+    width: 110,
+    backgroundColor: '#0f1123',
+    borderRadius: 14,
+    padding: 10,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#1f2444',
+    alignItems: 'center',
+  },
+  recentFileName: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  recentFileSize: {
+    color: '#8e92af',
+    fontSize: 10,
+    marginTop: 2,
   },
   listContent: {
     paddingHorizontal: 16,
@@ -677,23 +872,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     marginRight: 12,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
     overflow: 'hidden',
   },
   fabIconCircle: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
   },
   dialogOverlay: {
     flex: 1,
@@ -704,11 +899,11 @@ const styles = StyleSheet.create({
   },
   dialogBox: {
     width: '100%',
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     borderRadius: 24,
     padding: 24,
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
   },
   dialogTitle: {
     color: '#FFFFFF',
@@ -732,18 +927,18 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   bottomSheetContainer: {
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0f1123',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
     borderWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
   },
   bottomSheetHeader: {
     alignItems: 'center',
     marginBottom: 16,
     borderBottomWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
     paddingBottom: 12,
   },
   bottomSheetTitle: {
@@ -755,10 +950,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
   },
   bottomSheetItemDanger: {
-    borderColor: '#2C2C2E',
+    borderColor: '#1f2444',
   },
   bottomSheetItemCancel: {
     borderBottomWidth: 0,
@@ -773,7 +968,7 @@ const styles = StyleSheet.create({
     color: '#FF453A',
   },
   cancelText: {
-    color: '#8E8E93',
+    color: '#8e92af',
   },
 });
 
