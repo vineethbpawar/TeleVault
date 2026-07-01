@@ -2,7 +2,13 @@
 
 > **Camera. Memories. Drive.**
 
+**Version:** v2.0 Beta  
+**Developer:** Vineeth B. Pawar ([GitHub](https://github.com/vineethbpawar))
+
 TeleVault is a Snapchat-inspired camera, memories, and cloud drive vault app that is completely powered by Telegram's free, unlimited private channel cloud storage. It uses Supabase for lightweight account authentication and metadata storage, meaning no files are hosted on Supabase, allowing you to use the completely free tiers of both services.
+
+### Custom Branding & Logo
+This version introduces the official, custom-designed TeleVault logo. Designed as a lightweight, scalable React Native vector component (`src/components/TeleVaultLogo.tsx`), the logo features a sleek rounded vault/safe box outline, a circular vault dial, and the letter "T" integrated inside the vault, accented with a golden-yellow theme on a dark navy background. It is featured in the Splash, Login, Signup, Settings, and About developer sections.
 
 ---
 

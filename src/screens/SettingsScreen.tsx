@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  Linking,
 } from 'react-native';
 import AppInput from '../components/AppInput';
 import AppButton from '../components/AppButton';
@@ -30,6 +31,8 @@ import {
   Database,
   FileText,
   Users,
+  Mail,
+  Globe,
 } from 'lucide-react-native';
 import { CompositeScreenProps, useIsFocused } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -43,6 +46,7 @@ import { exportHelper } from '../utils/exportHelper';
 import * as LocalAuthentication from 'expo-local-authentication';
 import PinLockModal from '../components/PinLockModal';
 import UploadProgress from '../components/UploadProgress';
+import TeleVaultLogo from '../components/TeleVaultLogo';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'SettingsTab'>,
@@ -809,7 +813,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.card}>
             <View style={styles.itemRowNoPress}>
               <View style={styles.itemLeft}>
-                <Info size={20} color="#FFFC00" />
+                <TeleVaultLogo size={24} style={{ marginRight: 4 }} />
                 <View style={styles.itemMeta}>
                   <Text style={styles.itemTitle}>TeleVault</Text>
                   <Text style={styles.itemSubtitle}>Version 2.0.0 (Secure Social Upgrade)</Text>
@@ -819,6 +823,110 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 </View>
               </View>
             </View>
+          </View>
+        </View>
+
+        {/* About Developer Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionHeader}>About Developer</Text>
+          <View style={[styles.card, { padding: 20, alignItems: 'center' }]}>
+            <TeleVaultLogo size={60} />
+            <Text style={[styles.devName, { marginTop: 12 }]}>Vineeth B. Pawar</Text>
+            <Text style={styles.devTitle}>Creator of TeleVault</Text>
+            
+            <Text style={styles.devBio}>
+              Developer of TeleVault, focused on secure storage, privacy, and simple user experience.
+            </Text>
+
+            <View style={styles.devDivider} />
+
+            <View style={styles.linksContainer}>
+              <TouchableOpacity 
+                style={styles.linkRow} 
+                onPress={async () => {
+                  const emailUrl = 'mailto:vineethbpawar@gmail.com';
+                  try {
+                    const supported = await Linking.canOpenURL(emailUrl);
+                    if (supported) {
+                      await Linking.openURL(emailUrl);
+                    } else {
+                      Alert.alert('Contact Developer', 'Email: vineethbpawar@gmail.com');
+                    }
+                  } catch (error) {
+                    Alert.alert('Contact Developer', 'Email: vineethbpawar@gmail.com');
+                  }
+                }}
+              >
+                <Mail size={16} color="#FFFC00" style={styles.linkIcon} />
+                <Text style={styles.linkText}>vineethbpawar@gmail.com</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.linkRow} 
+                onPress={async () => {
+                  const url = 'https://github.com/vineethbpawar';
+                  try {
+                    const supported = await Linking.canOpenURL(url);
+                    if (supported) {
+                      await Linking.openURL(url);
+                    } else {
+                      Alert.alert('Error', `Cannot open link: ${url}`);
+                    }
+                  } catch (error) {
+                    Alert.alert('Error', `An error occurred: ${error}`);
+                  }
+                }}
+              >
+                <Globe size={16} color="#FFFC00" style={styles.linkIcon} />
+                <Text style={styles.linkText}>github.com/vineethbpawar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.linkRow} 
+                onPress={async () => {
+                  const url = 'https://instagram.com/vineethbpawar';
+                  try {
+                    const supported = await Linking.canOpenURL(url);
+                    if (supported) {
+                      await Linking.openURL(url);
+                    } else {
+                      Alert.alert('Error', `Cannot open link: ${url}`);
+                    }
+                  } catch (error) {
+                    Alert.alert('Error', `An error occurred: ${error}`);
+                  }
+                }}
+              >
+                <Camera size={16} color="#FFFC00" style={styles.linkIcon} />
+                <Text style={styles.linkText}>instagram.com/vineethbpawar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.linkRow} 
+                onPress={async () => {
+                  const url = 'https://linkedin.com/in/vineethbpawar';
+                  try {
+                    const supported = await Linking.canOpenURL(url);
+                    if (supported) {
+                      await Linking.openURL(url);
+                    } else {
+                      Alert.alert('Error', `Cannot open link: ${url}`);
+                    }
+                  } catch (error) {
+                    Alert.alert('Error', `An error occurred: ${error}`);
+                  }
+                }}
+              >
+                <Users size={16} color="#FFFC00" style={styles.linkIcon} />
+                <Text style={styles.linkText}>linkedin.com/in/vineethbpawar</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.devDivider} />
+
+            <Text style={styles.appInfoTitle}>TeleVault</Text>
+            <Text style={styles.appInfoSubtitle}>Version: v2.0 Beta</Text>
+            <Text style={styles.copyright}>© 2026 Vineeth B. Pawar. All rights reserved.</Text>
           </View>
         </View>
 
@@ -1004,6 +1112,65 @@ const styles = StyleSheet.create({
     width: '48%',
     height: 44,
     borderRadius: 22,
+  },
+  devName: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  devTitle: {
+    color: '#FFFC00',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
+  devBio: {
+    color: '#8e92af',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 12,
+    lineHeight: 18,
+    paddingHorizontal: 10,
+  },
+  devDivider: {
+    height: 1,
+    backgroundColor: '#1f2444',
+    width: '100%',
+    marginVertical: 16,
+  },
+  linksContainer: {
+    width: '100%',
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  linkIcon: {
+    marginRight: 12,
+  },
+  linkText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  appInfoTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  appInfoSubtitle: {
+    color: '#8e92af',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  copyright: {
+    color: '#4f5370',
+    fontSize: 10,
+    marginTop: 8,
   },
 });
 

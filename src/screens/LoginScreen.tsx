@@ -12,7 +12,7 @@ import {
 import { supabase } from '../lib/supabase';
 import AppInput from '../components/AppInput';
 import AppButton from '../components/AppButton';
-import { Shield } from 'lucide-react-native';
+import TeleVaultLogo from '../components/TeleVaultLogo';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../types/navigation';
 
@@ -57,9 +57,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
       >
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.logoContainer}>
-            <View style={styles.logoCircle}>
-              <Shield size={36} color="#FFFC00" fill="#FFFC00" fillOpacity={0.1} />
-            </View>
+            <TeleVaultLogo size={80} style={{ marginBottom: 20 }} />
             <Text style={styles.title}>Welcome Back</Text>
             <Text style={styles.subtitle}>Log in to access your TeleVault cloud drive</Text>
           </View>

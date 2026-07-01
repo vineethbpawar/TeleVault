@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View, Text, Animated } from 'react-native';
-import { Shield } from 'lucide-react-native';
+import TeleVaultLogo from '../components/TeleVaultLogo';
 
 export const SplashScreen: React.FC = () => {
   const fadeAnim = new Animated.Value(0);
@@ -16,9 +16,7 @@ export const SplashScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-        <View style={styles.logoCircle}>
-          <Shield size={48} color="#FFFC00" fill="#FFFC00" fillOpacity={0.1} />
-        </View>
+        <TeleVaultLogo size={96} style={{ marginBottom: 24 }} />
         <Text style={styles.title}>TeleVault</Text>
         <Text style={styles.tagline}>Camera. Memories. Drive.</Text>
       </Animated.View>
