@@ -6,7 +6,8 @@
     "updates": {
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0,
-      "enabled": true
+      "enabled": true,
+      "url": "https://u.expo.dev/3bf79277-2e49-4449-90ee-1c02ae729456"
     },
     "runtimeVersion": {
       "policy": "appVersion"
@@ -38,6 +39,12 @@
       "expo-background-task",
       "expo-sharing",
       "expo-video"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3bf79277-2e49-4449-90ee-1c02ae729456"
+      }
+    },
+    "owner": "vineethbpawar"
   }
 }
