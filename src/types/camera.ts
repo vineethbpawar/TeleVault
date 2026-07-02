@@ -67,6 +67,7 @@ export interface UploadQueueItem {
   large_file_id?: string | null;
   chunk_progress?: string;
   stage?: string;
+  local_thumbnail_uri?: string | null;
 }
 
 export interface OptimizedMedia {

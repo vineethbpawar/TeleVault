@@ -285,11 +285,12 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     setContainerSize({ width, height });
   };
 
-  const getPackagedMetadata = () => ({
+  const getPackagedMetadata = (thumbUri?: string | null) => ({
     overlays,
     drawing: drawingLines,
     rotation,
     blur: blurActive,
+    thumbnailUri: thumbUri || null,
   });
 
   const handleQueueUpload = async (destination: 'memories' | 'drive' | 'private_drive') => {
@@ -328,6 +329,19 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     const fileName = `TV_${destination.toUpperCase()}_${timestamp}.${extension}`;
     const mimeType = type === 'video' ? 'video/mp4' : 'image/jpeg';
 
+    let localThumbnailUri: string | null = null;
+    if (type === 'video') {
+      try {
+        const VideoThumbnails = require('expo-video-thumbnails');
+        const thumb = await VideoThumbnails.getThumbnailAsync(uri, { time: 500 });
+        if (thumb && thumb.uri) {
+          localThumbnailUri = thumb.uri;
+        }
+      } catch (e) {
+        console.warn('Failed to pre-generate video thumbnail on save:', e);
+      }
+    }
+
     try {
       await uploadQueueService.addToUploadQueue({
         local_uri: uri,
@@ -339,7 +353,8 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         folder_id: null,
         is_private: destination === 'private_drive',
         is_drive_file: destination !== 'memories',
-        overlay_metadata: getPackagedMetadata(),
+        overlay_metadata: getPackagedMetadata(localThumbnailUri),
+        local_thumbnail_uri: localThumbnailUri,
       });
 
       showToast('Saving in background...');
@@ -1304,34 +1319,35 @@ const styles = StyleSheet.create({
   },
   textOverlayWrapper: {
     position: 'absolute',
-    bottom: 220,
+    bottom: 240,
     alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
   },
   liveOverlayStampText: {
     color: '#FFFC00',
-    fontSize: 28,
+    fontSize: 18,
     fontWeight: '800',
+    textAlign: 'center',
   },
   stampOverlayWrapper: {
     position: 'absolute',
-    top: 150,
+    top: 100,
     right: 20,
     transform: [{ rotate: '-12deg' }],
   },
   stampOverlayText: {
     color: '#FFFC00',
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '900',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: '#FFFC00',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 6,
     letterSpacing: 2,
   },

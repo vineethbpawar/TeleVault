@@ -66,6 +66,7 @@ export const uploadQueueService = {
     is_private: boolean;
     is_drive_file: boolean;
     overlay_metadata: any | null;
+    local_thumbnail_uri?: string | null;
   }): Promise<UploadQueueItem> {
     const queue = await this.getUploadQueue();
     const now = new Date().toISOString();
@@ -92,6 +93,7 @@ export const uploadQueueService = {
       updated_at: now,
       upload_mode: uploadMode,
       large_file_id: null,
+      local_thumbnail_uri: itemData.local_thumbnail_uri || null,
     };
 
     queue.push(newItem);
@@ -303,7 +305,7 @@ export const uploadQueueService = {
         telegram_message_id: telegramResult.telegramMessageId,
         telegram_file_id: telegramResult.telegramFileId,
         telegram_file_unique_id: telegramResult.telegramFileUniqueId,
-        local_thumbnail_uri: pendingItem.file_type === 'image' ? finalUri : null,
+        local_thumbnail_uri: pendingItem.file_type === 'image' ? finalUri : (pendingItem.local_thumbnail_uri || null),
         overlay_metadata: pendingItem.overlay_metadata,
       });
 

@@ -51,8 +51,8 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
       return;
     }
 
-    // Resolve preview for image or video with local thumbnail
-    if (file.file_type === 'image' || file.local_thumbnail_uri) {
+    // Resolve preview for image or video
+    if (file.file_type === 'image' || file.file_type === 'video' || file.local_thumbnail_uri) {
       setLoading(true);
       setError(false);
       previewCacheService.resolveFilePreview({

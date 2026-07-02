@@ -602,7 +602,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     const bottomNavHeight = 64 + insets.bottom;
 
     return (
-      <View style={[styles.filterTrayContainer, { bottom: bottomNavHeight + 145 }]}>
+      <View style={[styles.filterTrayContainer, { bottom: bottomNavHeight + 130 }]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -622,9 +622,11 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
                 <View style={[styles.filterIconCircle, isSelected && styles.filterIconCircleActive]}>
                   <Text style={styles.filterIconText}>{lens.icon}</Text>
                 </View>
-                <Text style={[styles.filterLabel, isSelected && styles.filterLabelActive]}>
-                  {lens.label}
-                </Text>
+                {isSelected && (
+                  <Text style={styles.filterLabelActive}>
+                    {lens.label}
+                  </Text>
+                )}
               </TouchableOpacity>
             );
           })}
@@ -702,7 +704,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
 
             {/* Selected Lens/Filter indicator label */}
             {selectedLens !== 'original' && !isRecording && (
-              <View style={[styles.activeFilterPill, { bottom: 64 + insets.bottom + 106 }]}>
+              <View style={[styles.activeFilterPill, { bottom: 64 + insets.bottom + 185 }]}>
                 <Text style={styles.activeFilterPillText}>{selectedLens.toUpperCase()}</Text>
               </View>
             )}
@@ -887,35 +889,35 @@ const styles = StyleSheet.create({
   },
   textOverlayWrapper: {
     position: 'absolute',
-    bottom: 220,
+    bottom: 240,
     alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
   },
   liveOverlayStampText: {
     color: '#FFFC00',
-    fontSize: 28,
+    fontSize: 18,
     fontWeight: '800',
     textAlign: 'center',
   },
   stampOverlayWrapper: {
     position: 'absolute',
-    top: 150,
+    top: 100,
     right: 20,
     transform: [{ rotate: '-12deg' }],
   },
   stampOverlayText: {
     color: '#FFFC00',
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '900',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: '#FFFC00',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 6,
     letterSpacing: 2,
   },
@@ -1073,18 +1075,18 @@ const styles = StyleSheet.create({
   filterItem: {
     alignItems: 'center',
     marginHorizontal: 6,
-    width: 60,
+    width: 50,
   },
   filterItemActive: {
     transform: [{ scale: 1.05 }],
   },
   filterIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1093,23 +1095,25 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     backgroundColor: 'rgba(255, 252, 0, 0.15)',
     shadowColor: '#FFFC00',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowRadius: 2,
+    elevation: 2,
   },
   filterIconText: {
-    fontSize: 18,
+    fontSize: 14,
   },
   filterLabel: {
     color: '#8E8E93',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
-    marginTop: 4,
+    marginTop: 2,
   },
   filterLabelActive: {
     color: '#FFFC00',
+    fontSize: 9,
     fontWeight: '700',
+    marginTop: 2,
   },
   activeFilterPill: {
     position: 'absolute',

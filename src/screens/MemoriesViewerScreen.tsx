@@ -12,6 +12,7 @@ import {
   Alert,
   TextInput,
   Platform,
+  Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -33,7 +34,8 @@ const { width, height } = Dimensions.get('window');
 const ViewerItem: React.FC<{
   file: TeleVaultFile;
   isActive: boolean;
-}> = ({ file, isActive }) => {
+  onPress: () => void;
+}> = ({ file, isActive, onPress }) => {
   const [resolved, setResolved] = useState<{
     previewUri?: string;
     playableUri?: string;
@@ -70,25 +72,23 @@ const ViewerItem: React.FC<{
 
   if (resolved.loading) {
     return (
-      <View style={styles.itemContainer}>
+      <Pressable style={styles.itemContainer} onPress={onPress}>
         <ActivityIndicator size="large" color="#FFFC00" />
-      </View>
+      </Pressable>
     );
   }
 
   if (file.file_type === 'video') {
-    // Only mount and play video player if this slide is active
     if (isActive && resolved.playableUri) {
       return (
-        <View style={styles.itemContainer}>
+        <Pressable style={styles.itemContainer} onPress={onPress}>
           <VideoPlayer source={resolved.playableUri} style={StyleSheet.absoluteFill} />
-        </View>
+        </Pressable>
       );
     }
 
-    // Otherwise render the static preview thumbnail
     return (
-      <View style={styles.itemContainer}>
+      <Pressable style={styles.itemContainer} onPress={onPress}>
         {resolved.previewUri ? (
           <Image
             source={{ uri: resolved.previewUri }}
@@ -100,27 +100,26 @@ const ViewerItem: React.FC<{
             <ActivityIndicator size="small" color="#8E8E93" />
           </View>
         )}
-      </View>
+      </Pressable>
     );
   }
 
-  // Photo Rendering
   if (resolved.previewUri) {
     return (
-      <View style={styles.itemContainer}>
+      <Pressable style={styles.itemContainer} onPress={onPress}>
         <Image
           source={{ uri: resolved.previewUri }}
           style={StyleSheet.absoluteFill}
           resizeMode="contain"
         />
-      </View>
+      </Pressable>
     );
   }
 
   return (
-    <View style={styles.itemContainer}>
+    <Pressable style={styles.itemContainer} onPress={onPress}>
       <Text style={styles.errorText}>{resolved.error || 'Failed preview.'}</Text>
-    </View>
+    </Pressable>
   );
 };
 
@@ -136,8 +135,46 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
   const [captionVisible, setCaptionVisible] = useState(false);
   const [newCaption, setNewCaption] = useState('');
 
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const hideTimerRef = useRef<any>(null);
+
   const flatListRef = useRef<FlatList>(null);
   const currentFile = files[currentIndex] || null;
+
+  const resetHideTimer = () => {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+    }
+    if (!infoVisible && !renameVisible && !captionVisible) {
+      hideTimerRef.current = setTimeout(() => {
+        setControlsVisible(false);
+      }, 3000);
+    }
+  };
+
+  const handleTapScreen = () => {
+    setControlsVisible((prev) => {
+      const next = !prev;
+      if (next) {
+        resetHideTimer();
+      } else {
+        if (hideTimerRef.current) {
+          clearTimeout(hideTimerRef.current);
+        }
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    setControlsVisible(true);
+    resetHideTimer();
+    return () => {
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+      }
+    };
+  }, [currentIndex, infoVisible, renameVisible, captionVisible]);
 
   const formatSize = (bytes: number | null | undefined): string => {
     if (!bytes) return '0 B';
@@ -158,7 +195,6 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
         return;
       }
 
-      // If it's a remote URL, download it locally to share
       let localPath = targetUri;
       if (targetUri.startsWith('http')) {
         localPath = await telegramService.downloadTelegramFileToCache(
@@ -214,7 +250,6 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
               await fileService.deleteFileMetadata(currentFile.id);
               showToast('Memory deleted.');
               
-              // Remove from list
               const updated = files.filter(f => f.id !== currentFile.id);
               if (updated.length === 0) {
                 navigation.goBack();
@@ -305,50 +340,58 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
           setCurrentIndex(index);
         }}
         renderItem={({ item, index }) => (
-          <ViewerItem file={item} isActive={index === currentIndex} />
+          <ViewerItem 
+            file={item} 
+            isActive={index === currentIndex} 
+            onPress={handleTapScreen}
+          />
         )}
       />
 
       {/* Top Header Overlay */}
-      <View style={[styles.headerOverlay, { top: insets.top || 16 }]} pointerEvents="box-none">
-        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
-          <X size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+      {controlsVisible && (
+        <View style={[styles.headerOverlay, { top: insets.top || 16 }]} pointerEvents="box-none">
+          <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
+            <X size={24} color="#FFFFFF" />
+          </TouchableOpacity>
 
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {currentFile.caption || currentFile.file_name}
-          </Text>
-          <Text style={styles.headerSub}>{dateString}</Text>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {currentFile.caption || currentFile.file_name}
+            </Text>
+            <Text style={styles.headerSub}>{dateString}</Text>
+          </View>
+
+          <TouchableOpacity style={styles.headerBtn} onPress={() => setInfoVisible(true)}>
+            <Info size={20} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
-
-        <TouchableOpacity style={styles.headerBtn} onPress={() => setInfoVisible(true)}>
-          <Info size={20} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
+      )}
 
       {/* Bottom Actions Overlay */}
-      <View style={[styles.bottomOverlay, { bottom: insets.bottom || 16 }]} pointerEvents="box-none">
-        <TouchableOpacity style={styles.actionBtn} onPress={triggerCaption}>
-          <Type size={18} color="#FFFFFF" />
-          <Text style={styles.actionBtnLabel}>Caption</Text>
-        </TouchableOpacity>
+      {controlsVisible && (
+        <View style={[styles.bottomOverlay, { bottom: insets.bottom || 16 }]} pointerEvents="box-none">
+          <TouchableOpacity style={styles.actionBtn} onPress={triggerCaption}>
+            <Type size={18} color="#FFFFFF" />
+            <Text style={styles.actionBtnLabel}>Caption</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionBtn} onPress={handleShare}>
-          <Share2 size={18} color="#FFFFFF" />
-          <Text style={styles.actionBtnLabel}>Share</Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtn} onPress={handleShare}>
+            <Share2 size={18} color="#FFFFFF" />
+            <Text style={styles.actionBtnLabel}>Share</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionBtn} onPress={handleSendTo}>
-          <Send size={18} color="#FFFFFF" />
-          <Text style={styles.actionBtnLabel}>Send</Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtn} onPress={handleSendTo}>
+            <Send size={18} color="#FFFFFF" />
+            <Text style={styles.actionBtnLabel}>Send</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionBtn} onPress={() => setInfoVisible(true)}>
-          <Info size={18} color="#FFFC00" />
-          <Text style={[styles.actionBtnLabel, { color: '#FFFC00' }]}>Details</Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => setInfoVisible(true)}>
+            <Info size={18} color="#FFFC00" />
+            <Text style={[styles.actionBtnLabel, { color: '#FFFC00' }]}>Details</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Metadata Bottom Sheet Modal */}
       <Modal

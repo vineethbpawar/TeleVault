@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { telegramService } from './telegramService';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 
 const CACHE_PREFIX = 'televault_preview_';
 const CACHE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour expiry for Telegram getFile URLs
@@ -212,12 +213,15 @@ export const previewCacheService = {
 
       // Locate or generate thumbnail
       let previewUri: string | undefined;
+      let hasLocalThumb = false;
+      let hasCachedThumb = false;
 
       if (file.local_thumbnail_uri) {
         try {
           const info = await FileSystem.getInfoAsync(file.local_thumbnail_uri);
           if (info.exists) {
             previewUri = file.local_thumbnail_uri;
+            hasLocalThumb = true;
           }
         } catch (e) {}
       }
@@ -229,23 +233,40 @@ export const previewCacheService = {
             const info = await FileSystem.getInfoAsync(cachedThumb);
             if (info.exists) {
               previewUri = cachedThumb;
+              hasCachedThumb = true;
             }
           }
         } catch (e) {}
       }
 
+      if (__DEV__) {
+        console.log(`[VIDEO_PREVIEW_DEV] Resolving: file_name=${file.file_name} file_id=${file.id} hasLocalThumb=${hasLocalThumb} hasCachedThumb=${hasCachedThumb} playableUriResolved=${!!playableUri}`);
+      }
+
       // Generate dynamic thumbnail from video source
       if (!previewUri && playableUri) {
         try {
-          const { getThumbnailAsync } = require('expo-video-thumbnails');
-          const thumb = await getThumbnailAsync(playableUri, { time: 500 });
+          if (__DEV__) {
+            console.log(`[VIDEO_PREVIEW_DEV] Starting dynamic thumbnail generation for: ${file.file_name} from: ${playableUri}`);
+          }
+          const thumb = await VideoThumbnails.getThumbnailAsync(playableUri, { time: 500 });
           if (thumb && thumb.uri) {
             previewUri = thumb.uri;
             if (file.id) {
               await AsyncStorage.setItem(`televault_vid_thumb_${file.id}`, thumb.uri);
             }
+            if (__DEV__) {
+              console.log(`[VIDEO_PREVIEW_DEV] Dynamic thumbnail generation SUCCESS: ${thumb.uri}`);
+            }
+          } else {
+            if (__DEV__) {
+              console.log(`[VIDEO_PREVIEW_DEV] Dynamic thumbnail generation FAILED: Empty response`);
+            }
           }
-        } catch (e) {
+        } catch (e: any) {
+          if (__DEV__) {
+            console.log(`[VIDEO_PREVIEW_DEV] Dynamic thumbnail generation ERROR: name=${e.name} msg=${e.message}`);
+          }
           console.warn('Dynamic video thumbnail generation failed:', e);
         }
       }
