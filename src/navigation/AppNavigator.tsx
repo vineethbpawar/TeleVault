@@ -25,8 +25,13 @@ import GroupChatScreen from '../screens/GroupChatScreen';
 import CreateGroupScreen from '../screens/CreateGroupScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import ChunkManagerScreen from '../screens/ChunkManagerScreen';
+import PrivateDriveScreen from '../screens/PrivateDriveScreen';
+import UserProfileScreen from '../screens/UserProfileScreen';
+import MyProfileScreen from '../screens/MyProfileScreen';
 import { Session } from '@supabase/supabase-js';
 import { authEvents } from '../utils/authEvent';
+import { telegramService } from '../services/telegramService';
+import { Alert } from 'react-native';
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
@@ -34,6 +39,7 @@ export const AppNavigator: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasUsername, setHasUsername] = useState<boolean | null>(null);
+  const [restoringConfig, setRestoringConfig] = useState(false);
 
   const checkUsername = async (userId: string, email?: string) => {
     try {
@@ -73,7 +79,18 @@ export const AppNavigator: React.FC = () => {
   useEffect(() => {
     const checkUserAndSession = async (currSession: Session | null) => {
       if (currSession) {
+        setRestoringConfig(true);
         await checkUsername(currSession.user.id, currSession.user.email);
+        try {
+          const config = await telegramService.getTelegramConfig();
+          if (!config.botToken || !config.channelId) {
+            Alert.alert('Configuration Warning', 'Telegram storage not configured.');
+          }
+        } catch (err) {
+          console.error('Failed restoring Telegram config:', err);
+        } finally {
+          setRestoringConfig(false);
+        }
       } else {
         setHasUsername(null);
       }
@@ -111,6 +128,10 @@ export const AppNavigator: React.FC = () => {
     return <SplashScreen />;
   }
 
+  if (restoringConfig) {
+    return <SplashScreen message="Restoring Telegram connection…" />;
+  }
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {session ? (
@@ -122,7 +143,6 @@ export const AppNavigator: React.FC = () => {
             <Stack.Screen name="TelegramConnect" component={TelegramConnectScreen} />
             <Stack.Screen name="Preview" component={PreviewScreen} />
             <Stack.Screen name="FileDetails" component={FileDetailsScreen} />
-            <Stack.Screen name="UsernameSetup" component={UsernameSetupScreen} />
             <Stack.Screen name="UserSearch" component={UserSearchScreen} />
             <Stack.Screen name="ChatList" component={ChatListScreen} />
             <Stack.Screen name="ChatRoom" component={ChatRoomScreen} />
@@ -139,6 +159,9 @@ export const AppNavigator: React.FC = () => {
             <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
             <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
             <Stack.Screen name="ChunkManager" component={ChunkManagerScreen} />
+            <Stack.Screen name="PrivateDrive" component={PrivateDriveScreen} />
+            <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+            <Stack.Screen name="MyProfile" component={MyProfileScreen} />
           </>
         )
       ) : (

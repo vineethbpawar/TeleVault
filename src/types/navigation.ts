@@ -11,7 +11,7 @@ export type MainTabParamList = {
   CameraTab: undefined;
   MemoriesTab: undefined;
   DriveTab: undefined;
-  PrivateDriveTab: undefined;
+  ChatTab: undefined;
   SettingsTab: undefined;
 };
 
@@ -52,6 +52,10 @@ export type AppStackParamList = {
   CreateGroup: undefined;
   AdminDashboard: undefined;
   ChunkManager: undefined;
+  PrivateDrive: undefined;
+  ChatHub: undefined;
+  UserProfile: { userId: string; username: string };
+  MyProfile: undefined;
 };
 
 

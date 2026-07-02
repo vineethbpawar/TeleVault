@@ -279,7 +279,7 @@ export const chatService = {
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'chat_messages',
           filter: `conversation_id=eq.${conversationId}`,

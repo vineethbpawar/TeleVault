@@ -19,21 +19,9 @@ export const TeleVaultLogo: React.FC<TeleVaultLogoProps> = ({
   const logoSize = size;
   const isFull = variant === 'full' || showText;
 
-  // Scale dimensions based on size
-  const vaultRadius = logoSize * 0.22;
-  const vaultBorderWidth = Math.max(1.5, logoSize * 0.05);
-  const dialSize = logoSize * 0.5;
-  const dialBorderWidth = Math.max(1, logoSize * 0.035);
-  const tBarWidth = logoSize * 0.38;
-  const tBarHeight = Math.max(2, logoSize * 0.07);
-  const tStemWidth = Math.max(2, logoSize * 0.07);
-  const tStemHeight = logoSize * 0.4;
-  const boltSize = Math.max(1.5, logoSize * 0.04);
-  const boltOffset = logoSize * 0.12;
-
-  // Layout calculations
-  const tStemTop = (logoSize - tStemHeight) / 2 + (logoSize * 0.04);
-  const tBarTop = tStemTop - tBarHeight + 1; // overlap by 1px to avoid gap
+  const borderRadius = logoSize * 0.2;
+  const borderWidth = Math.max(1.5, logoSize * 0.05);
+  const innerPadding = logoSize * 0.12;
 
   return (
     <View style={[styles.outerContainer, style]}>
@@ -43,70 +31,27 @@ export const TeleVaultLogo: React.FC<TeleVaultLogoProps> = ({
           {
             width: logoSize,
             height: logoSize,
-            borderRadius: vaultRadius,
-            borderWidth: vaultBorderWidth,
+            borderRadius: borderRadius,
+            borderWidth: borderWidth,
+            padding: innerPadding,
           },
         ]}
       >
-        {/* Bolt dots in corners to look like a vault door */}
-        <View style={[styles.bolt, { top: boltOffset, left: boltOffset, width: boltSize, height: boltSize, borderRadius: boltSize / 2 }]} />
-        <View style={[styles.bolt, { top: boltOffset, right: boltOffset, width: boltSize, height: boltSize, borderRadius: boltSize / 2 }]} />
-        <View style={[styles.bolt, { bottom: boltOffset, left: boltOffset, width: boltSize, height: boltSize, borderRadius: boltSize / 2 }]} />
-        <View style={[styles.bolt, { bottom: boltOffset, right: boltOffset, width: boltSize, height: boltSize, borderRadius: boltSize / 2 }]} />
-
-        {/* Circular Vault Dial (behind/integrated with T) */}
-        <View
-          style={[
-            styles.dial,
-            {
-              width: dialSize,
-              height: dialSize,
-              borderRadius: dialSize / 2,
-              borderWidth: dialBorderWidth,
-            },
-          ]}
-        >
-          {/* Small Dial Pointer inside */}
-          <View style={[styles.dialPointer, { height: dialSize * 0.18, width: Math.max(1, dialSize * 0.06), top: 2 }]} />
+        {/* Simple Dial Circle */}
+        <View style={[styles.dialCircle, { borderWidth: Math.max(1, logoSize * 0.04) }]}>
+          {/* Letter T inside dial */}
+          <Text
+            style={[
+              styles.letterT,
+              {
+                fontSize: logoSize * 0.4,
+                lineHeight: logoSize * 0.5,
+              },
+            ]}
+          >
+            T
+          </Text>
         </View>
-
-        {/* Letter T integrated inside vault */}
-        {/* T horizontal bar */}
-        <View
-          style={[
-            styles.tBar,
-            {
-              width: tBarWidth,
-              height: tBarHeight,
-              top: tBarTop,
-              borderRadius: tBarHeight / 2,
-            },
-          ]}
-        />
-        {/* T vertical stem */}
-        <View
-          style={[
-            styles.tStem,
-            {
-              width: tStemWidth,
-              height: tStemHeight,
-              top: tStemTop,
-              borderRadius: tStemWidth / 2,
-            },
-          ]}
-        />
-
-        {/* Central dial lock handle dot */}
-        <View
-          style={[
-            styles.dialCenter,
-            {
-              width: logoSize * 0.12,
-              height: logoSize * 0.12,
-              borderRadius: (logoSize * 0.12) / 2,
-            },
-          ]}
-        />
       </View>
 
       {isFull && (
@@ -127,42 +72,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   vaultBox: {
-    backgroundColor: '#0F1123', // Dark Navy
+    backgroundColor: '#0B0E1B', // Dark Navy matching assets
     borderColor: '#FFFC00', // Yellow/Gold
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'relative',
   },
-  bolt: {
-    position: 'absolute',
-    backgroundColor: 'rgba(255, 252, 0, 0.45)',
-  },
-  dial: {
-    borderColor: 'rgba(255, 252, 0, 0.3)',
+  dialCircle: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 999,
+    borderColor: '#FFFC00',
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'absolute',
+    backgroundColor: 'rgba(255, 252, 0, 0.05)',
   },
-  dialPointer: {
-    position: 'absolute',
-    backgroundColor: 'rgba(255, 252, 0, 0.45)',
-    borderRadius: 1,
-  },
-  dialCenter: {
-    position: 'absolute',
-    backgroundColor: '#FFFC00',
-    borderWidth: 1,
-    borderColor: '#0F1123',
-  },
-  tBar: {
-    position: 'absolute',
-    backgroundColor: '#FFFC00',
-    alignSelf: 'center',
-  },
-  tStem: {
-    position: 'absolute',
-    backgroundColor: '#FFFC00',
-    alignSelf: 'center',
+  letterT: {
+    color: '#FFFC00',
+    fontWeight: '900',
+    textAlign: 'center',
   },
   textContainer: {
     marginLeft: 12,

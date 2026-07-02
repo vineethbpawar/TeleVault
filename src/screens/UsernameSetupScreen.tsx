@@ -70,15 +70,16 @@ export const UsernameSetupScreen: React.FC<Props> = ({ navigation }) => {
         return;
       }
 
-      // 2. Save username and full name
+      // 2. Save username and full name using upsert for safety
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({
+        .upsert({
+          id: user.id,
+          email: user.email,
           username: cleanUsername,
           full_name: cleanFullName || null,
           updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
+        });
 
       if (updateError) {
         if (updateError.code === '23505') {
@@ -90,14 +91,12 @@ export const UsernameSetupScreen: React.FC<Props> = ({ navigation }) => {
         return;
       }
 
-      // 3. Emit auth event to trigger navigation switch
-      authEvents.emit();
-      
       Alert.alert('Success', 'Profile setup complete!', [
         {
           text: 'Get Started',
           onPress: () => {
-            // Note: Triggering authEvents.emit will switch the app navigator Stack automatically
+            // Emit auth event to trigger navigation switch after user acknowledges
+            authEvents.emit();
           },
         },
       ]);

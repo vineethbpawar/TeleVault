@@ -171,6 +171,22 @@ To keep the release APK footprint as small as possible:
 
 ---
 
+---
+
+## Upgrades in TeleVault v2.2.0 (Bug-Fix Release)
+
+This update resolves critical user loops, credentials data persistence, and upload routing issues:
+
+1. **Simple Practical Logo & Launcher Icon:** Replaced the logo with a clean, high-readability vault storage symbol with a small letter "T" centered inside it. The launcher icons (`assets/icon.png`, `assets/adaptive-icon.png`, and `assets/splash-icon.png`) have been updated to matches this style on a solid `#0B0E1B` dark navy background.
+2. **Setup Loop Resolved:** Users completing their profile setup (username and full name) will transition to the main app dashboard immediately upon clicking "Get Started" without requiring a manual app reload.
+3. **Persisted Telegram Configurations:** Added a `telegram_configs` table in Supabase to sync and back up Telegram Bot Tokens and Channel IDs. If the user uninstalls and reinstalls the app, they can instantly sync/restore their keys from Settings. Added credentials masking in the settings subtitle.
+4. **Instantly Synchronized Chats:** Fixed subscription configurations so that message read receipts and snap "Opened" status changes update instantly for both sender and receiver without polling delays.
+5. **Cleaned Chat UI:** Enhanced the chat layout with text-profile avatars, balanced messaging bubbles, and a proper KeyboardAvoidingView offset.
+6. **Automatic Chunk Routing:** The upload queue runner now dynamically reads the actual file size from the disk prior to upload. If a file/video is 50 MB - 500 MB, it automatically routes it to chunk uploading (45 MB splits) even if the picker size metadata returned 0. Files over 500 MB are blocked.
+7. **Cleaned Snap Inbox:** Direct snaps in the inbox are structured cleanly, separating new vs. opened snaps with visual badges.
+
+---
+
 ## Upgrades in TeleVault v2.1.0 (Fix and Polish Update)
 
 This update focuses on performance, speed perception, and media capabilities:

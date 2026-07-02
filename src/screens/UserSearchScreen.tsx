@@ -254,12 +254,18 @@ export const UserSearchScreen: React.FC<Props> = ({ navigation, route }) => {
 
     return (
       <AppCard style={styles.card}>
-        <UserAvatar name={item.full_name || item.username} avatarUrl={item.avatar_url} size={44} />
-        
-        <View style={styles.userInfo}>
-          <Text style={styles.fullName}>{item.full_name || 'No name'}</Text>
-          <Text style={styles.username}>@{item.username}</Text>
-        </View>
+        <TouchableOpacity
+          style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+          onPress={() => navigation.navigate('UserProfile', { userId: item.id, username: item.username || 'unknown' })}
+          activeOpacity={0.7}
+        >
+          <UserAvatar name={item.full_name || item.username} avatarUrl={item.avatar_url} size={44} />
+          
+          <View style={styles.userInfo}>
+            <Text style={styles.fullName}>{item.full_name || 'No name'}</Text>
+            <Text style={styles.username}>@{item.username}</Text>
+          </View>
+        </TouchableOpacity>
 
         {isBlocked ? (
           <View style={styles.blockedBadge}>

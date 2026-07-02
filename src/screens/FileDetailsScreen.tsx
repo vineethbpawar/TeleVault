@@ -23,6 +23,8 @@ import AppHeader from '../components/AppHeader';
 import AppCard from '../components/AppCard';
 import AppButton from '../components/AppButton';
 
+import { previewCacheService } from '../services/previewCacheService';
+
 type Props = NativeStackScreenProps<AppStackParamList, 'FileDetails'>;
 
 export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
@@ -36,27 +38,18 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
 
   useEffect(() => {
     const fetchTelegramUrl = async () => {
-      if (!file.telegram_file_id) {
-        setLoading(false);
-        setError('Telegram File ID is missing.');
-        return;
-      }
-
+      setLoading(true);
+      setError('');
       try {
-        const config = await telegramService.getTelegramConfig();
-        if (!config.botToken) {
-          throw new Error('Telegram bot token is not configured.');
-        }
-
-        const res = await fetch(`https://api.telegram.org/bot${config.botToken}/getFile?file_id=${file.telegram_file_id}`);
-        const data = await res.json();
-
-        if (res.ok && data.ok) {
-          const filePath = data.result.file_path;
-          const url = `https://api.telegram.org/file/bot${config.botToken}/${filePath}`;
+        const url = await previewCacheService.resolvePreviewForFile({
+          id: file.id,
+          local_uri: file.local_thumbnail_uri,
+          telegram_file_id: file.telegram_file_id,
+        });
+        if (url) {
           setMediaUrl(url);
         } else {
-          throw new Error(data.description || 'Failed to locate file on Telegram.');
+          setError('Could not fetch file download link.');
         }
       } catch (err: any) {
         console.error('File url fetch error:', err);

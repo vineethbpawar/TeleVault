@@ -1,13 +1,13 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MainTabParamList } from '../types/navigation';
-import { Camera, Grid, HardDrive, Lock, Settings } from 'lucide-react-native';
+import { Camera, Grid, HardDrive, MessageSquare, Settings } from 'lucide-react-native';
 
-// Import screens (will create these next)
+// Import screens
 import CameraScreen from '../screens/CameraScreen';
 import MemoriesScreen from '../screens/MemoriesScreen';
 import DriveScreen from '../screens/DriveScreen';
-import PrivateDriveScreen from '../screens/PrivateDriveScreen';
+import ChatHubScreen from '../screens/ChatHubScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -59,11 +59,11 @@ export const MainTabs: React.FC = () => {
         }}
       />
       <Tab.Screen
-        name="PrivateDriveTab"
-        component={PrivateDriveScreen}
+        name="ChatTab"
+        component={ChatHubScreen}
         options={{
-          tabBarLabel: 'Private',
-          tabBarIcon: ({ color, size }) => <Lock color={color} size={size} />,
+          tabBarLabel: 'Chat',
+          tabBarIcon: ({ color, size }) => <MessageSquare color={color} size={size} />,
         }}
       />
       <Tab.Screen

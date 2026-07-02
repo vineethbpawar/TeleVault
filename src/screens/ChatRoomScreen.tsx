@@ -327,12 +327,23 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <ArrowLeft size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerName} numberOfLines={1}>
-            {otherFullName || `@${otherUsername}`}
-          </Text>
-          <Text style={styles.headerUsername}>@{otherUsername}</Text>
-        </View>
+        <TouchableOpacity 
+          style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+          onPress={() => navigation.navigate('UserProfile', { userId: otherUserId, username: otherUsername })}
+          activeOpacity={0.7}
+        >
+          <View style={styles.headerAvatar}>
+            <Text style={styles.headerAvatarText}>
+              {(otherFullName || otherUsername).substring(0, 1).toUpperCase()}
+            </Text>
+          </View>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerName} numberOfLines={1}>
+              {otherFullName || `@${otherUsername}`}
+            </Text>
+            <Text style={styles.headerUsername}>@{otherUsername}</Text>
+          </View>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.headerCameraBtn} onPress={handleSnapPress}>
           <Camera size={22} color="#FFFC00" />
         </TouchableOpacity>
@@ -354,9 +365,9 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No messages yet.</Text>
+              <Text style={styles.emptyText}>Say hi 👋</Text>
               <Text style={styles.emptySubtext}>
-                Telegram Bot API is used as backup log storage. Supabase is used for in-app chat retrieval/realtime.
+                Messages are backed up to your private Telegram storage bot log.
               </Text>
             </View>
           }
@@ -365,7 +376,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
 
       {/* Input */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         <View style={styles.inputContainer}>
@@ -405,6 +416,20 @@ const styles = StyleSheet.create({
     height: 56,
     borderBottomWidth: 1,
     borderColor: '#1E1E1E',
+  },
+  headerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFFC00',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  headerAvatarText: {
+    color: '#000000',
+    fontWeight: '700',
+    fontSize: 16,
   },
   backBtn: {
     padding: 8,

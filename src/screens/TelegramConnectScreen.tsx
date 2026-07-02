@@ -116,6 +116,7 @@ export const TelegramConnectScreen: React.FC<Props> = ({ navigation, route }) =>
               onChangeText={setBotToken}
               autoCapitalize="none"
               autoCorrect={false}
+              isPassword={true}
             />
 
             <AppInput

@@ -1,7 +1,8 @@
-import React from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { FileImage, FileVideo, FileText, MoreVertical, File } from 'lucide-react-native';
 import { TeleVaultFile } from '../types/file';
+import { previewCacheService } from '../services/previewCacheService';
 
 interface FileCardProps {
   file: TeleVaultFile;
@@ -14,6 +15,41 @@ export const FileCard: React.FC<FileCardProps> = ({
   onPress,
   onMorePress,
 }) => {
+  const [resolvedUri, setResolvedUri] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (file.file_type === 'image' || file.file_type === 'video') {
+      setLoading(true);
+      setError(false);
+      previewCacheService.resolvePreviewForFile({
+        id: file.id,
+        local_uri: file.local_thumbnail_uri,
+        telegram_file_id: file.telegram_file_id,
+      }).then(uri => {
+        if (active) {
+          if (uri) {
+            setResolvedUri(uri);
+          } else {
+            setError(true);
+          }
+          setLoading(false);
+        }
+      }).catch(err => {
+        console.error('Failed to resolve FileCard preview:', err);
+        if (active) {
+          setError(true);
+          setLoading(false);
+        }
+      });
+    }
+    return () => {
+      active = false;
+    };
+  }, [file.id, file.local_thumbnail_uri, file.telegram_file_id, file.file_type]);
+
   const formatSize = (bytes: number | null): string => {
     if (!bytes) return '0 B';
     const k = 1024;
@@ -36,22 +72,39 @@ export const FileCard: React.FC<FileCardProps> = ({
   };
 
   const renderIcon = () => {
-    // If local thumbnail exists, try to display it for images
-    if (file.file_type === 'image' && file.local_thumbnail_uri) {
-      return (
-        <Image
-          source={{ uri: file.local_thumbnail_uri }}
-          style={styles.thumbnail}
-          resizeMode="cover"
-        />
-      );
+    if (file.file_type === 'image' || file.file_type === 'video') {
+      if (loading) {
+        return <ActivityIndicator size="small" color="#FFFC00" />;
+      }
+      if (resolvedUri && !error) {
+        return (
+          <Image
+            source={{ uri: resolvedUri }}
+            style={styles.thumbnail}
+            resizeMode="cover"
+            onError={() => {
+              previewCacheService.resolvePreviewForFile({
+                id: file.id,
+                local_uri: file.local_thumbnail_uri,
+                telegram_file_id: file.telegram_file_id,
+              }, true).then(refreshed => {
+                if (refreshed) {
+                  setResolvedUri(refreshed);
+                } else {
+                  setError(true);
+                }
+              }).catch(() => setError(true));
+            }}
+          />
+        );
+      }
     }
 
     switch (file.file_type) {
       case 'image':
-        return <FileImage size={24} color="#FFFC00" />;
+        return <FileImage size={24} color="#8E8E93" />;
       case 'video':
-        return <FileVideo size={24} color="#FFFC00" />;
+        return <FileVideo size={24} color="#8E8E93" />;
       case 'document':
       default:
         if (file.mime_type && file.mime_type.includes('pdf')) {

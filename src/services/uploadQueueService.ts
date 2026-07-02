@@ -5,6 +5,7 @@ import { fileService } from './fileService';
 import { mediaOptimizationService } from './mediaOptimizationService';
 import { settingsService } from './settingsService';
 import { largeFileService, NORMAL_TELEGRAM_LIMIT_BYTES } from './largeFileService';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const QUEUE_STORAGE_KEY = 'televault_upload_queue';
 let isProcessing = false;
@@ -219,8 +220,14 @@ export const uploadQueueService = {
         await this.updateUploadQueueItem(itemId, { progress: 25 });
       }
 
+      // Check the actual file size from disk for final safety
+      const fileInfo = await FileSystem.getInfoAsync(finalUri);
+      if (fileInfo.exists) {
+        finalSize = fileInfo.size;
+      }
+
       // If it is a chunked upload, delegate to largeFileService
-      if (pendingItem.upload_mode === 'chunked') {
+      if (finalSize > NORMAL_TELEGRAM_LIMIT_BYTES || pendingItem.upload_mode === 'chunked') {
         let largeFileId = pendingItem.large_file_id;
         const { CHUNK_SIZE_BYTES } = require('./largeFileService');
 
@@ -238,7 +245,7 @@ export const uploadQueueService = {
           );
           const totalChunks = Math.ceil(finalSize / CHUNK_SIZE_BYTES);
           await largeFileService.createChunkRecords(largeFileId, totalChunks, finalSize, pendingItem.file_name);
-          await this.updateUploadQueueItem(itemId, { large_file_id: largeFileId });
+          await this.updateUploadQueueItem(itemId, { large_file_id: largeFileId, upload_mode: 'chunked' });
         }
 
         await largeFileService.resumeLargeFileUpload(

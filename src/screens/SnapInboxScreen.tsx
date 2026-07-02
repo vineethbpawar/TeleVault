@@ -96,31 +96,41 @@ export const SnapInboxScreen: React.FC<Props> = ({ navigation }) => {
     const isVideo = item.media_type === 'video';
 
     return (
-      <TouchableOpacity 
-        style={[styles.card, isViewed && styles.cardViewed]} 
-        onPress={() => handleOpenSnap(item)}
-        activeOpacity={isViewed ? 1.0 : 0.8}
-      >
-        <View style={[styles.statusIndicator, isViewed ? styles.indicatorViewed : styles.indicatorNew]}>
-          {isVideo ? (
-            <Video size={18} color={isViewed ? '#8E8E93' : '#000000'} />
-          ) : (
-            <Image size={18} color={isViewed ? '#8E8E93' : '#000000'} />
-          )}
-        </View>
-
-        <View style={styles.info}>
-          <Text style={[styles.senderName, isViewed && styles.textViewed]}>
-            {sender?.full_name || `@${sender?.username || 'unknown'}`}
-          </Text>
-          <View style={styles.subRow}>
-            <Text style={styles.subtext}>
-              {isVideo ? 'Video Snap' : 'Photo Snap'} • {formatTime(item.created_at)}
-            </Text>
+      <View style={[styles.card, isViewed && styles.cardViewed]}>
+        <TouchableOpacity 
+          style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+          onPress={() => {
+            if (sender) {
+              navigation.navigate('UserProfile', { userId: item.sender_id, username: sender.username || 'unknown' });
+            }
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.statusIndicator, isViewed ? styles.indicatorViewed : styles.indicatorNew]}>
+            {isVideo ? (
+              <Video size={18} color={isViewed ? '#8E8E93' : '#000000'} />
+            ) : (
+              <Image size={18} color={isViewed ? '#8E8E93' : '#000000'} />
+            )}
           </View>
-        </View>
 
-        <View style={styles.rightAction}>
+          <View style={styles.info}>
+            <Text style={[styles.senderName, isViewed && styles.textViewed]}>
+              {sender?.full_name || `@${sender?.username || 'unknown'}`}
+            </Text>
+            <View style={styles.subRow}>
+              <Text style={styles.subtext}>
+                {isVideo ? 'Video Snap' : 'Photo Snap'} • {formatTime(item.created_at)}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.rightAction}
+          onPress={() => handleOpenSnap(item)}
+          disabled={isViewed}
+        >
           {isViewed ? (
             <View style={styles.openedBadge}>
               <Eye size={14} color="#8E8E93" />
@@ -132,8 +142,8 @@ export const SnapInboxScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.newText}>Tap to View</Text>
             </View>
           )}
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </View>
     );
   };
 

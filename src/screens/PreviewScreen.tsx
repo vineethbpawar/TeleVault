@@ -274,12 +274,20 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
 
-    if (fileSize !== null && fileSize > 50 * 1024 * 1024) {
-      Alert.alert(
-        'Upload Blocked',
-        'This file exceeds 50 MB. Telegram Bot API limits uploads to 50 MB. Try a smaller file.'
-      );
-      return;
+    if (fileSize !== null) {
+      if (fileSize > 500 * 1024 * 1024) {
+        Alert.alert(
+          'Upload Blocked',
+          'This file is too large for the current Large File Mode. Max supported is 500 MB.'
+        );
+        return;
+      } else if (fileSize > 50 * 1024 * 1024) {
+        // Warn the user about chunked upload route
+        Alert.alert(
+          'Large File Detected',
+          'This file is larger than 50 MB. TeleVault will split this into 45 MB parts and upload to Telegram.'
+        );
+      }
     }
 
     const timestamp = Date.now();
@@ -323,7 +331,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
               if (destination === 'memories') {
                 navigation.replace('Main', { screen: 'MemoriesTab' });
               } else if (destination === 'private_drive') {
-                navigation.replace('Main', { screen: 'PrivateDriveTab' });
+                navigation.replace('PrivateDrive');
               } else {
                 navigation.replace('Main', { screen: 'DriveTab' });
               }

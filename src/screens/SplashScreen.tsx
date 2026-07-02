@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { StyleSheet, View, Text, Animated } from 'react-native';
 import TeleVaultLogo from '../components/TeleVaultLogo';
 
-export const SplashScreen: React.FC = () => {
+export const SplashScreen: React.FC<{ message?: string }> = ({ message }) => {
   const fadeAnim = new Animated.Value(0);
 
   useEffect(() => {
@@ -19,6 +19,11 @@ export const SplashScreen: React.FC = () => {
         <TeleVaultLogo size={96} style={{ marginBottom: 24 }} />
         <Text style={styles.title}>TeleVault</Text>
         <Text style={styles.tagline}>Camera. Memories. Drive.</Text>
+        {message && (
+          <Text style={{ color: '#FFFC00', fontSize: 13, marginTop: 32, fontWeight: '600', letterSpacing: 0.5 }}>
+            {message}
+          </Text>
+        )}
       </Animated.View>
     </View>
   );

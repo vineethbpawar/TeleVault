@@ -12,7 +12,9 @@ import {
   Alert,
   Modal,
   ScrollView,
+  Image,
 } from 'react-native';
+import { previewCacheService } from '../services/previewCacheService';
 import {
   Plus,
   FolderPlus,
@@ -49,6 +51,88 @@ import UploadProgress from '../components/UploadProgress';
 import AppButton from '../components/AppButton';
 import AppInput from '../components/AppInput';
 import AppCard from '../components/AppCard';
+
+const RecentFileCard: React.FC<{ item: TeleVaultFile; onPress: () => void; formatSize: (size: number) => string }> = ({ item, onPress, formatSize }) => {
+  const [resolvedUri, setResolvedUri] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (item.file_type === 'image' || item.file_type === 'video') {
+      setLoading(true);
+      setError(false);
+      previewCacheService.resolvePreviewForFile({
+        id: item.id,
+        local_uri: item.local_thumbnail_uri,
+        telegram_file_id: item.telegram_file_id,
+      }).then(uri => {
+        if (active) {
+          if (uri) {
+            setResolvedUri(uri);
+          } else {
+            setError(true);
+          }
+          setLoading(false);
+        }
+      }).catch(err => {
+        console.error('Failed to resolve recent preview:', err);
+        if (active) {
+          setError(true);
+          setLoading(false);
+        }
+      });
+    }
+    return () => {
+      active = false;
+    };
+  }, [item.id, item.local_thumbnail_uri, item.telegram_file_id, item.file_type]);
+
+  return (
+    <TouchableOpacity
+      style={styles.recentCard}
+      onPress={onPress}
+    >
+      {loading ? (
+        <View style={[styles.recentPlaceholder, styles.skeletonBg]}>
+          <ActivityIndicator size="small" color="#FFFC00" />
+        </View>
+      ) : error || !resolvedUri ? (
+        <View style={styles.recentPlaceholder}>
+          {item.file_type === 'image' ? (
+            <ImageIcon size={22} color="#8E8E93" />
+          ) : item.file_type === 'video' ? (
+            <Video size={22} color="#8E8E93" />
+          ) : (
+            <FileText size={22} color="#FFFFFF" />
+          )}
+        </View>
+      ) : (
+        <Image 
+          source={{ uri: resolvedUri }} 
+          style={styles.recentImg as any}
+          onError={() => {
+            previewCacheService.resolvePreviewForFile({
+              id: item.id,
+              local_uri: item.local_thumbnail_uri,
+              telegram_file_id: item.telegram_file_id,
+            }, true).then(refreshed => {
+              if (refreshed) {
+                setResolvedUri(refreshed);
+              } else {
+                setError(true);
+              }
+            }).catch(() => setError(true));
+          }}
+        />
+      )}
+      <View style={styles.recentOverlay}>
+        <Text style={styles.recentFileName} numberOfLines={1}>{item.file_name}</Text>
+        <Text style={styles.recentFileSize}>{formatSize(item.file_size || 0)}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'DriveTab'>,
@@ -494,20 +578,11 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.recentList}
             renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.recentCard}
+              <RecentFileCard
+                item={item}
                 onPress={() => navigation.navigate('FileDetails', { file: item })}
-              >
-                {item.file_type === 'image' ? (
-                  <ImageIcon size={22} color="#FFFC00" />
-                ) : item.file_type === 'video' ? (
-                  <Video size={22} color="#FFFC00" />
-                ) : (
-                  <FileText size={22} color="#FFFFFF" />
-                )}
-                <Text style={styles.recentFileName} numberOfLines={1}>{item.file_name}</Text>
-                <Text style={styles.recentFileSize}>{formatSize(item.file_size || 0)}</Text>
-              </TouchableOpacity>
+                formatSize={formatSize}
+              />
             )}
           />
         </View>
@@ -811,26 +886,46 @@ const styles = StyleSheet.create({
     paddingRight: 16,
   },
   recentCard: {
-    width: 110,
-    backgroundColor: '#0f1123',
-    borderRadius: 14,
-    padding: 10,
+    width: 100,
+    height: 120,
+    borderRadius: 16,
     marginRight: 10,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#1f2444',
+    backgroundColor: '#0f1123',
+  },
+  recentImg: {
+    width: '100%',
+    height: '100%',
+  },
+  recentPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+  },
+  recentOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    padding: 6,
+  },
+  skeletonBg: {
+    backgroundColor: '#0f1123',
   },
   recentFileName: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
-    marginTop: 8,
     textAlign: 'center',
   },
   recentFileSize: {
-    color: '#8e92af',
-    fontSize: 10,
+    color: '#FFFC00',
+    fontSize: 9,
     marginTop: 2,
+    textAlign: 'center',
   },
   listContent: {
     paddingHorizontal: 16,

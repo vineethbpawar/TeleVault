@@ -34,6 +34,8 @@ import {
   Mail,
   Globe,
   Clock,
+  RefreshCw,
+  Trash2,
 } from 'lucide-react-native';
 import { CompositeScreenProps, useIsFocused } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -58,6 +60,8 @@ type Props = CompositeScreenProps<
 export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [userEmail, setUserEmail] = useState('');
   const [telegramConfigured, setTelegramConfigured] = useState(false);
+  const [maskedBotToken, setMaskedBotToken] = useState<string | null>(null);
+  const [telegramChannelId, setTelegramChannelId] = useState<string | null>(null);
   const [hasPin, setHasPin] = useState(false);
   const [driveLock, setDriveLock] = useState(false);
   const [privateDriveLock, setPrivateDriveLock] = useState(false);
@@ -150,6 +154,19 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     // 2. Get Telegram credentials status
     const config = await telegramService.getTelegramConfig();
     setTelegramConfigured(!!config.botToken && !!config.channelId);
+    setTelegramChannelId(config.channelId || null);
+    if (config.botToken) {
+      const parts = config.botToken.split(':');
+      if (parts.length > 1) {
+        const prefix = parts[0];
+        const suffix = parts[1].substring(0, Math.min(3, parts[1].length));
+        setMaskedBotToken(`${prefix}:${suffix}••••••`);
+      } else {
+        setMaskedBotToken(`${config.botToken.substring(0, Math.min(6, config.botToken.length))}••••••`);
+      }
+    } else {
+      setMaskedBotToken(null);
+    }
 
     // 3. Get PIN security status
     const pinExists = await securityService.hasPin();
@@ -358,6 +375,76 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const handleSyncTelegramConfig = async () => {
+    setTestingConnection(true);
+    try {
+      const success = await telegramService.syncTelegramConfig();
+      if (success) {
+        setTelegramConfigured(true);
+        // Refresh masked token
+        const config = await telegramService.getTelegramConfig();
+        setTelegramChannelId(config.channelId || null);
+        if (config.botToken) {
+          const parts = config.botToken.split(':');
+          if (parts.length > 1) {
+            setMaskedBotToken(`${parts[0]}:${parts[1].substring(0, Math.min(3, parts[1].length))}••••••`);
+          } else {
+            setMaskedBotToken(`${config.botToken.substring(0, Math.min(6, config.botToken.length))}••••••`);
+          }
+        }
+        Alert.alert('Success', 'Telegram credentials restored from cloud sync successfully!');
+      } else {
+        Alert.alert('Not Found', 'No Telegram credentials backup found in your cloud account.');
+      }
+    } catch (err: any) {
+      Alert.alert('Sync Failed', err.message || 'An error occurred during synchronization.');
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  const handleBackupTelegramConfig = async () => {
+    setTestingConnection(true);
+    try {
+      const config = await telegramService.getTelegramConfig();
+      if (!config.botToken || !config.channelId) {
+        Alert.alert('Error', 'Please configure your Telegram sync details first.');
+        return;
+      }
+      await telegramService.saveTelegramConfig(config.botToken, config.channelId);
+      Alert.alert('Success', 'Telegram credentials backed up to cloud successfully!');
+    } catch (err: any) {
+      Alert.alert('Backup Failed', err.message || 'An error occurred during backup.');
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  const handleRemoveTelegramConfig = async () => {
+    Alert.alert(
+      'Remove Telegram Credentials',
+      'This will delete your storage credentials locally and from your cloud account. Your uploaded files will remain on Telegram, but you will not be able to sync new files until you re-configure. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await telegramService.deleteTelegramConfig();
+              setTelegramConfigured(false);
+              setMaskedBotToken(null);
+              setTelegramChannelId(null);
+              Alert.alert('Removed', 'Telegram configuration deleted.');
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to delete configuration.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleLogout = async () => {
     Alert.alert('Log Out', 'Are you sure you want to log out of TeleVault?', [
       { text: 'Cancel', style: 'cancel' },
@@ -470,31 +557,79 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
               <View style={styles.itemLeft}>
                 <Database size={20} color="#FFFC00" />
                 <View style={styles.itemMeta}>
-                  <Text style={styles.itemTitle}>Telegram Channel Keys</Text>
-                  <Text style={styles.itemSubtitle}>
-                    {telegramConfigured ? 'Bot and channel sync active' : 'Sync credentials not configured'}
+                  <Text style={styles.itemTitle}>Telegram Sync Connection</Text>
+                  <Text style={[styles.itemSubtitle, telegramConfigured ? { color: '#30D158' } : { color: '#FF453A' }]}>
+                    {telegramConfigured ? 'Connected & Verified' : 'Not Connected'}
                   </Text>
                 </View>
               </View>
-              {telegramConfigured ? (
-                <CheckCircle size={20} color="#30D158" style={{ marginRight: 8 }} />
-              ) : (
-                <XCircle size={20} color="#FF453A" style={{ marginRight: 8 }} />
-              )}
               <ChevronRight size={18} color="#8E8E93" />
             </TouchableOpacity>
 
             {telegramConfigured && (
-              <TouchableOpacity style={styles.itemRow} onPress={handleTestTelegram} disabled={testingConnection}>
-                <View style={styles.itemLeft}>
-                  <Send size={20} color="#FFFC00" />
+              <>
+                <View style={[styles.itemRow, { borderTopWidth: 1, borderColor: '#1C1C1E', paddingLeft: 32 }]}>
                   <View style={styles.itemMeta}>
-                    <Text style={styles.itemTitle}>Test Connection</Text>
-                    <Text style={styles.itemSubtitle}>Send verification ping log to Telegram</Text>
+                    <Text style={[styles.itemTitle, { fontSize: 13, color: '#8E8E93' }]}>Bot Token</Text>
+                    <Text style={[styles.itemSubtitle, { color: '#FFFFFF' }]}>{maskedBotToken}</Text>
                   </View>
                 </View>
-                {testingConnection ? <ActivityIndicator size="small" color="#FFFC00" /> : <ChevronRight size={18} color="#8E8E93" />}
-              </TouchableOpacity>
+
+                <View style={[styles.itemRow, { borderTopWidth: 1, borderColor: '#1C1C1E', paddingLeft: 32 }]}>
+                  <View style={styles.itemMeta}>
+                    <Text style={[styles.itemTitle, { fontSize: 13, color: '#8E8E93' }]}>Channel ID</Text>
+                    <Text style={[styles.itemSubtitle, { color: '#FFFFFF' }]}>{telegramChannelId}</Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity style={styles.itemRow} onPress={handleBackupTelegramConfig} disabled={testingConnection}>
+                  <View style={styles.itemLeft}>
+                    <Upload size={20} color="#FFFC00" />
+                    <View style={styles.itemMeta}>
+                      <Text style={styles.itemTitle}>Backup credentials to Cloud</Text>
+                      <Text style={styles.itemSubtitle}>Save keys to secure cloud sync database</Text>
+                    </View>
+                  </View>
+                  {testingConnection ? <ActivityIndicator size="small" color="#FFFC00" /> : <ChevronRight size={18} color="#8E8E93" />}
+                </TouchableOpacity>
+              </>
+            )}
+
+            <TouchableOpacity style={styles.itemRow} onPress={handleSyncTelegramConfig} disabled={testingConnection}>
+              <View style={styles.itemLeft}>
+                <RefreshCw size={20} color="#FFFC00" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Restore credentials from Cloud</Text>
+                  <Text style={styles.itemSubtitle}>Pull keys from secure cloud backup</Text>
+                </View>
+              </View>
+              {testingConnection ? <ActivityIndicator size="small" color="#FFFC00" /> : <ChevronRight size={18} color="#8E8E93" />}
+            </TouchableOpacity>
+
+            {telegramConfigured && (
+              <>
+                <TouchableOpacity style={styles.itemRow} onPress={handleTestTelegram} disabled={testingConnection}>
+                  <View style={styles.itemLeft}>
+                    <Send size={20} color="#FFFC00" />
+                    <View style={styles.itemMeta}>
+                      <Text style={styles.itemTitle}>Test Connection</Text>
+                      <Text style={styles.itemSubtitle}>Send verification ping log to Telegram</Text>
+                    </View>
+                  </View>
+                  {testingConnection ? <ActivityIndicator size="small" color="#FFFC00" /> : <ChevronRight size={18} color="#8E8E93" />}
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.itemRow} onPress={handleRemoveTelegramConfig}>
+                  <View style={styles.itemLeft}>
+                    <Trash2 size={20} color="#FF453A" />
+                    <View style={styles.itemMeta}>
+                      <Text style={[styles.itemTitle, { color: '#FF453A' }]}>Remove Telegram Config</Text>
+                      <Text style={styles.itemSubtitle}>Delete credentials locally and from cloud</Text>
+                    </View>
+                  </View>
+                  <ChevronRight size={18} color="#8E8E93" />
+                </TouchableOpacity>
+              </>
             )}
           </View>
         </View>

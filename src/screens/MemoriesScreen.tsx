@@ -12,6 +12,8 @@ import {
   ActivityIndicator,
   Dimensions,
   Alert,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import { Search, Image as ImageIcon, Video, Calendar, Star, Lock, Eye, AlertTriangle } from 'lucide-react-native';
 import { CompositeScreenProps, useIsFocused } from '@react-navigation/native';
@@ -25,6 +27,7 @@ import { TeleVaultFile } from '../types/file';
 import EmptyState from '../components/EmptyState';
 import PinLockModal from '../components/PinLockModal';
 import AppCard from '../components/AppCard';
+import { previewCacheService } from '../services/previewCacheService';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'MemoriesTab'>,
@@ -38,6 +41,175 @@ interface GroupedMemories {
   title: string;
   data: TeleVaultFile[];
 }
+
+const MemoryGridItem: React.FC<{ item: TeleVaultFile; onPress: () => void }> = ({ item, onPress }) => {
+  const [resolvedUri, setResolvedUri] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const resolve = async () => {
+      setLoading(true);
+      setError(false);
+      try {
+        const uri = await previewCacheService.resolvePreviewForFile({
+          id: item.id,
+          local_uri: item.local_thumbnail_uri,
+          telegram_file_id: item.telegram_file_id,
+        });
+        if (active) {
+          if (uri) {
+            setResolvedUri(uri);
+          } else {
+            setError(true);
+          }
+        }
+      } catch (err) {
+        console.error('Error resolving memory preview:', err);
+        if (active) setError(true);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    resolve();
+
+    return () => {
+      active = false;
+    };
+  }, [item.id, item.local_thumbnail_uri, item.telegram_file_id]);
+
+  const isVideo = item.file_type === 'video';
+
+  return (
+    <TouchableOpacity
+      style={styles.gridItem}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      {loading ? (
+        <View style={[styles.placeholderGrid, styles.skeletonBg]}>
+          <ActivityIndicator size="small" color="#FFFC00" />
+        </View>
+      ) : error || !resolvedUri ? (
+        <View style={[styles.placeholderGrid, styles.errorBg]}>
+          {isVideo ? (
+            <Video size={24} color="#8E8E93" />
+          ) : (
+            <ImageIcon size={24} color="#8E8E93" />
+          )}
+        </View>
+      ) : (
+        <Image 
+          source={{ uri: resolvedUri }} 
+          style={styles.gridImage as any} 
+          onError={() => {
+            previewCacheService.resolvePreviewForFile({
+              id: item.id,
+              local_uri: item.local_thumbnail_uri,
+              telegram_file_id: item.telegram_file_id,
+            }, true).then(refreshedUri => {
+              if (refreshedUri) {
+                setResolvedUri(refreshedUri);
+              } else {
+                setError(true);
+              }
+            }).catch(() => setError(true));
+          }}
+        />
+      )}
+      {isVideo && (
+        <View style={styles.videoBadge}>
+          <Text style={styles.videoBadgeText}>▶</Text>
+        </View>
+      )}
+      {item.is_favorite && (
+        <View style={styles.starBadge}>
+          <Star size={10} color="#FFFC00" fill="#FFFC00" />
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+};
+
+const OnThisDayGridItem: React.FC<{ item: TeleVaultFile; onPress: () => void }> = ({ item, onPress }) => {
+  const [resolvedUri, setResolvedUri] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const resolve = async () => {
+      setLoading(true);
+      setError(false);
+      try {
+        const uri = await previewCacheService.resolvePreviewForFile({
+          id: item.id,
+          local_uri: item.local_thumbnail_uri,
+          telegram_file_id: item.telegram_file_id,
+        });
+        if (active) {
+          if (uri) {
+            setResolvedUri(uri);
+          } else {
+            setError(true);
+          }
+        }
+      } catch (err) {
+        console.error('Error resolving memory preview:', err);
+        if (active) setError(true);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    resolve();
+
+    return () => {
+      active = false;
+    };
+  }, [item.id, item.local_thumbnail_uri, item.telegram_file_id]);
+
+  return (
+    <TouchableOpacity
+      style={styles.onThisDayCard}
+      onPress={onPress}
+    >
+      {loading ? (
+        <View style={[styles.onThisDayPlaceholder, styles.skeletonBg]}>
+          <ActivityIndicator size="small" color="#FFFC00" />
+        </View>
+      ) : error || !resolvedUri ? (
+        <View style={styles.onThisDayPlaceholder}>
+          <Calendar size={24} color="#8E8E93" />
+        </View>
+      ) : (
+        <Image 
+          source={{ uri: resolvedUri }} 
+          style={styles.onThisDayImg as any} 
+          onError={() => {
+            previewCacheService.resolvePreviewForFile({
+              id: item.id,
+              local_uri: item.local_thumbnail_uri,
+              telegram_file_id: item.telegram_file_id,
+            }, true).then(refreshedUri => {
+              if (refreshedUri) {
+                setResolvedUri(refreshedUri);
+              } else {
+                setError(true);
+              }
+            }).catch(() => setError(true));
+          }}
+        />
+      )}
+      <View style={styles.onThisDayOverlay}>
+        <Text style={styles.onThisDayYear}>{new Date(item.created_at).getFullYear()}</Text>
+        <Text style={styles.onThisDayCaption} numberOfLines={1}>{item.caption || item.file_name}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
   const [files, setFiles] = useState<TeleVaultFile[]>([]);
@@ -90,6 +262,16 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
         loadMemories(true);
       }
     }
+
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active' && isFocused) {
+        loadMemories(false);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, [isFocused, filterType, isUnlocked]);
 
   const onRefresh = useCallback(() => {
@@ -177,36 +359,11 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const renderGridItem = ({ item }: { item: TeleVaultFile }) => {
-    const isVideo = item.file_type === 'video';
-
     return (
-      <TouchableOpacity
-        style={styles.gridItem}
+      <MemoryGridItem
+        item={item}
         onPress={() => navigation.navigate('FileDetails', { file: item })}
-        activeOpacity={0.8}
-      >
-        {item.local_thumbnail_uri ? (
-          <Image source={{ uri: item.local_thumbnail_uri }} style={styles.gridImage as any} />
-        ) : (
-          <View style={styles.placeholderGrid}>
-            {isVideo ? (
-              <Video size={24} color="#FFFC00" />
-            ) : (
-              <ImageIcon size={24} color="#FFFC00" />
-            )}
-          </View>
-        )}
-        {isVideo && (
-          <View style={styles.videoBadge}>
-            <Text style={styles.videoBadgeText}>▶</Text>
-          </View>
-        )}
-        {item.is_favorite && (
-          <View style={styles.starBadge}>
-            <Star size={10} color="#FFFC00" fill="#FFFC00" />
-          </View>
-        )}
-      </TouchableOpacity>
+      />
     );
   };
 
@@ -217,7 +374,15 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Memories</Text>
+        <View style={styles.headerMainRow}>
+          <Text style={styles.headerTitle}>Memories</Text>
+          <Text style={styles.headerCountBadge}>
+            {files.length === 1 ? '1 Memory' : `${files.length} Memories`}
+          </Text>
+        </View>
+        <Text style={styles.headerSubCountText}>
+          {files.filter(f => f.file_type === 'image').length} Photos • {files.filter(f => f.file_type === 'video').length} Videos • {files.filter(f => f.is_favorite === true).length} Favorites
+        </Text>
       </View>
 
       {/* Search Input */}
@@ -273,22 +438,10 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.onThisDayList}
             renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.onThisDayCard}
+              <OnThisDayGridItem
+                item={item}
                 onPress={() => navigation.navigate('FileDetails', { file: item })}
-              >
-                {item.local_thumbnail_uri ? (
-                  <Image source={{ uri: item.local_thumbnail_uri }} style={styles.onThisDayImg as any} />
-                ) : (
-                  <View style={styles.onThisDayPlaceholder}>
-                    <Calendar size={24} color="#FFFC00" />
-                  </View>
-                )}
-                <View style={styles.onThisDayOverlay}>
-                  <Text style={styles.onThisDayYear}>{new Date(item.created_at).getFullYear()}</Text>
-                  <Text style={styles.onThisDayCaption} numberOfLines={1}>{item.caption || item.file_name}</Text>
-                </View>
-              </TouchableOpacity>
+              />
             )}
           />
         </View>
@@ -350,7 +503,8 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    height: 56,
+    paddingVertical: 8,
+    minHeight: 56,
     justifyContent: 'center',
   },
   headerTitle: {
@@ -358,6 +512,33 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: 0.5,
+  },
+  headerMainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerCountBadge: {
+    color: '#FFFC00',
+    backgroundColor: 'rgba(255, 252, 0, 0.1)',
+    fontSize: 12,
+    fontWeight: '700',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  headerSubCountText: {
+    color: '#8e92af',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+    letterSpacing: 0.2,
+  },
+  skeletonBg: {
+    backgroundColor: '#0f1123',
+  },
+  errorBg: {
+    backgroundColor: '#1b1b1b',
   },
   searchContainer: {
     paddingHorizontal: 16,

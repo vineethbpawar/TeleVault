@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
+import { supabase } from '../lib/supabase';
 
 const BOT_TOKEN_KEY = 'telegram_bot_token';
 const CHANNEL_ID_KEY = 'telegram_channel_id';
@@ -19,12 +20,102 @@ export const telegramService = {
   async saveTelegramConfig(botToken: string, channelId: string): Promise<void> {
     await SecureStore.setItemAsync(BOT_TOKEN_KEY, botToken.trim());
     await SecureStore.setItemAsync(CHANNEL_ID_KEY, channelId.trim());
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { error } = await supabase
+          .from('telegram_configs')
+          .upsert({
+            user_id: user.id,
+            bot_token: botToken.trim(),
+            channel_id: channelId.trim(),
+            is_verified: true,
+            last_verified_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' });
+
+        if (error) {
+          console.error('Failed to back up Telegram config to Supabase:', error);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to save Telegram config to Supabase:', err);
+    }
   },
 
   async getTelegramConfig(): Promise<TelegramConfig> {
-    const botToken = await SecureStore.getItemAsync(BOT_TOKEN_KEY);
-    const channelId = await SecureStore.getItemAsync(CHANNEL_ID_KEY);
+    let botToken = await SecureStore.getItemAsync(BOT_TOKEN_KEY);
+    let channelId = await SecureStore.getItemAsync(CHANNEL_ID_KEY);
+
+    if (!botToken || !channelId) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data, error } = await supabase
+            .from('telegram_configs')
+            .select('bot_token, channel_id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (data && !error) {
+            botToken = data.bot_token;
+            channelId = data.channel_id;
+            if (botToken) await SecureStore.setItemAsync(BOT_TOKEN_KEY, botToken);
+            if (channelId) await SecureStore.setItemAsync(CHANNEL_ID_KEY, channelId);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to restore Telegram config from Supabase:', err);
+      }
+    }
+
     return { botToken, channelId };
+  },
+
+  async deleteTelegramConfig(): Promise<void> {
+    await SecureStore.deleteItemAsync(BOT_TOKEN_KEY);
+    await SecureStore.deleteItemAsync(CHANNEL_ID_KEY);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { error } = await supabase
+          .from('telegram_configs')
+          .delete()
+          .eq('user_id', user.id);
+        if (error) {
+          console.error('Failed to delete Telegram config from Supabase:', error);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to delete Telegram config from Supabase:', err);
+    }
+  },
+
+  async syncTelegramConfig(): Promise<boolean> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+
+      const { data, error } = await supabase
+        .from('telegram_configs')
+        .select('bot_token, channel_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        if (data.bot_token) await SecureStore.setItemAsync(BOT_TOKEN_KEY, data.bot_token);
+        if (data.channel_id) await SecureStore.setItemAsync(CHANNEL_ID_KEY, data.channel_id);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Explicit Telegram config sync failed:', err);
+      return false;
+    }
   },
 
   async testTelegramConnection(botToken: string, channelId: string): Promise<boolean> {
