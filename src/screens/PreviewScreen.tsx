@@ -25,6 +25,8 @@ import VideoPlayer from '../components/VideoPlayer';
 import { MediaOverlayItem } from '../types/camera';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { showToast } from '../components/ToastBanner';
+
 
 type Props = NativeStackScreenProps<AppStackParamList, 'Preview'>;
 
@@ -340,17 +342,14 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         overlay_metadata: getPackagedMetadata(),
       });
 
-      Alert.alert('Upload Queued', 'Secure upload initiated.', [
-        { text: 'View Queue', onPress: () => setQueueVisible(true) },
-        {
-          text: 'Dismiss',
-          onPress: () => {
-            if (destination === 'memories') navigation.replace('Main', { screen: 'MemoriesTab' });
-            else if (destination === 'private_drive') navigation.replace('PrivateDrive');
-            else navigation.replace('Main', { screen: 'DriveTab' });
-          },
-        },
-      ]);
+      showToast('Saving in background...');
+      if (destination === 'memories') {
+        navigation.replace('Main', { screen: 'MemoriesTab' });
+      } else if (destination === 'private_drive') {
+        navigation.replace('PrivateDrive');
+      } else {
+        navigation.replace('Main', { screen: 'DriveTab' });
+      }
     } catch (error: any) {
       console.error('Queue add failed:', error);
       Alert.alert('Queue Error', 'Failed to schedule media upload.');
@@ -424,6 +423,47 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const renderLensOverlay = () => {
+    if (!defaultLens || defaultLens === 'none' || defaultLens === 'original') return null;
+
+    const now = new Date();
+    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateString = now.toLocaleDateString();
+
+    return (
+      <View style={styles.liveOverlayContainer} pointerEvents="none">
+        {/* Color Tints */}
+        {defaultLens === 'warm' && <View style={styles.warmOverlay} />}
+        {defaultLens === 'cool' && <View style={styles.coolOverlay} />}
+        {defaultLens === 'bw' && <View style={styles.bwOverlay} />}
+        {defaultLens === 'soft' && <View style={styles.softOverlay} />}
+        {defaultLens === 'night' && <View style={styles.nightOverlay} />}
+        
+        {/* Stamp / Text Overlays */}
+        {defaultLens === 'time' && (
+          <View style={styles.textOverlayWrapper}>
+            <Text style={styles.liveOverlayStampText}>{timeString}</Text>
+          </View>
+        )}
+        {defaultLens === 'date' && (
+          <View style={styles.textOverlayWrapper}>
+            <Text style={styles.liveOverlayStampText}>{dateString}</Text>
+          </View>
+        )}
+        {defaultLens === 'vault' && (
+          <View style={styles.stampOverlayWrapper}>
+            <Text style={styles.stampOverlayText}>TELEVAULT SECURE</Text>
+          </View>
+        )}
+        {defaultLens === 'private' && (
+          <View style={styles.stampOverlayWrapper}>
+            <Text style={[styles.stampOverlayText, { borderColor: '#FF453A', color: '#FF453A' }]}>PRIVATE LOCK</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   const renderOverlays = () => {
     return overlays.map((o) => {
       const isEmoji = o.emoji !== null;
@@ -483,6 +523,9 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
 
         {/* Filters Overlay */}
         <View style={[StyleSheet.absoluteFill, { backgroundColor: selectedFilter.color }]} pointerEvents="none" />
+
+        {/* Live Lens Overlay */}
+        {renderLensOverlay()}
 
         {/* Draggable Overlays */}
         {renderOverlays()}
@@ -1232,6 +1275,65 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     backgroundColor: '#151728',
     borderRadius: 10,
+  },
+  liveOverlayContainer: {
+    ...StyleSheet.absoluteFill,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 5,
+  },
+  warmOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(255, 160, 0, 0.12)',
+  },
+  coolOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 120, 255, 0.12)',
+  },
+  bwOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+  },
+  softOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  nightOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(10, 15, 45, 0.35)',
+  },
+  textOverlayWrapper: {
+    position: 'absolute',
+    bottom: 220,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  liveOverlayStampText: {
+    color: '#FFFC00',
+    fontSize: 28,
+    fontWeight: '800',
+  },
+  stampOverlayWrapper: {
+    position: 'absolute',
+    top: 150,
+    right: 20,
+    transform: [{ rotate: '-12deg' }],
+  },
+  stampOverlayText: {
+    color: '#FFFC00',
+    fontSize: 14,
+    fontWeight: '900',
+    borderWidth: 2,
+    borderColor: '#FFFC00',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    letterSpacing: 2,
   },
 });
 

@@ -37,29 +37,40 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const [isFavorite, setIsFavorite] = useState(file.is_favorite || false);
   const [openingDoc, setOpeningDoc] = useState(false);
 
-  useEffect(() => {
-    const fetchTelegramUrl = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const url = await previewCacheService.resolvePreviewForFile({
+  const fetchTelegramUrl = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      let url: string | null = null;
+      if (file.file_type === 'video') {
+        if (file.telegram_file_id) {
+          url = await previewCacheService.resolvePreviewForFile({
+            id: file.id,
+            telegram_file_id: file.telegram_file_id,
+          });
+        }
+      } else {
+        url = await previewCacheService.resolvePreviewForFile({
           id: file.id,
           local_uri: file.local_thumbnail_uri,
           telegram_file_id: file.telegram_file_id,
         });
-        if (url) {
-          setMediaUrl(url);
-        } else {
-          setError('Could not fetch file download link.');
-        }
-      } catch (err: any) {
-        console.error('File url fetch error:', err);
-        setError(err.message || 'Could not fetch file download link.');
-      } finally {
-        setLoading(false);
       }
-    };
 
+      if (url) {
+        setMediaUrl(url);
+      } else {
+        setError('Could not fetch file download link.');
+      }
+    } catch (err: any) {
+      console.error('File url fetch error:', err);
+      setError(err.message || 'Could not fetch file download link.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchTelegramUrl();
   }, [file.telegram_file_id]);
 
@@ -288,7 +299,23 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
       return (
         <View style={styles.previewPlaceholder}>
           <AlertTriangle size={48} color="#FF453A" />
-          <Text style={[styles.placeholderText, { color: '#FF453A', marginTop: 12 }]}>{error}</Text>
+          <Text style={[styles.placeholderText, { color: '#FF453A', marginTop: 12, textAlign: 'center' }]}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => fetchTelegramUrl()}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.retryBtnText}>Retry Loading</Text>
+          </TouchableOpacity>
+          {file.file_type === 'video' && (
+            <TouchableOpacity
+              style={styles.openExternalBtn}
+              onPress={handleOpenInBrowser}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.openExternalBtnText}>Open Externally</Text>
+            </TouchableOpacity>
+          )}
         </View>
       );
     }
@@ -333,8 +360,22 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
       return (
         <View style={styles.previewPlaceholder}>
           <Play size={56} color="#FFFC00" fill="#FFFC00" />
-          <Text style={styles.placeholderText}>Video Fallback Player</Text>
+          <Text style={styles.placeholderText}>Video Player Fallback</Text>
           <Text style={styles.docSubtitle}>{file.file_name} ({formatSize(file.file_size)})</Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => fetchTelegramUrl()}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.retryBtnText}>Load Video</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.openExternalBtn}
+            onPress={handleOpenInBrowser}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.openExternalBtnText}>Open Externally</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -712,6 +753,31 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   openManagerBtnInlineText: {
+    color: '#FFFC00',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  retryBtn: {
+    marginTop: 16,
+    backgroundColor: '#FFFC00',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+  },
+  retryBtnText: {
+    color: '#000000',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  openExternalBtn: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#FFFC00',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+  },
+  openExternalBtnText: {
     color: '#FFFC00',
     fontWeight: '700',
     fontSize: 13,

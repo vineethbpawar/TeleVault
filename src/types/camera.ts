@@ -2,8 +2,16 @@ export type CameraTimerOption = 'off' | '3s' | '5s' | '10s';
 
 export type CameraLensType =
   | 'none'
+  | 'original'
+  | 'warm'
+  | 'cool'
+  | 'bw'
+  | 'soft'
+  | 'night'
   | 'time'
   | 'date'
+  | 'vault'
+  | 'private'
   | 'time_date'
   | 'location'
   | 'emoji'

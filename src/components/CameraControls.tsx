@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
-import { StyleSheet, View, TouchableOpacity, Text, Animated } from 'react-native';
-import { Zap, ZapOff, RotateCw, Settings, Image as ImageIcon, Grid, Timer, MessageSquare, Inbox, Sparkles, Cloud, Lock } from 'lucide-react-native';
+import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
+import { Grid, Image as ImageIcon } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UploadDestination } from '../types/camera';
 
@@ -9,17 +9,9 @@ interface CameraControlsProps {
   onStartRecording: () => void;
   onStopRecording: () => void;
   isRecording: boolean;
-  timerOption: 'off' | '3s' | '5s' | '10s';
-  onTimerToggle: () => void;
-  onFlip: () => void;
-  onFlashToggle: () => void;
-  flashMode: 'on' | 'off';
   onGalleryPress: () => void;
   onMemoriesPress: () => void;
-  onSettingsPress: () => void;
-  onChatPress: () => void;
-  onStoriesPress: () => void;
-  onInboxPress: () => void;
+  zoom: number;
   onZoomChange?: (zoom: number) => void;
   destination: UploadDestination;
   onDestinationChange: (dest: UploadDestination) => void;
@@ -30,17 +22,9 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
   onStartRecording,
   onStopRecording,
   isRecording,
-  timerOption,
-  onTimerToggle,
-  onFlip,
-  onFlashToggle,
-  flashMode,
   onGalleryPress,
   onMemoriesPress,
-  onSettingsPress,
-  onChatPress,
-  onStoriesPress,
-  onInboxPress,
+  zoom,
   onZoomChange,
   destination,
   onDestinationChange,
@@ -56,127 +40,90 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
     if (isRecording && onZoomChange) {
       const currentY = e.nativeEvent.pageY;
       const dy = currentY - initialTouchY.current;
-      // Drag up = negative dy -> zoom in
-      const zoomValue = Math.max(0, Math.min(1, -dy / 300));
-      onZoomChange(zoomValue);
+      // Drag up = negative dy -> zoom in. Map delta to 0-1 range
+      const sensitivity = 250; // pixels for full zoom
+      const zoomDelta = -dy / sensitivity;
+      const newZoom = Math.max(0, Math.min(1, zoom + zoomDelta));
+      onZoomChange(newZoom);
+      // Reset start Y to current to allow continuous smooth drag
+      initialTouchY.current = currentY;
     }
   };
 
+  const bottomNavHeight = 64 + insets.bottom;
+  const zoomDisplay = (zoom * 3 + 1).toFixed(1) + 'x';
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top > 0 ? insets.top + 10 : 30, paddingBottom: insets.bottom > 0 ? insets.bottom + 10 : 20 }]}>
-      {/* Top Bar Controls */}
-      <View style={styles.topBar}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity style={styles.iconButton} onPress={onSettingsPress}>
-            <Settings size={22} color="#FFFFFF" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={[styles.iconButton, { marginLeft: 10 }]} onPress={onChatPress}>
-            <MessageSquare size={22} color="#FFFC00" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.iconButton, { marginLeft: 10 }]} onPress={onInboxPress}>
-            <Inbox size={22} color="#FFFC00" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.iconButton, { marginLeft: 10 }]} onPress={onStoriesPress}>
-            <Sparkles size={22} color="#FFFC00" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.topRightControls}>
-          <TouchableOpacity style={[styles.iconButton, { marginRight: 12 }]} onPress={onTimerToggle}>
-            <Timer size={24} color={timerOption !== 'off' ? '#FFFC00' : '#FFFFFF'} />
-            {timerOption !== 'off' && (
-              <Text style={styles.timerBadgeText}>{timerOption}</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.iconButton, { marginRight: 12 }]} onPress={onFlashToggle}>
-            {flashMode === 'on' ? (
-              <Zap size={24} color="#FFFC00" fill="#FFFC00" />
-            ) : (
-              <ZapOff size={24} color="#FFFFFF" />
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.iconButton} onPress={onFlip}>
-            <RotateCw size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
+    <View style={[styles.container, { bottom: bottomNavHeight }]}>
+      {/* Zoom Indicator */}
+      <View style={styles.zoomIndicatorContainer}>
+        <Text style={styles.zoomIndicatorText}>{zoomDisplay}</Text>
       </View>
 
-      {/* Bottom Area */}
-      <View style={styles.bottomArea}>
-        {/* Destination Toggle (Vault Mode) */}
-        {!isRecording && (
-          <View style={styles.destinationToggleContainer}>
-            <TouchableOpacity 
-              style={[styles.destBtn, destination === 'memories' && styles.destActive]}
-              onPress={() => onDestinationChange('memories')}
-            >
-              <Grid size={14} color={destination === 'memories' ? '#000' : '#FFF'} style={{ marginRight: 4 }} />
-              <Text style={[styles.destText, destination === 'memories' && styles.destTextActive]}>Memories</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.destBtn, destination === 'drive' && styles.destActive]}
-              onPress={() => onDestinationChange('drive')}
-            >
-              <Cloud size={14} color={destination === 'drive' ? '#000' : '#FFF'} style={{ marginRight: 4 }} />
-              <Text style={[styles.destText, destination === 'drive' && styles.destTextActive]}>Drive</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.destBtn, destination === 'private' && styles.destActive]}
-              onPress={() => onDestinationChange('private')}
-            >
-              <Lock size={14} color={destination === 'private' ? '#000' : '#FFF'} style={{ marginRight: 4 }} />
-              <Text style={[styles.destText, destination === 'private' && styles.destTextActive]}>Vault</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <View style={styles.bottomBar}>
-          <TouchableOpacity
-            style={styles.bottomIconButton}
-            onPress={onMemoriesPress}
-            activeOpacity={0.7}
-            disabled={isRecording}
+      {/* Destination Toggle / Vault Mode */}
+      {!isRecording && (
+        <View style={styles.destinationToggleContainer}>
+          <TouchableOpacity 
+            style={[styles.destBtn, destination === 'memories' && styles.destActive]}
+            onPress={() => onDestinationChange('memories')}
           >
-            <View style={[styles.bottomIconCircle, isRecording && { opacity: 0.3 }]}>
-              <Grid size={22} color="#FFFFFF" />
-            </View>
-            <Text style={[styles.bottomButtonText, isRecording && { opacity: 0.3 }]}>Memories</Text>
+            <Text style={[styles.destText, destination === 'memories' && styles.destTextActive]}>Memories</Text>
           </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.destBtn, destination === 'drive' && styles.destActive]}
+            onPress={() => onDestinationChange('drive')}
+          >
+            <Text style={[styles.destText, destination === 'drive' && styles.destTextActive]}>Drive</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.destBtn, destination === 'private' && styles.destActive]}
+            onPress={() => onDestinationChange('private')}
+          >
+            <Text style={[styles.destText, destination === 'private' && styles.destTextActive]}>Vault</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-          {/* Capture Button with Drag to Zoom */}
-          {/* @ts-ignore */}
+      {/* Capture Button Row */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity
+          style={styles.bottomIconButton}
+          onPress={onMemoriesPress}
+          activeOpacity={0.7}
+          disabled={isRecording}
+        >
+          <View style={[styles.bottomIconCircle, isRecording && { opacity: 0.3 }]}>
+            <Grid size={22} color="#FFFFFF" />
+          </View>
+        </TouchableOpacity>
+
+        {/* Capture Button with Drag to Zoom */}
+        <View
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+        >
           <TouchableOpacity
             style={[styles.captureOuterCircle, isRecording && styles.captureOuterCircleRecording]}
             onPress={onCapture}
             onLongPress={onStartRecording}
             onPressOut={onStopRecording}
-            // @ts-ignore
-            onTouchStart={handleTouchStart}
-            // @ts-ignore
-            onTouchMove={handleTouchMove}
-            delayLongPress={300}
+            delayLongPress={350}
             activeOpacity={0.9}
           >
             <View style={[styles.captureInnerCircle, isRecording && styles.captureInnerCircleRecording]} />
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.bottomIconButton}
-            onPress={onGalleryPress}
-            activeOpacity={0.7}
-            disabled={isRecording}
-          >
-            <View style={[styles.bottomIconCircle, isRecording && { opacity: 0.3 }]}>
-              <ImageIcon size={22} color="#FFFFFF" />
-            </View>
-            <Text style={[styles.bottomButtonText, isRecording && { opacity: 0.3 }]}>Gallery</Text>
-          </TouchableOpacity>
         </View>
+
+        <TouchableOpacity
+          style={styles.bottomIconButton}
+          onPress={onGalleryPress}
+          activeOpacity={0.7}
+          disabled={isRecording}
+        >
+          <View style={[styles.bottomIconCircle, isRecording && { opacity: 0.3 }]}>
+            <ImageIcon size={22} color="#FFFFFF" />
+          </View>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -184,48 +131,38 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFill,
-    justifyContent: 'space-between',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
     paddingHorizontal: 20,
     zIndex: 10,
   },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-  },
-  topRightControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  zoomIndicatorContainer: {
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
   },
-  bottomArea: {
-    alignItems: 'center',
-    width: '100%',
+  zoomIndicatorText: {
+    color: '#FFFC00',
+    fontSize: 12,
+    fontWeight: '700',
   },
   destinationToggleContainer: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     borderRadius: 24,
-    padding: 4,
-    marginBottom: 20,
+    padding: 3,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   destBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 16,
     borderRadius: 20,
   },
@@ -233,8 +170,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFC00',
   },
   destText: {
-    color: '#FFFFFF',
-    fontSize: 13,
+    color: '#E0E0E0',
+    fontSize: 12,
     fontWeight: '600',
   },
   destTextActive: {
@@ -249,64 +186,50 @@ const styles = StyleSheet.create({
   },
   bottomIconButton: {
     alignItems: 'center',
-    width: 80,
+    justifyContent: 'center',
+    width: 60,
+    height: 60,
   },
   bottomIconCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
   },
-  bottomButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 3,
-  },
   captureOuterCircle: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    borderWidth: 5,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 4,
     borderColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    shadowColor: '#000000',
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 8,
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
   },
   captureOuterCircleRecording: {
     borderColor: '#FF453A',
-    transform: [{ scale: 1.2 }], // Grow slightly when recording
+    transform: [{ scale: 1.15 }],
   },
   captureInnerCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#FFFFFF', // Clean white core
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FFFFFF',
   },
   captureInnerCircleRecording: {
     backgroundColor: '#FF453A',
-    width: 32,
-    height: 32,
-    borderRadius: 8, // Square-ish red stop button look
-  },
-  timerBadgeText: {
-    color: '#FFFC00',
-    fontSize: 9,
-    fontWeight: '800',
-    position: 'absolute',
-    bottom: 2,
+    width: 28,
+    height: 28,
+    borderRadius: 6,
   },
 });
 

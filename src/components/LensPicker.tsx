@@ -8,20 +8,16 @@ interface LensPickerProps {
 }
 
 const LENSES: { type: CameraLensType; label: string; icon: string }[] = [
-  { type: 'none', label: 'None', icon: '🚫' },
+  { type: 'original', label: 'Original', icon: '🚫' },
+  { type: 'warm', label: 'Warm', icon: '🔥' },
+  { type: 'cool', label: 'Cool', icon: '❄️' },
+  { type: 'bw', label: 'B/W', icon: '🏁' },
+  { type: 'soft', label: 'Soft', icon: '🌸' },
+  { type: 'night', label: 'Night', icon: '🌙' },
   { type: 'time', label: 'Time', icon: '🕒' },
   { type: 'date', label: 'Date', icon: '📅' },
-  { type: 'time_date', label: 'Time & Date', icon: '⏰' },
-  { type: 'location', label: 'Location', icon: '📍' },
-  { type: 'emoji', label: 'Emoji', icon: '😎' },
-  { type: 'crown', label: 'Crown', icon: '👑' },
-  { type: 'sunglasses', label: 'Sunglasses', icon: '🕶️' },
-  { type: 'heart_eyes', label: 'Heart Eyes', icon: '😍' },
-  { type: 'fire', label: 'Fire', icon: '🔥' },
-  { type: 'glow', label: 'Glow', icon: '✨' },
-  { type: 'vintage', label: 'Vintage', icon: '🎞️' },
-  { type: 'vignette', label: 'Vignette', icon: '📷' },
-  { type: 'beauty_light', label: 'Beauty', icon: '💡' },
+  { type: 'vault', label: 'Vault', icon: '🏛️' },
+  { type: 'private', label: 'Private', icon: '🔒' },
 ];
 
 export const LensPicker: React.FC<LensPickerProps> = ({ selectedLens, onSelectLens }) => {

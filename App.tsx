@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { uploadQueueService } from './src/services/uploadQueueService';
 import { backgroundUploadService } from './src/services/backgroundUploadTask';
+import { ToastBanner } from './src/components/ToastBanner';
 
 export default function App() {
   useEffect(() => {
@@ -33,7 +34,9 @@ export default function App() {
       <NavigationContainer>
         <AppNavigator />
         <StatusBar style="light" />
+        <ToastBanner />
       </NavigationContainer>
     </SafeAreaProvider>
   );
 }
+
