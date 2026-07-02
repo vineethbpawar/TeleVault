@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
 import { Zap, ZapOff, RotateCw, Settings, Image, Grid, Timer, MessageSquare, Inbox, Sparkles } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface CameraControlsProps {
   onCapture: () => void;
@@ -37,8 +38,10 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
   onStoriesPress,
   onInboxPress,
 }) => {
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top > 0 ? insets.top + 10 : 30, paddingBottom: insets.bottom > 0 ? insets.bottom + 10 : 20 }]}>
       {/* Top Bar Controls */}
       <View style={styles.topBar}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>

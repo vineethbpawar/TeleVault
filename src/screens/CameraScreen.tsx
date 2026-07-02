@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Alert, SafeAreaView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { CompositeScreenProps, useIsFocused } from '@react-navigation/native';
@@ -20,6 +21,7 @@ type Props = CompositeScreenProps<
 >;
 
 export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
+  const insets = useSafeAreaInsets();
   const { sendToUserId, sendToUsername, conversationId } = (route.params || {}) as any;
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [flash, setFlash] = useState<'off' | 'on'>('off');
@@ -321,7 +323,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
         >
           {/* Floating Sparkles Button to select Lens before capture */}
           <TouchableOpacity
-            style={styles.floatingLensButton}
+            style={[styles.floatingLensButton, { top: insets.top > 0 ? insets.top + 50 : 80 }]}
             onPress={() => setShowLensPicker((prev) => !prev)}
             activeOpacity={0.8}
           >
@@ -337,7 +339,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
 
           {/* Recording Indicator */}
           {isRecording && (
-            <View style={styles.recordingIndicator}>
+            <View style={[styles.recordingIndicator, { top: insets.top > 0 ? insets.top + 50 : 80 }]}>
               <View style={styles.recordingRedDot} />
               <Text style={styles.recordingTimerText}>{formatDuration(recordingDuration)}</Text>
             </View>
@@ -345,7 +347,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
 
           {/* Slide-up Lens Picker */}
           {showLensPicker && (
-            <View style={styles.lensPickerOverlay}>
+            <View style={[styles.lensPickerOverlay, { bottom: 140 + insets.bottom }]}>
               <LensPicker selectedLens={selectedLens} onSelectLens={setSelectedLens} />
             </View>
           )}

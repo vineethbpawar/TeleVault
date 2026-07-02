@@ -452,7 +452,7 @@ export const telegramService = {
       throw new Error('Telegram bot token is not configured.');
     }
 
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${encodeURIComponent(fileId)}`);
     const data = await res.json();
     if (res.ok && data.ok) {
       return data.result;
@@ -483,6 +483,53 @@ export const telegramService = {
 
     return downloadResult.uri;
   },
+
+  configReady: null as boolean | null,
+  listeners: [] as (() => void)[],
+
+  subscribeConfigReady(listener: () => void) {
+    this.listeners.push(listener);
+    if (this.configReady !== null) {
+      listener();
+    }
+    return () => {
+      this.listeners = this.listeners.filter(l => l !== listener);
+    };
+  },
+
+  notifyListeners() {
+    this.listeners.forEach(l => {
+      try {
+        l();
+      } catch (err) {
+        console.error('Error in config listener:', err);
+      }
+    });
+  },
+
+  async initConfig(): Promise<void> {
+    try {
+      const config = await this.getTelegramConfig();
+      if (config.botToken && config.channelId) {
+        this.configReady = true;
+      } else {
+        this.configReady = false;
+      }
+    } catch (err) {
+      console.error('Failed to init config:', err);
+      this.configReady = false;
+    }
+    this.notifyListeners();
+  },
 };
+
+supabase.auth.onAuthStateChange((event, session) => {
+  if (session) {
+    telegramService.initConfig();
+  } else {
+    telegramService.configReady = false;
+    telegramService.notifyListeners();
+  }
+});
 
 export default telegramService;

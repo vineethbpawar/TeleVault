@@ -12,6 +12,7 @@ import {
   Modal,
   ScrollView,
 } from 'react-native';
+import Screen from '../components/Screen';
 import { CompositeScreenProps, useIsFocused } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -499,7 +500,7 @@ export const ChatHubScreen: React.FC<Props> = ({ navigation }) => {
   const myInitials = (myProfile?.full_name || myProfile?.username || 'U').substring(0, 1).toUpperCase();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen edges={['top']}>
       {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -640,7 +641,7 @@ export const ChatHubScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+    </Screen>
   );
 };
 

@@ -12,6 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import Screen from '../components/Screen';
 import { AppStackParamList } from '../types/navigation';
 import { ArrowLeft, User, Database, Settings, LogOut, Shield, Info, Edit3, Grid, Users } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
@@ -188,19 +189,19 @@ export const MyProfileScreen: React.FC<Props> = ({ navigation }) => {
 
   if (loading && !profile) {
     return (
-      <SafeAreaView style={styles.container}>
+      <Screen>
         <AppHeader title="My Profile" showBackButton={true} />
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#FFFC00" />
         </View>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   const nameLetter = (profile?.full_name || profile?.username || 'U').substring(0, 1).toUpperCase();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen>
       <AppHeader title="My Profile" showBackButton={true} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -288,7 +289,7 @@ export const MyProfileScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 };
 

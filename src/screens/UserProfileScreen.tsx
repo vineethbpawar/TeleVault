@@ -11,6 +11,7 @@ import {
   Image,
   Platform,
 } from 'react-native';
+import Screen from '../components/Screen';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
 import { ArrowLeft, UserPlus, UserCheck, MessageSquare, Camera, ShieldAlert, Ban, Info, Shield, Grid, Calendar } from 'lucide-react-native';
@@ -252,31 +253,31 @@ export const UserProfileScreen: React.FC<Props> = ({ navigation, route }) => {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <Screen>
         <AppHeader title="Profile" showBackButton={true} />
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#FFFC00" />
         </View>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   if (isBlocked) {
     return (
-      <SafeAreaView style={styles.container}>
+      <Screen>
         <AppHeader title="Profile" showBackButton={true} />
         <View style={styles.center}>
           <Ban size={64} color="#8E8E93" style={{ marginBottom: 16 }} />
           <Text style={styles.blockedText}>You have blocked this user or are blocked.</Text>
         </View>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   const nameLetter = (profile?.full_name || profile?.username || 'U').substring(0, 1).toUpperCase();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen>
       <AppHeader 
         title={profile?.full_name || `@${profile?.username}`} 
         showBackButton={true} 
@@ -397,7 +398,7 @@ export const UserProfileScreen: React.FC<Props> = ({ navigation, route }) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 };
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Screen from '../components/Screen';
 import {
   StyleSheet,
   View,
@@ -459,7 +460,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen edges={['top']}>
       <PinLockModal
         visible={pinModalVisible}
         onClose={() => setPinModalVisible(false)}
@@ -1187,7 +1188,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
       {/* Upload Queue Overlay */}
       <UploadProgress visible={queueModalVisible} onClose={() => setQueueModalVisible(false)} />
-    </SafeAreaView>
+    </Screen>
   );
 };
 

@@ -11,7 +11,8 @@ import {
   Linking,
   ActivityIndicator,
 } from 'react-native';
-import { ArrowLeft, Trash2, Download, ExternalLink, FileText, Video, Eye, Star, Edit, FolderInput, Share2 } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Download, ExternalLink, FileText, Video, Eye, Star, Edit, FolderInput, Share2, Play, FileImage, AlertTriangle } from 'lucide-react-native';
+import Screen from '../components/Screen';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
 import { telegramService } from '../services/telegramService';
@@ -266,7 +267,7 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const formatDate = (dateStr: string): string => {
     try {
-      const d = new Date(dateStr);
+          const d = new Date(dateStr);
       return d.toLocaleString();
     } catch (_) {
       return '';
@@ -286,7 +287,7 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
     if (error) {
       return (
         <View style={styles.previewPlaceholder}>
-          <FileText size={48} color="#FF453A" />
+          <AlertTriangle size={48} color="#FF453A" />
           <Text style={[styles.placeholderText, { color: '#FF453A', marginTop: 12 }]}>{error}</Text>
         </View>
       );
@@ -305,25 +306,35 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
       );
     }
 
-    if (file.file_type === 'image' && mediaUrl) {
+    if (file.file_type === 'image') {
+      if (mediaUrl) {
+        return (
+          <Image
+            source={{ uri: mediaUrl }}
+            style={styles.fullImage}
+            resizeMode="contain"
+          />
+        );
+      }
       return (
-        <Image
-          source={{ uri: mediaUrl }}
-          style={styles.fullImage}
-          resizeMode="contain"
-        />
+        <View style={styles.previewPlaceholder}>
+          <FileImage size={56} color="#8E8E93" />
+          <Text style={styles.placeholderText}>{file.file_name}</Text>
+        </View>
       );
     }
 
-    if (file.file_type === 'video' && mediaUrl) {
-      return (
-        <VideoPlayer source={mediaUrl} style={styles.fullImage} />
-      );
-    } else if (file.file_type === 'video') {
+    if (file.file_type === 'video') {
+      if (mediaUrl) {
+        return (
+          <VideoPlayer source={mediaUrl} style={styles.fullImage} />
+        );
+      }
       return (
         <View style={styles.previewPlaceholder}>
-          <ActivityIndicator size="large" color="#FFFC00" />
-          <Text style={styles.placeholderText}>Loading video stream from Telegram...</Text>
+          <Play size={56} color="#FFFC00" fill="#FFFC00" />
+          <Text style={styles.placeholderText}>Video Fallback Player</Text>
+          <Text style={styles.docSubtitle}>{file.file_name} ({formatSize(file.file_size)})</Text>
         </View>
       );
     }
@@ -338,7 +349,7 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen>
       <AppHeader
         title="File Details"
         showBackButton={true}
@@ -508,7 +519,7 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
           )}
         </AppCard>
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 };
 

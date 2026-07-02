@@ -3,6 +3,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MainTabParamList } from '../types/navigation';
 import { Camera, Grid, HardDrive, MessageSquare, Settings } from 'lucide-react-native';
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 // Import screens
 import CameraScreen from '../screens/CameraScreen';
 import MemoriesScreen from '../screens/MemoriesScreen';
@@ -13,6 +15,8 @@ import SettingsScreen from '../screens/SettingsScreen';
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 export const MainTabs: React.FC = () => {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
       initialRouteName="CameraTab"
@@ -24,8 +28,8 @@ export const MainTabs: React.FC = () => {
           backgroundColor: '#121212',
           borderTopColor: '#2C2C2E',
           borderTopWidth: 1,
-          height: 64,
-          paddingBottom: 8,
+          height: 64 + insets.bottom,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
           paddingTop: 8,
         },
         tabBarLabelStyle: {

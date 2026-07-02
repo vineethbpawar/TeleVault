@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { ArrowLeft, Database, Trash2, Play, AlertCircle, RefreshCw, X, Shield, Eye, CheckCircle2 } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import Screen from '../components/Screen';
 import { AppStackParamList } from '../types/navigation';
 import { largeFileService } from '../services/largeFileService';
 import { LargeFile, LargeFileChunk } from '../types/largeFile';
@@ -282,7 +283,7 @@ export const ChunkManagerScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
@@ -427,7 +428,7 @@ export const ChunkManagerScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </Screen>
   );
 };
 

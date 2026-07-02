@@ -52,85 +52,22 @@ import AppButton from '../components/AppButton';
 import AppInput from '../components/AppInput';
 import AppCard from '../components/AppCard';
 
+import Screen from '../components/Screen';
+import FilePreviewCard from '../components/FilePreviewCard';
+
 const RecentFileCard: React.FC<{ item: TeleVaultFile; onPress: () => void; formatSize: (size: number) => string }> = ({ item, onPress, formatSize }) => {
-  const [resolvedUri, setResolvedUri] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    if (item.file_type === 'image' || item.file_type === 'video') {
-      setLoading(true);
-      setError(false);
-      previewCacheService.resolvePreviewForFile({
-        id: item.id,
-        local_uri: item.local_thumbnail_uri,
-        telegram_file_id: item.telegram_file_id,
-      }).then(uri => {
-        if (active) {
-          if (uri) {
-            setResolvedUri(uri);
-          } else {
-            setError(true);
-          }
-          setLoading(false);
-        }
-      }).catch(err => {
-        console.error('Failed to resolve recent preview:', err);
-        if (active) {
-          setError(true);
-          setLoading(false);
-        }
-      });
-    }
-    return () => {
-      active = false;
-    };
-  }, [item.id, item.local_thumbnail_uri, item.telegram_file_id, item.file_type]);
-
   return (
-    <TouchableOpacity
-      style={styles.recentCard}
-      onPress={onPress}
-    >
-      {loading ? (
-        <View style={[styles.recentPlaceholder, styles.skeletonBg]}>
-          <ActivityIndicator size="small" color="#FFFC00" />
-        </View>
-      ) : error || !resolvedUri ? (
-        <View style={styles.recentPlaceholder}>
-          {item.file_type === 'image' ? (
-            <ImageIcon size={22} color="#8E8E93" />
-          ) : item.file_type === 'video' ? (
-            <Video size={22} color="#8E8E93" />
-          ) : (
-            <FileText size={22} color="#FFFFFF" />
-          )}
-        </View>
-      ) : (
-        <Image 
-          source={{ uri: resolvedUri }} 
-          style={styles.recentImg as any}
-          onError={() => {
-            previewCacheService.resolvePreviewForFile({
-              id: item.id,
-              local_uri: item.local_thumbnail_uri,
-              telegram_file_id: item.telegram_file_id,
-            }, true).then(refreshed => {
-              if (refreshed) {
-                setResolvedUri(refreshed);
-              } else {
-                setError(true);
-              }
-            }).catch(() => setError(true));
-          }}
-        />
-      )}
+    <View style={{ marginRight: 10, position: 'relative' }}>
+      <FilePreviewCard
+        file={item}
+        variant="recent"
+        onPress={onPress}
+      />
       <View style={styles.recentOverlay}>
         <Text style={styles.recentFileName} numberOfLines={1}>{item.file_name}</Text>
         <Text style={styles.recentFileSize}>{formatSize(item.file_size || 0)}</Text>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 };
 
@@ -160,6 +97,14 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
   const [pinModalMode, setPinModalMode] = useState<'verify' | 'create'>('verify');
   const [isUnlocked, setIsUnlocked] = useState(false);
   const isFocused = useIsFocused();
+  const [configReady, setConfigReady] = useState<boolean | null>(telegramService.configReady);
+
+  useEffect(() => {
+    const unsubscribe = telegramService.subscribeConfigReady(() => {
+      setConfigReady(telegramService.configReady);
+    });
+    return unsubscribe;
+  }, []);
 
   // Floating Action Menu state
   const [fabMenuVisible, setFabMenuVisible] = useState(false);
@@ -506,8 +451,21 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
 
   const { sortedFolders, sortedFiles } = getProcessedItems();
 
+  if (configReady === null) {
+    return (
+      <Screen>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#FFFC00" />
+          <Text style={{ color: '#8e92af', marginTop: 12, fontSize: 15, fontWeight: '600' }}>
+            Restoring Telegram connection...
+          </Text>
+        </View>
+      </Screen>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen>
       <PinLockModal
         visible={pinModalVisible}
         onClose={handlePinCancel}
@@ -778,7 +736,7 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+    </Screen>
   );
 };
 
