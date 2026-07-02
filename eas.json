@@ -12,6 +12,13 @@
       "distribution": "internal",
       "channel": "preview"
     },
+    "ios-preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "ios": {
+        "distribution": "internal"
+      }
+    },
     "production": {
       "channel": "production"
     }
