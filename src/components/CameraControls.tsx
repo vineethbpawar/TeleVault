@@ -31,30 +31,56 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const initialTouchY = useRef(0);
+  const startZoomRef = useRef(0);
+  const touchStartTimeRef = useRef(0);
+  const isRecordingStartedRef = useRef(false);
+  const longPressTimeoutRef = useRef<any>(null);
 
   const handleTouchStart = (e: any) => {
     initialTouchY.current = e.nativeEvent.pageY;
+    startZoomRef.current = zoom;
+    touchStartTimeRef.current = Date.now();
+    isRecordingStartedRef.current = false;
+
+    // Trigger video recording start on hold (350ms)
+    longPressTimeoutRef.current = setTimeout(() => {
+      isRecordingStartedRef.current = true;
+      onStartRecording();
+    }, 350);
   };
 
   const handleTouchMove = (e: any) => {
-    if (isRecording && onZoomChange) {
-      const currentY = e.nativeEvent.pageY;
-      const dy = currentY - initialTouchY.current;
-      // Drag up = negative dy -> zoom in. Map delta to 0-1 range
-      const sensitivity = 250; // pixels for full zoom
-      const zoomDelta = -dy / sensitivity;
-      const newZoom = Math.max(0, Math.min(1, zoom + zoomDelta));
+    const currentY = e.nativeEvent.pageY;
+    if ((isRecording || isRecordingStartedRef.current) && onZoomChange) {
+      const dy = initialTouchY.current - currentY; // positive when dragging up
+      const sensitivity = 250; // drag 250px up to reach 100% zoom
+      const newZoom = Math.max(0, Math.min(1, startZoomRef.current + (dy / sensitivity)));
       onZoomChange(newZoom);
-      // Reset start Y to current to allow continuous smooth drag
-      initialTouchY.current = currentY;
     }
   };
 
+  const handleTouchEnd = () => {
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+
+    const duration = Date.now() - touchStartTimeRef.current;
+
+    if (isRecording || isRecordingStartedRef.current) {
+      onStopRecording();
+    } else if (duration < 350) {
+      onCapture();
+    }
+
+    isRecordingStartedRef.current = false;
+  };
+
   const bottomNavHeight = 64 + insets.bottom;
-  const zoomDisplay = (zoom * 3 + 1).toFixed(1) + 'x';
+  const zoomDisplay = `${(zoom * 3 + 1).toFixed(1)}x`;
 
   return (
-    <View style={[styles.container, { bottom: bottomNavHeight }]}>
+    <View style={[styles.container, { bottom: bottomNavHeight }]} pointerEvents="box-none">
       {/* Zoom Indicator */}
       <View style={styles.zoomIndicatorContainer}>
         <Text style={styles.zoomIndicatorText}>{zoomDisplay}</Text>
@@ -85,7 +111,7 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
       )}
 
       {/* Capture Button Row */}
-      <View style={styles.bottomBar}>
+      <View style={styles.bottomBar} pointerEvents="box-none">
         <TouchableOpacity
           style={styles.bottomIconButton}
           onPress={onMemoriesPress}
@@ -97,21 +123,20 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
           </View>
         </TouchableOpacity>
 
-        {/* Capture Button with Drag to Zoom */}
+        {/* Capture Button wrapper for gestures */}
         <View
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
+          style={styles.captureContainer}
         >
-          <TouchableOpacity
+          <View 
             style={[styles.captureOuterCircle, isRecording && styles.captureOuterCircleRecording]}
-            onPress={onCapture}
-            onLongPress={onStartRecording}
-            onPressOut={onStopRecording}
-            delayLongPress={350}
-            activeOpacity={0.9}
+            pointerEvents="none"
           >
             <View style={[styles.captureInnerCircle, isRecording && styles.captureInnerCircleRecording]} />
-          </TouchableOpacity>
+          </View>
         </View>
 
         <TouchableOpacity
@@ -199,6 +224,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  captureContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 90,
+    height: 90,
   },
   captureOuterCircle: {
     width: 76,

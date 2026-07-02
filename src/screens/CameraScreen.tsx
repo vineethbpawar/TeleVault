@@ -16,6 +16,7 @@ import { Settings } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import UserAvatar from '../components/UserAvatar';
 import { showToast } from '../components/ToastBanner';
+import { locationService } from '../services/locationService';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'CameraTab'>,
@@ -61,6 +62,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const [isStartingRecording, setIsStartingRecording] = useState(false);
   const [showToolsPanel, setShowToolsPanel] = useState(false);
   const [profile, setProfile] = useState<{ username?: string; avatar_url?: string; full_name?: string } | null>(null);
+  const [locationText, setLocationText] = useState('📍 Fetching Location...');
 
   const cameraRef = useRef<any>(null);
   const isFocused = useIsFocused();
@@ -68,6 +70,10 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const recordingIntervalRef = useRef<any>(null);
   const recordingTimeoutRef = useRef<any>(null);
   const countdownIntervalRef = useRef<any>(null);
+
+  // Two-Finger Pinch Zoom Refs
+  const initialPinchDistRef = useRef<number | null>(null);
+  const initialPinchZoomRef = useRef<number>(0);
 
   // Fetch Supabase User Profile
   useEffect(() => {
@@ -91,9 +97,27 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     fetchProfile();
   }, []);
 
-  // Load defaults from settings on focus
+  // Fetch Location when Location Lens is Selected
+  useEffect(() => {
+    if (selectedLens === 'location') {
+      setLocationText('📍 Locating...');
+      locationService.getCityLocation().then((loc) => {
+        if (loc) {
+          setLocationText(`📍 ${loc.text}`);
+        } else {
+          setLocationText('📍 Unknown Location');
+        }
+      }).catch((err) => {
+        console.warn('Location lookup failed:', err);
+        setLocationText('📍 Location Denied');
+      });
+    }
+  }, [selectedLens]);
+
+  // Load defaults from settings on focus and Reset Zoom
   useEffect(() => {
     if (isFocused) {
+      setZoom(0); // Reset zoom on return / focus!
       settingsService.getSettings().then((settings) => {
         setTimerOption(settings.defaultTimer);
         setMaxDuration(settings.maxVideoDuration);
@@ -137,6 +161,41 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     );
   }
 
+  // Two-Finger Pinch Zoom Helpers
+  const calcDistance = (touches: any[]) => {
+    if (touches.length < 2) return 0;
+    const dx = touches[0].pageX - touches[1].pageX;
+    const dy = touches[0].pageY - touches[1].pageY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const handleCameraTouchStart = (e: any) => {
+    const touches = e.nativeEvent.touches;
+    if (touches && touches.length === 2) {
+      const dist = calcDistance(touches);
+      initialPinchDistRef.current = dist;
+      initialPinchZoomRef.current = zoom;
+    }
+  };
+
+  const handleCameraTouchMove = (e: any) => {
+    const touches = e.nativeEvent.touches;
+    if (touches && touches.length === 2 && initialPinchDistRef.current) {
+      const currentDist = calcDistance(touches);
+      const ratio = currentDist / initialPinchDistRef.current;
+      const zoomFactor = 0.5; // gentle mapping speed
+      const newZoom = Math.max(0, Math.min(1, initialPinchZoomRef.current + (ratio - 1) * zoomFactor));
+      setZoom(newZoom);
+    }
+  };
+
+  const handleCameraTouchEnd = (e: any) => {
+    const touches = e.nativeEvent.touches;
+    if (!touches || touches.length < 2) {
+      initialPinchDistRef.current = null;
+    }
+  };
+
   const startCountdown = (seconds: number, callback: () => void) => {
     setCountdown(seconds);
     countdownIntervalRef.current = setInterval(() => {
@@ -175,11 +234,13 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
             file_type: 'image',
             mime_type: 'image/jpeg',
             defaultLens: selectedLens,
+            locationText: selectedLens === 'location' ? locationText : undefined,
             defaultDestination,
             sendToUserId,
             sendToUsername,
             conversationId,
           } as any);
+          setZoom(0); // Reset zoom!
         } else {
           Alert.alert('Error', 'Failed to capture image');
         }
@@ -263,11 +324,13 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           file_type: 'video',
           mime_type: 'video/mp4',
           defaultLens: selectedLens,
+          locationText: selectedLens === 'location' ? locationText : undefined,
           defaultDestination,
           sendToUserId,
           sendToUsername,
           conversationId,
         } as any);
+        setZoom(0); // Reset zoom!
       }
     } catch (error: any) {
       if (__DEV__) {
@@ -317,6 +380,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     }
     setIsRecording(false);
     setRecordingDuration(0);
+    setZoom(0); // Reset zoom!
     settingsService.getSettings().then((settings) => {
       setCameraMode(settings.defaultCameraMode === 'Video' ? 'video' : 'picture');
     });
@@ -330,6 +394,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleFlip = () => {
     setFacing((prev) => (prev === 'back' ? 'front' : 'back'));
+    setZoom(0); // Reset zoom!
   };
 
   const handleFlashToggle = () => {
@@ -373,6 +438,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           sendToUsername,
           conversationId,
         } as any);
+        setZoom(0); // Reset zoom!
       }
     } catch (error: any) {
       console.error('Gallery pick error:', error);
@@ -411,6 +477,11 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
         {selectedLens === 'date' && (
           <View style={styles.textOverlayWrapper}>
             <Text style={styles.liveOverlayStampText}>{dateString}</Text>
+          </View>
+        )}
+        {selectedLens === 'location' && (
+          <View style={styles.textOverlayWrapper}>
+            <Text style={styles.liveOverlayStampText}>{locationText}</Text>
           </View>
         )}
         {selectedLens === 'vault' && (
@@ -565,7 +636,12 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   return (
     <View style={styles.container}>
       {isFocused ? (
-        <View style={StyleSheet.absoluteFill}>
+        <View 
+          style={StyleSheet.absoluteFill}
+          onTouchStart={handleCameraTouchStart}
+          onTouchMove={handleCameraTouchMove}
+          onTouchEnd={handleCameraTouchEnd}
+        >
           <CameraView
             style={StyleSheet.absoluteFill}
             facing={facing}
@@ -826,6 +902,7 @@ const styles = StyleSheet.create({
     color: '#FFFC00',
     fontSize: 28,
     fontWeight: '800',
+    textAlign: 'center',
   },
   stampOverlayWrapper: {
     position: 'absolute',
@@ -972,7 +1049,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   toolBtnActive: {
     backgroundColor: '#FFFC00',

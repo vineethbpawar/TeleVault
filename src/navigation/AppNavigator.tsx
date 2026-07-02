@@ -83,6 +83,7 @@ export const AppNavigator: React.FC = () => {
         setRestoringConfig(true);
         await checkUsername(currSession.user.id, currSession.user.email);
         try {
+          await telegramService.initConfig();
           const config = await telegramService.getTelegramConfig();
           if (!config.botToken || !config.channelId) {
             Alert.alert('Configuration Warning', 'Telegram storage not configured.');

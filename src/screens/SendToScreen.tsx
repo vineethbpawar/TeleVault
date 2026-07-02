@@ -24,6 +24,7 @@ import { UserProfile } from '../types/chat';
 import { Group } from '../types/groups';
 import UserAvatar from '../components/UserAvatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { showToast } from '../components/ToastBanner';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'SendTo'>;
 
@@ -217,9 +218,8 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
         }
       }
 
-      Alert.alert('Success', 'Successfully delivered!', [
-        { text: 'OK', onPress: () => navigation.navigate('Main', { screen: 'CameraTab' } as any) },
-      ]);
+      showToast('Successfully sent in background!');
+      navigation.navigate('Main', { screen: 'CameraTab' } as any);
     } catch (err: any) {
       console.error(err);
       Alert.alert('Error', err.message || 'An error occurred during sending.');

@@ -357,6 +357,7 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
         <FlatList
           data={groupedData}
           keyExtractor={(item) => item.title}
+          contentContainerStyle={{ paddingBottom: 100 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFC00" />}
           renderItem={({ item }) => (
             <View style={styles.sectionContainer}>
