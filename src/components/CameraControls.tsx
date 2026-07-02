@@ -73,14 +73,8 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
   };
 
   const bottomNavHeight = 64 + insets.bottom;
-  const zoomDisplay = `${(zoom * 3 + 1).toFixed(1)}x`;
-
   return (
     <View style={[styles.container, { bottom: bottomNavHeight }]} pointerEvents="box-none">
-      {/* Zoom Indicator */}
-      <View style={styles.zoomIndicatorContainer}>
-        <Text style={styles.zoomIndicatorText}>{zoomDisplay}</Text>
-      </View>
 
       {/* Capture Button Row */}
       <View style={styles.bottomBar} pointerEvents="box-none">
@@ -135,21 +129,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     zIndex: 10,
   },
-  zoomIndicatorContainer: {
-    position: 'absolute',
-    bottom: 95,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-  },
-  zoomIndicatorText: {
-    color: '#FFFC00',
-    fontSize: 12,
-    fontWeight: '700',
-  },
+
   destinationToggleContainer: {
     flexDirection: 'row',
     backgroundColor: 'rgba(0, 0, 0, 0.65)',

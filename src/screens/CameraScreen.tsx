@@ -57,6 +57,14 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const [selectedLens, setSelectedLens] = useState<CameraLensType>('original');
   const [zoom, setZoom] = useState(0);
   const [defaultDestination, setDefaultDestination] = useState<UploadDestination>('memories');
+  const getZoomDisplay = () => {
+    const val = zoom * 3 + 1;
+    if (val === 1) return '1x';
+    if (val === 2) return '2x';
+    if (val === 3) return '3x';
+    if (val === 4) return '4x';
+    return `${val.toFixed(1)}x`;
+  };
   
   const [cameraReady, setCameraReady] = useState(false);
   const [isStartingRecording, setIsStartingRecording] = useState(false);
@@ -635,6 +643,8 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     );
   };
 
+  const bottomNavHeight = 64 + insets.bottom;
+
   return (
     <View style={styles.container}>
       {isFocused ? (
@@ -711,6 +721,11 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
 
             {/* Live Filter Tray */}
             {renderFilterTray()}
+
+            {/* Zoom Indicator Pill */}
+            <View style={[styles.zoomPill, { bottom: bottomNavHeight + 105 }]}>
+              <Text style={styles.zoomPillText}>{getZoomDisplay()}</Text>
+            </View>
 
             {/* Bottom Controls */}
             <CameraControls
@@ -1131,6 +1146,20 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     letterSpacing: 0.5,
+  },
+  zoomPill: {
+    position: 'absolute',
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    zIndex: 10,
+  },
+  zoomPillText: {
+    color: '#FFFC00',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
 

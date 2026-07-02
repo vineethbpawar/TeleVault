@@ -127,14 +127,14 @@ export const UsernameSetupScreen: React.FC<Props> = ({ navigation }) => {
 
             <AppInput
               label="Full Name (Optional)"
-              placeholder="e.g. Vineeth Pawar"
+              placeholder="e.g. Vineeth"
               value={fullName}
               onChangeText={setFullName}
             />
 
             <AppInput
               label="Username"
-              placeholder="e.g. vineeth_p"
+              placeholder="e.g. vineeth"
               autoCapitalize="none"
               value={username}
               onChangeText={(text) => setUsername(text.toLowerCase())}

@@ -1078,79 +1078,14 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
         {/* About Developer Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionHeader}>About Developer</Text>
           <View style={[styles.card, { padding: 20, alignItems: 'center' }]}>
             <TeleVaultLogo size={60} />
-            <Text style={[styles.devName, { marginTop: 12 }]}>Vineeth B. Pawar</Text>
+            <Text style={[styles.devName, { marginTop: 12 }]}>Vineeth</Text>
             <Text style={styles.devTitle}>Creator of TeleVault</Text>
-            
-            <Text style={styles.devBio}>
-              Developer of TeleVault, focused on secure storage, privacy, and simple user experience.
-            </Text>
 
             <View style={styles.devDivider} />
 
             <View style={styles.linksContainer}>
-              <TouchableOpacity 
-                style={styles.linkRow} 
-                onPress={async () => {
-                  const emailUrl = 'mailto:vineethbpawar@gmail.com';
-                  try {
-                    const supported = await Linking.canOpenURL(emailUrl);
-                    if (supported) {
-                      await Linking.openURL(emailUrl);
-                    } else {
-                      Alert.alert('Contact Developer', 'Email: vineethbpawar@gmail.com');
-                    }
-                  } catch (error) {
-                    Alert.alert('Contact Developer', 'Email: vineethbpawar@gmail.com');
-                  }
-                }}
-              >
-                <Mail size={16} color="#FFFC00" style={styles.linkIcon} />
-                <Text style={styles.linkText}>vineethbpawar@gmail.com</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.linkRow} 
-                onPress={async () => {
-                  const url = 'https://github.com/vineethbpawar';
-                  try {
-                    const supported = await Linking.canOpenURL(url);
-                    if (supported) {
-                      await Linking.openURL(url);
-                    } else {
-                      Alert.alert('Error', `Cannot open link: ${url}`);
-                    }
-                  } catch (error) {
-                    Alert.alert('Error', `An error occurred: ${error}`);
-                  }
-                }}
-              >
-                <Globe size={16} color="#FFFC00" style={styles.linkIcon} />
-                <Text style={styles.linkText}>github.com/vineethbpawar</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.linkRow} 
-                onPress={async () => {
-                  const url = 'https://instagram.com/vineethbpawar';
-                  try {
-                    const supported = await Linking.canOpenURL(url);
-                    if (supported) {
-                      await Linking.openURL(url);
-                    } else {
-                      Alert.alert('Error', `Cannot open link: ${url}`);
-                    }
-                  } catch (error) {
-                    Alert.alert('Error', `An error occurred: ${error}`);
-                  }
-                }}
-              >
-                <Camera size={16} color="#FFFC00" style={styles.linkIcon} />
-                <Text style={styles.linkText}>instagram.com/vineethbpawar</Text>
-              </TouchableOpacity>
-
               <TouchableOpacity 
                 style={styles.linkRow} 
                 onPress={async () => {
@@ -1176,7 +1111,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
             <Text style={styles.appInfoTitle}>TeleVault</Text>
             <Text style={styles.appInfoSubtitle}>Version: v2.0 Beta</Text>
-            <Text style={styles.copyright}>© 2026 Vineeth B. Pawar. All rights reserved.</Text>
+            <Text style={styles.copyright}>© 2026 Vineeth. All rights reserved.</Text>
           </View>
         </View>
 
