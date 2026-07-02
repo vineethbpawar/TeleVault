@@ -235,11 +235,29 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
     }));
   };
 
+  const handleItemPress = (item: TeleVaultFile) => {
+    const filteredList = getFilteredFiles();
+    const index = filteredList.findIndex(f => f.id === item.id);
+    navigation.navigate('MemoriesViewer', {
+      files: filteredList,
+      initialIndex: index >= 0 ? index : 0,
+    });
+  };
+
+  const handleOnThisDayPress = (item: TeleVaultFile) => {
+    const onThisDayList = getOnThisDayMemories();
+    const index = onThisDayList.findIndex(f => f.id === item.id);
+    navigation.navigate('MemoriesViewer', {
+      files: onThisDayList,
+      initialIndex: index >= 0 ? index : 0,
+    });
+  };
+
   const renderGridItem = ({ item }: { item: TeleVaultFile }) => {
     return (
       <MemoryGridItem
         item={item}
-        onPress={() => navigation.navigate('FileDetails', { file: item })}
+        onPress={() => handleItemPress(item)}
       />
     );
   };
@@ -330,7 +348,7 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
             renderItem={({ item }) => (
               <OnThisDayGridItem
                 item={item}
-                onPress={() => navigation.navigate('FileDetails', { file: item })}
+                onPress={() => handleOnThisDayPress(item)}
               />
             )}
           />

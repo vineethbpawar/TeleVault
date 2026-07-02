@@ -13,8 +13,6 @@ interface CameraControlsProps {
   onMemoriesPress: () => void;
   zoom: number;
   onZoomChange?: (zoom: number) => void;
-  destination: UploadDestination;
-  onDestinationChange: (dest: UploadDestination) => void;
 }
 
 export const CameraControls: React.FC<CameraControlsProps> = ({
@@ -26,8 +24,6 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
   onMemoriesPress,
   zoom,
   onZoomChange,
-  destination,
-  onDestinationChange,
 }) => {
   const insets = useSafeAreaInsets();
   const initialTouchY = useRef(0);
@@ -85,30 +81,6 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
       <View style={styles.zoomIndicatorContainer}>
         <Text style={styles.zoomIndicatorText}>{zoomDisplay}</Text>
       </View>
-
-      {/* Destination Toggle / Vault Mode */}
-      {!isRecording && (
-        <View style={styles.destinationToggleContainer}>
-          <TouchableOpacity 
-            style={[styles.destBtn, destination === 'memories' && styles.destActive]}
-            onPress={() => onDestinationChange('memories')}
-          >
-            <Text style={[styles.destText, destination === 'memories' && styles.destTextActive]}>Memories</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.destBtn, destination === 'drive' && styles.destActive]}
-            onPress={() => onDestinationChange('drive')}
-          >
-            <Text style={[styles.destText, destination === 'drive' && styles.destTextActive]}>Drive</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.destBtn, destination === 'private' && styles.destActive]}
-            onPress={() => onDestinationChange('private')}
-          >
-            <Text style={[styles.destText, destination === 'private' && styles.destTextActive]}>Vault</Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
       {/* Capture Button Row */}
       <View style={styles.bottomBar} pointerEvents="box-none">

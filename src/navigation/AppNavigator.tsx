@@ -7,6 +7,7 @@ import MainTabs from './MainTabs';
 import TelegramConnectScreen from '../screens/TelegramConnectScreen';
 import PreviewScreen from '../screens/PreviewScreen';
 import FileDetailsScreen from '../screens/FileDetailsScreen';
+import MemoriesViewerScreen from '../screens/MemoriesViewerScreen';
 import SplashScreen from '../screens/SplashScreen';
 import UsernameSetupScreen from '../screens/UsernameSetupScreen';
 import UserSearchScreen from '../screens/UserSearchScreen';
@@ -165,6 +166,7 @@ export const AppNavigator: React.FC = () => {
             <Stack.Screen name="UserProfile" component={UserProfileScreen} />
             <Stack.Screen name="MyProfile" component={MyProfileScreen} />
             <Stack.Screen name="SendTo" component={SendToScreen} />
+            <Stack.Screen name="MemoriesViewer" component={MemoriesViewerScreen} />
           </>
         )
       ) : (

@@ -720,8 +720,6 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
               onMemoriesPress={() => navigation.navigate('MemoriesTab')}
               zoom={zoom}
               onZoomChange={setZoom}
-              destination={defaultDestination}
-              onDestinationChange={setDefaultDestination}
             />
           </CameraView>
         </View>

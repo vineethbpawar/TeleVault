@@ -155,12 +155,14 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
 
       return (
         <View style={[styles.center, styles.videoFallbackContainer]}>
-          <View style={styles.videoHeaderRow}>
-            <Text style={styles.videoLabel}>VIDEO</Text>
-            {durationStr && (
-              <Text style={styles.videoDuration}>{durationStr}</Text>
-            )}
-          </View>
+          {variant !== 'grid' && (
+            <View style={styles.videoHeaderRow}>
+              <Text style={styles.videoLabel}>VIDEO</Text>
+              {durationStr && (
+                <Text style={styles.videoDuration}>{durationStr}</Text>
+              )}
+            </View>
+          )}
           
           <View style={styles.fallbackPlayBtn}>
             <Play size={variant === 'row' ? 14 : 20} color="#000000" fill="#000000" />
@@ -175,12 +177,6 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
                 {formatSize(file.file_size)}
               </Text>
             </View>
-          )}
-          
-          {variant === 'grid' && (
-            <Text style={styles.videoGridTitle} numberOfLines={1}>
-              {file.file_name || 'Video'}
-            </Text>
           )}
         </View>
       );

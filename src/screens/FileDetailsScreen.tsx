@@ -36,6 +36,7 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const [error, setError] = useState('');
   const [isFavorite, setIsFavorite] = useState(file.is_favorite || false);
   const [openingDoc, setOpeningDoc] = useState(false);
+  const [showMetadata, setShowMetadata] = useState(false);
 
   const fetchTelegramUrl = async () => {
     setLoading(true);
@@ -486,79 +487,91 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
           )}
         </View>
 
-        {/* Metadata Details Card */}
-        <AppCard style={styles.detailsCard}>
-          <Text style={styles.cardTitle}>File Metadata</Text>
+        {/* Toggle Metadata Button */}
+        <TouchableOpacity
+          style={styles.metadataToggleBtn}
+          onPress={() => setShowMetadata(!showMetadata)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.metadataToggleText}>
+            {showMetadata ? 'Hide File Details' : 'Show File Details'}
+          </Text>
+        </TouchableOpacity>
 
-          <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>Name</Text>
-            <Text style={styles.metaValue}>{file.file_name}</Text>
-          </View>
+        {showMetadata && (
+          <AppCard style={styles.detailsCard}>
+            <Text style={styles.cardTitle}>File Metadata</Text>
 
-          {file.caption ? (
             <View style={styles.metaRow}>
-              <Text style={styles.metaLabel}>Caption</Text>
-              <Text style={[styles.metaValue, { fontStyle: 'italic' }]}>"{file.caption}"</Text>
+              <Text style={styles.metaLabel}>Name</Text>
+              <Text style={styles.metaValue}>{file.file_name}</Text>
             </View>
-          ) : null}
 
-          <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>Type</Text>
-            <Text style={styles.metaValue}>{file.file_type.toUpperCase()}</Text>
-          </View>
-
-          <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>Mime Type</Text>
-            <Text style={styles.metaValue}>{file.mime_type || 'Unknown'}</Text>
-          </View>
-
-          <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>File Size</Text>
-            <Text style={styles.metaValue}>{formatSize(file.file_size)}</Text>
-          </View>
-
-          <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>Privacy</Text>
-            <Text style={[styles.metaValue, file.is_private && { color: '#FF453A', fontWeight: 'bold' }]}>
-              {file.is_private ? 'PRIVATE DRIVE' : 'PUBLIC'}
-            </Text>
-          </View>
-
-          <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>Uploaded At</Text>
-            <Text style={styles.metaValue}>{formatDate(file.uploaded_at)}</Text>
-          </View>
-
-          <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>Telegram Msg ID</Text>
-            <Text style={styles.metaValue} numberOfLines={1}>{file.telegram_message_id || 'N/A'}</Text>
-          </View>
-
-          {file.is_chunked && (
-            <View style={styles.chunkedMetadata}>
-              <View style={styles.chunkDivider} />
-              
-              <Text style={styles.chunkHeader}>Chunked Upload Info</Text>
-              
+            {file.caption ? (
               <View style={styles.metaRow}>
-                <Text style={styles.metaLabel}>Large File ID</Text>
-                <Text style={styles.metaValue} numberOfLines={1}>{file.large_file_id || 'N/A'}</Text>
+                <Text style={styles.metaLabel}>Caption</Text>
+                <Text style={[styles.metaValue, { fontStyle: 'italic' }]}>"{file.caption}"</Text>
               </View>
+            ) : null}
 
-              <Text style={styles.chunkNote}>
-                Download/rebuild is beta. Upload and chunk tracking are available.
-              </Text>
-
-              <TouchableOpacity
-                style={styles.openManagerBtnInline}
-                onPress={() => navigation.navigate('ChunkManager')}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.openManagerBtnInlineText}>Open Chunk Manager</Text>
-              </TouchableOpacity>
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Type</Text>
+              <Text style={styles.metaValue}>{file.file_type.toUpperCase()}</Text>
             </View>
-          )}
-        </AppCard>
+
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Mime Type</Text>
+              <Text style={styles.metaValue}>{file.mime_type || 'Unknown'}</Text>
+            </View>
+
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>File Size</Text>
+              <Text style={styles.metaValue}>{formatSize(file.file_size)}</Text>
+            </View>
+
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Privacy</Text>
+              <Text style={[styles.metaValue, file.is_private && { color: '#FF453A', fontWeight: 'bold' }]}>
+                {file.is_private ? 'PRIVATE DRIVE' : 'PUBLIC'}
+              </Text>
+            </View>
+
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Uploaded At</Text>
+              <Text style={styles.metaValue}>{formatDate(file.uploaded_at)}</Text>
+            </View>
+
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Telegram Msg ID</Text>
+              <Text style={styles.metaValue} numberOfLines={1}>{file.telegram_message_id || 'N/A'}</Text>
+            </View>
+
+            {file.is_chunked && (
+              <View style={styles.chunkedMetadata}>
+                <View style={styles.chunkDivider} />
+                
+                <Text style={styles.chunkHeader}>Chunked Upload Info</Text>
+                
+                <View style={styles.metaRow}>
+                  <Text style={styles.metaLabel}>Large File ID</Text>
+                  <Text style={styles.metaValue} numberOfLines={1}>{file.large_file_id || 'N/A'}</Text>
+                </View>
+
+                <Text style={styles.chunkNote}>
+                  Download/rebuild is beta. Upload and chunk tracking are available.
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.openManagerBtnInline}
+                  onPress={() => navigation.navigate('ChunkManager')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.openManagerBtnInlineText}>Open Chunk Manager</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </AppCard>
+        )}
       </ScrollView>
     </Screen>
   );
@@ -781,6 +794,21 @@ const styles = StyleSheet.create({
     color: '#FFFC00',
     fontWeight: '700',
     fontSize: 13,
+  },
+  metadataToggleBtn: {
+    backgroundColor: '#0f1123',
+    borderWidth: 1,
+    borderColor: '#1f2444',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 16,
+  },
+  metadataToggleText: {
+    color: '#FFFC00',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });
 

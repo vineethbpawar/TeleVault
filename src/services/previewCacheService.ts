@@ -57,17 +57,14 @@ export const previewCacheService = {
     },
     forceRefresh = false
   ): Promise<string | null> {
-    // 1. If file has local_uri, use it
     if (file.local_uri) {
       return file.local_uri;
     }
 
-    // 2. Else if it has media_url, use it
     if (file.media_url) {
       return file.media_url;
     }
 
-    // 3. Else if it has telegram_file_id, try cache first (unless forceRefresh is true)
     if (file.telegram_file_id) {
       if (!forceRefresh) {
         const cached = await this.getCachedPreview(file.telegram_file_id);
@@ -76,7 +73,6 @@ export const previewCacheService = {
         }
       }
 
-      // If missing, expired, or forced, fetch from Telegram getFile API
       try {
         const url = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id);
         if (url) {
@@ -113,117 +109,197 @@ export const previewCacheService = {
     const fileType = file.file_type || 'unknown';
     const fallbackIcon = fileType === 'image' ? 'image' : fileType === 'video' ? 'video' : 'document';
 
-    // 1. If local_uri exists and exists locally, use it
-    const localUri = file.local_uri || file.local_thumbnail_uri;
-    if (localUri) {
-      try {
-        const info = await FileSystem.getInfoAsync(localUri);
-        if (info.exists) {
+    // 1. Image resolution
+    if (fileType === 'image') {
+      const localUri = file.local_uri || file.local_thumbnail_uri;
+      if (localUri) {
+        try {
+          const info = await FileSystem.getInfoAsync(localUri);
+          if (info.exists) {
+            return {
+              type: 'image',
+              previewUri: localUri,
+              fallbackIcon,
+            };
+          }
+        } catch (e) {
+          console.warn('Local image check failed:', e);
+        }
+      }
+
+      if (file.media_url) {
+        return {
+          type: 'image',
+          previewUri: file.media_url,
+          fallbackIcon,
+        };
+      }
+
+      if (file.telegram_file_id) {
+        try {
+          const config = await telegramService.getTelegramConfig();
+          if (!config.botToken) {
+            return {
+              type: 'image',
+              fallbackIcon,
+              error: 'Telegram config is missing.',
+            };
+          }
+          if (!forceRefresh) {
+            const cached = await this.getCachedPreview(file.telegram_file_id);
+            if (cached) {
+              return {
+                type: 'image',
+                previewUri: cached,
+                fallbackIcon,
+              };
+            }
+          }
+          const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id);
+          const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
+          await this.setCachedPreview(file.telegram_file_id, url);
           return {
-            type: fileType,
-            previewUri: localUri,
-            playableUri: fileType === 'video' ? localUri : undefined,
+            type: 'image',
+            previewUri: url,
             fallbackIcon,
           };
+        } catch (err: any) {
+          return {
+            type: 'image',
+            fallbackIcon,
+            error: err.message || 'Failed to fetch Telegram download link.',
+          };
         }
-      } catch (e) {
-        console.warn('Local uri existence check failed:', e);
       }
     }
 
-    // 2. If media_url exists, use it
-    if (file.media_url) {
+    // 2. Video resolution (play source vs preview source)
+    if (fileType === 'video') {
+      let playableUri: string | undefined;
+
+      // Locate video path
+      if (file.local_uri) {
+        try {
+          const info = await FileSystem.getInfoAsync(file.local_uri);
+          if (info.exists) {
+            playableUri = file.local_uri;
+          }
+        } catch (e) {}
+      }
+
+      if (!playableUri && file.media_url) {
+        playableUri = file.media_url;
+      }
+
+      if (!playableUri && file.telegram_file_id) {
+        try {
+          const config = await telegramService.getTelegramConfig();
+          if (config.botToken) {
+            const cached = await this.getCachedPreview(file.telegram_file_id);
+            if (cached) {
+              playableUri = cached;
+            } else {
+              const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id);
+              const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
+              await this.setCachedPreview(file.telegram_file_id, url);
+              playableUri = url;
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to resolve Telegram video URL:', e);
+        }
+      }
+
+      // Locate or generate thumbnail
+      let previewUri: string | undefined;
+
+      if (file.local_thumbnail_uri) {
+        try {
+          const info = await FileSystem.getInfoAsync(file.local_thumbnail_uri);
+          if (info.exists) {
+            previewUri = file.local_thumbnail_uri;
+          }
+        } catch (e) {}
+      }
+
+      if (!previewUri && file.id) {
+        try {
+          const cachedThumb = await AsyncStorage.getItem(`televault_vid_thumb_${file.id}`);
+          if (cachedThumb) {
+            const info = await FileSystem.getInfoAsync(cachedThumb);
+            if (info.exists) {
+              previewUri = cachedThumb;
+            }
+          }
+        } catch (e) {}
+      }
+
+      // Generate dynamic thumbnail from video source
+      if (!previewUri && playableUri) {
+        try {
+          const { getThumbnailAsync } = require('expo-video-thumbnails');
+          const thumb = await getThumbnailAsync(playableUri, { time: 500 });
+          if (thumb && thumb.uri) {
+            previewUri = thumb.uri;
+            if (file.id) {
+              await AsyncStorage.setItem(`televault_vid_thumb_${file.id}`, thumb.uri);
+            }
+          }
+        } catch (e) {
+          console.warn('Dynamic video thumbnail generation failed:', e);
+        }
+      }
+
       return {
-        type: fileType,
-        previewUri: file.media_url,
-        playableUri: fileType === 'video' ? file.media_url : undefined,
+        type: 'video',
+        previewUri,
+        playableUri,
         fallbackIcon,
       };
     }
 
-    // 3. If telegram_file_id exists
-    if (file.telegram_file_id) {
-      if (__DEV__) {
-        console.log(`file_name: ${file.file_name}`);
-        console.log(`telegram_file_id exists: yes`);
-      }
+    // 3. Document / other resolution
+    if (file.local_uri) {
       try {
-        const config = await telegramService.getTelegramConfig();
-        if (!config.botToken) {
-          if (__DEV__) {
-            console.log(`getFile success/failure: failure (no bot token)`);
-            console.log(`file_path: none`);
-            console.log(`final URL exists: no`);
-          }
+        const info = await FileSystem.getInfoAsync(file.local_uri);
+        if (info.exists) {
           return {
             type: fileType,
+            previewUri: file.local_uri,
             fallbackIcon,
-            error: 'Telegram config is missing (bot token not set).',
           };
         }
+      } catch (e) {}
+    }
 
-        if (!forceRefresh) {
+    if (file.telegram_file_id) {
+      try {
+        const config = await telegramService.getTelegramConfig();
+        if (config.botToken) {
           const cached = await this.getCachedPreview(file.telegram_file_id);
           if (cached) {
-            if (__DEV__) {
-              console.log(`getFile success/failure: cached`);
-              console.log(`file_path: cached`);
-              console.log(`final URL exists: yes`);
-            }
             return {
               type: fileType,
               previewUri: cached,
-              playableUri: fileType === 'video' ? cached : undefined,
               fallbackIcon,
             };
           }
-        }
-
-        // If missing, expired, or forced, fetch from Telegram getFile API
-        const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id);
-        const filePath = fileInfo.file_path;
-        const url = `https://api.telegram.org/file/bot${config.botToken}/${filePath}`;
-        
-        if (__DEV__) {
-          console.log(`getFile success/failure: success`);
-          console.log(`file_path: ${filePath}`);
-          console.log(`final URL exists: yes`);
-        }
-
-        if (url) {
+          const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id);
+          const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
           await this.setCachedPreview(file.telegram_file_id, url);
           return {
             type: fileType,
             previewUri: url,
-            playableUri: fileType === 'video' ? url : undefined,
             fallbackIcon,
           };
         }
-      } catch (err: any) {
-        if (__DEV__) {
-          console.log(`getFile success/failure: failure`);
-          console.log(`file_path: none`);
-          console.log(`final URL exists: no`);
-          console.error(`Failed to resolve Telegram URL for file ${file.id}:`, err);
-        }
-        return {
-          type: fileType,
-          fallbackIcon,
-          error: err.message || 'Failed to fetch Telegram download link.',
-        };
-      }
-    } else {
-      if (__DEV__) {
-        console.log(`file_name: ${file.file_name}`);
-        console.log(`telegram_file_id exists: no`);
-      }
+      } catch (e) {}
     }
 
-    // 4. Fallback when nothing works
     return {
       type: fileType,
       fallbackIcon,
-      error: !file.telegram_file_id ? 'Telegram file ID is missing.' : 'Failed to resolve preview url.',
+      error: 'Failed to resolve preview url.',
     };
   }
 };

@@ -61,6 +61,10 @@ export type AppStackParamList = {
     mediaType: 'image' | 'video';
     metadata?: any;
   };
+  MemoriesViewer: {
+    files: TeleVaultFile[];
+    initialIndex: number;
+  };
 };
 
 
