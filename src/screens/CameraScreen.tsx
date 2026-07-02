@@ -12,7 +12,7 @@ import LoadingScreen from '../components/LoadingScreen';
 import AppButton from '../components/AppButton';
 import { settingsService } from '../services/settingsService';
 import LensPicker from '../components/LensPicker';
-import { CameraLensType } from '../types/camera';
+import { CameraLensType, UploadDestination } from '../types/camera';
 import { Sparkles } from 'lucide-react-native';
 
 type Props = CompositeScreenProps<
@@ -39,6 +39,8 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   
   const [selectedLens, setSelectedLens] = useState<CameraLensType>('none');
   const [showLensPicker, setShowLensPicker] = useState(false);
+  const [zoom, setZoom] = useState(0);
+  const [defaultDestination, setDefaultDestination] = useState<UploadDestination>('memories');
 
   const cameraRef = useRef<any>(null);
   const isFocused = useIsFocused();
@@ -129,6 +131,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
             file_type: 'image',
             mime_type: 'image/jpeg',
             defaultLens: selectedLens,
+            defaultDestination,
             sendToUserId,
             sendToUsername,
             conversationId,
@@ -196,6 +199,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
               file_type: 'video',
               mime_type: 'video/mp4',
               defaultLens: selectedLens,
+              defaultDestination,
               sendToUserId,
               sendToUsername,
               conversationId,
@@ -294,6 +298,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           file_type: type,
           mime_type: asset.mimeType || (type === 'video' ? 'video/mp4' : 'image/jpeg'),
           defaultLens: 'none',
+          defaultDestination,
           sendToUserId,
           sendToUsername,
           conversationId,
@@ -311,6 +316,37 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const renderLiveOverlay = () => {
+    if (selectedLens === 'none') return null;
+
+    const now = new Date();
+    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateString = now.toLocaleDateString();
+
+    return (
+      <View style={styles.liveOverlayContainer} pointerEvents="none">
+        {selectedLens === 'time' && <Text style={styles.liveOverlayTextTime}>{timeString}</Text>}
+        {selectedLens === 'date' && <Text style={styles.liveOverlayTextDate}>{dateString}</Text>}
+        {selectedLens === 'time_date' && (
+          <View style={styles.liveOverlayTimeDate}>
+            <Text style={styles.liveOverlayTextTime}>{timeString}</Text>
+            <Text style={styles.liveOverlayTextDate}>{dateString}</Text>
+          </View>
+        )}
+        {selectedLens === 'location' && <Text style={styles.liveOverlayTextLocation}>📍 Location</Text>}
+        {selectedLens === 'emoji' && <Text style={styles.liveOverlayEmoji}>😎</Text>}
+        {selectedLens === 'crown' && <Text style={styles.liveOverlayEmoji}>👑</Text>}
+        {selectedLens === 'sunglasses' && <Text style={styles.liveOverlayEmoji}>🕶️</Text>}
+        {selectedLens === 'heart_eyes' && <Text style={styles.liveOverlayEmoji}>😍</Text>}
+        {selectedLens === 'fire' && <Text style={styles.liveOverlayEmoji}>🔥</Text>}
+        {selectedLens === 'glow' && <View style={styles.glowOverlay} />}
+        {selectedLens === 'vintage' && <View style={styles.vintageOverlay} />}
+        {selectedLens === 'vignette' && <View style={styles.vignetteOverlay} />}
+        {selectedLens === 'beauty_light' && <View style={styles.beautyLightOverlay} />}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {isFocused ? (
@@ -319,8 +355,10 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           facing={facing}
           flash={flash}
           mode={cameraMode}
+          zoom={zoom}
           ref={cameraRef}
         >
+          {renderLiveOverlay()}
           {/* Floating Sparkles Button to select Lens before capture */}
           <TouchableOpacity
             style={[styles.floatingLensButton, { top: insets.top > 0 ? insets.top + 50 : 80 }]}
@@ -368,6 +406,9 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
             onChatPress={() => navigation.navigate('ChatList')}
             onStoriesPress={() => navigation.navigate('Stories')}
             onInboxPress={() => navigation.navigate('SnapInbox')}
+            onZoomChange={setZoom}
+            destination={defaultDestination}
+            onDestinationChange={setDefaultDestination}
           />
         </CameraView>
       ) : (
@@ -480,6 +521,64 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  liveOverlayContainer: {
+    ...StyleSheet.absoluteFill,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 5,
+  },
+  liveOverlayTextTime: {
+    fontSize: 72,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  liveOverlayTextDate: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+    marginTop: 8,
+  },
+  liveOverlayTimeDate: {
+    alignItems: 'center',
+  },
+  liveOverlayTextLocation: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  liveOverlayEmoji: {
+    fontSize: 120,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 12,
+  },
+  glowOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(255, 252, 0, 0.15)',
+  },
+  vintageOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(138, 90, 25, 0.2)',
+  },
+  vignetteOverlay: {
+    ...StyleSheet.absoluteFill,
+    borderWidth: 40,
+    borderColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 200,
+  },
+  beautyLightOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
 });
 

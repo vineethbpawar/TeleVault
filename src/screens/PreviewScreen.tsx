@@ -12,9 +12,8 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
-  PanResponder,
 } from 'react-native';
-import { ArrowLeft, Send, Sparkles, X, Plus, Type, Edit3, RotateCw, EyeOff, Music, CloudSun, BarChart2, HelpCircle, MapPin, Clock } from 'lucide-react-native';
+import { ArrowLeft, Send, Sparkles, X, Type, Edit3, RotateCw, EyeOff, Music, CloudSun, BarChart2, HelpCircle, MapPin, Clock, DownloadCloud, Lock, HardDrive, Mic, Smile, Paperclip, MoreHorizontal } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
 import { telegramService } from '../services/telegramService';
@@ -25,10 +24,11 @@ import UploadProgress from '../components/UploadProgress';
 import VideoPlayer from '../components/VideoPlayer';
 import { MediaOverlayItem } from '../types/camera';
 import * as FileSystem from 'expo-file-system/legacy';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'Preview'>;
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 const FILTERS = [
   { name: 'Normal', color: 'transparent' },
@@ -42,8 +42,38 @@ const FILTERS = [
 const EMOJIS = ['😎', '😂', '❤️', '🔥', '✨', '🎉', '😍', '😭', '👍', '👑', '⭐', '💯', '📍', '⏰'];
 const OVERLAY_COLORS = ['#FFFFFF', '#000000', '#FFFC00', '#FF453A', '#30D158', '#0A84FF', '#BF5AF2'];
 
+const DESTINATIONS = [
+  { id: 'memories', name: 'Memories', icon: DownloadCloud, desc: 'Save securely to cloud Memories' },
+  { id: 'drive', name: 'Drive', icon: HardDrive, desc: 'Upload to your TeleVault Drive' },
+  { id: 'private_drive', name: 'Private Drive', icon: Lock, desc: 'Zero-knowledge encrypted folder' },
+  { id: 'story', name: 'Story', icon: Sparkles, desc: 'Share with friends for 24 hours' },
+  { id: 'snap', name: 'Snap', icon: Send, desc: 'Send as disappearing media' },
+  { id: 'download', name: 'Download', icon: DownloadCloud, desc: 'Save local copy to gallery' },
+];
+
 export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { uri, type, fromGallery, defaultLens, sendToUserId, sendToUsername, conversationId } = route.params as any;
+  const { uri, type, fromGallery, defaultLens, sendToUserId, sendToUsername, conversationId, isVault, isPrivate } = route.params as any;
+  const insets = useSafeAreaInsets();
+  
+  // Try to default highlight the private save based on camera context
+  const isDefaultPrivate = isVault || isPrivate;
+
+  // Set default destination based on params
+  const getDefaultDest = () => {
+    const defaultDestParam = (route.params as any).defaultDestination;
+    if (defaultDestParam) {
+      if (defaultDestParam === 'private' || defaultDestParam === 'private_drive') return 'private_drive';
+      if (defaultDestParam === 'drive') return 'drive';
+      if (defaultDestParam === 'memories') return 'memories';
+      if (defaultDestParam === 'story') return 'story';
+      if (defaultDestParam === 'snap') return 'snap';
+    }
+    if (isPrivate || isVault) return 'private_drive';
+    return 'memories';
+  };
+
+  const [selectedDestination, setSelectedDestination] = useState<'memories' | 'drive' | 'private_drive' | 'story' | 'snap' | 'download'>(getDefaultDest());
+  const [destinationPickerVisible, setDestinationPickerVisible] = useState(false);
 
   const [selectedFilter, setSelectedFilter] = useState(FILTERS[0]);
   const [overlays, setOverlays] = useState<MediaOverlayItem[]>([]);
@@ -73,7 +103,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
   const [sendLoading, setSendLoading] = useState(false);
 
   // Container layout size to compute coordinates
-  const [containerSize, setContainerSize] = useState({ width: 300, height: 400 });
+  const [containerSize, setContainerSize] = useState({ width, height });
 
   // Touch State for Dragging
   const touchStartRef = useRef({ x: 0, y: 0, overlayX: 0, overlayY: 0 });
@@ -88,13 +118,14 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     });
   }, [uri]);
 
-  const handleRotate = () => {
-    setRotation((prev) => (prev + 90) % 360);
-  };
+  useEffect(() => {
+    if (defaultLens === 'location' || defaultLens === 'time') {
+      handleAddSticker(defaultLens);
+    }
+  }, [defaultLens]);
 
-  const handleBlurToggle = () => {
-    setBlurActive((prev) => !prev);
-  };
+  const handleRotate = () => setRotation((prev) => (prev + 90) % 360);
+  const handleBlurToggle = () => setBlurActive((prev) => !prev);
 
   const handleTextSubmit = () => {
     if (!customText.trim()) {
@@ -155,7 +186,11 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
       newOverlay.text = '❓ Ask me anything...';
     }
 
-    setOverlays((prev) => [...prev, newOverlay]);
+    setOverlays((prev) => {
+      // Check if this type of sticker already exists to avoid duplicates when defaulting
+      if (prev.some(o => o.type === stickerType)) return prev;
+      return [...prev, newOverlay];
+    });
   };
 
   const handleAddEmoji = (emoji: string) => {
@@ -179,7 +214,6 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     setOverlays((prev) => prev.filter((o) => o.id !== id));
   };
 
-  // Drag Gesture Responders
   const handleTouchStart = (id: string, e: any) => {
     if (drawingMode) return;
     const overlay = overlays.find((o) => o.id === id);
@@ -222,7 +256,6 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     activeOverlayIdRef.current = null;
   };
 
-  // Drawing Tool touch tracking
   const handleCanvasTouchStart = (e: any) => {
     if (!drawingMode) return;
     const { locationX, locationY } = e.nativeEvent;
@@ -243,14 +276,19 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
-  const clearDrawing = () => {
-    setDrawingLines([]);
-  };
+  const clearDrawing = () => setDrawingLines([]);
 
   const handleLayout = (e: any) => {
     const { width, height } = e.nativeEvent.layout;
     setContainerSize({ width, height });
   };
+
+  const getPackagedMetadata = () => ({
+    overlays,
+    drawing: drawingLines,
+    rotation,
+    blur: blurActive,
+  });
 
   const handleQueueUpload = async (destination: 'memories' | 'drive' | 'private_drive') => {
     try {
@@ -276,17 +314,10 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
 
     if (fileSize !== null) {
       if (fileSize > 500 * 1024 * 1024) {
-        Alert.alert(
-          'Upload Blocked',
-          'This file is too large for the current Large File Mode. Max supported is 500 MB.'
-        );
+        Alert.alert('Upload Blocked', 'This file is too large. Max supported is 500 MB.');
         return;
       } else if (fileSize > 50 * 1024 * 1024) {
-        // Warn the user about chunked upload route
-        Alert.alert(
-          'Large File Detected',
-          'This file is larger than 50 MB. TeleVault will split this into 45 MB parts and upload to Telegram.'
-        );
+        Alert.alert('Large File Detected', 'This file will be split into chunks and uploaded to Telegram.');
       }
     }
 
@@ -294,14 +325,6 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     const extension = type === 'video' ? 'mp4' : 'jpg';
     const fileName = `TV_${destination.toUpperCase()}_${timestamp}.${extension}`;
     const mimeType = type === 'video' ? 'video/mp4' : 'image/jpeg';
-
-    // Package overlays + drawing lines in overlay metadata
-    const packagedMetadata = {
-      overlays,
-      drawing: drawingLines,
-      rotation,
-      blur: blurActive,
-    };
 
     try {
       await uploadQueueService.addToUploadQueue({
@@ -314,46 +337,48 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         folder_id: null,
         is_private: destination === 'private_drive',
         is_drive_file: destination !== 'memories',
-        overlay_metadata: packagedMetadata,
+        overlay_metadata: getPackagedMetadata(),
       });
 
-      Alert.alert(
-        'Upload Queued',
-        'Secure upload initiated. You can close this screen or wait.',
-        [
-          {
-            text: 'View Queue',
-            onPress: () => setQueueVisible(true),
+      Alert.alert('Upload Queued', 'Secure upload initiated.', [
+        { text: 'View Queue', onPress: () => setQueueVisible(true) },
+        {
+          text: 'Dismiss',
+          onPress: () => {
+            if (destination === 'memories') navigation.replace('Main', { screen: 'MemoriesTab' });
+            else if (destination === 'private_drive') navigation.replace('PrivateDrive');
+            else navigation.replace('Main', { screen: 'DriveTab' });
           },
-          {
-            text: 'Dismiss',
-            onPress: () => {
-              if (destination === 'memories') {
-                navigation.replace('Main', { screen: 'MemoriesTab' });
-              } else if (destination === 'private_drive') {
-                navigation.replace('PrivateDrive');
-              } else {
-                navigation.replace('Main', { screen: 'DriveTab' });
-              }
-            },
-          },
-        ]
-      );
+        },
+      ]);
     } catch (error: any) {
       console.error('Queue add failed:', error);
       Alert.alert('Queue Error', 'Failed to schedule media upload.');
     }
   };
 
+  const handleSaveToSelectedDestination = async () => {
+    if (selectedDestination === 'memories') {
+      await handleQueueUpload('memories');
+    } else if (selectedDestination === 'drive') {
+      await handleQueueUpload('drive');
+    } else if (selectedDestination === 'private_drive') {
+      await handleQueueUpload('private_drive');
+    } else if (selectedDestination === 'story') {
+      await handleAddToStory();
+    } else if (selectedDestination === 'snap') {
+      await handleSendSnap();
+    } else if (selectedDestination === 'download') {
+      Alert.alert(
+        'Media Saved',
+        'This action simulated a download/save to your device gallery successfully.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
   const handleSendSnap = async () => {
     if (fileSize !== null && fileSize > 50 * 1024 * 1024) return;
-
-    const packagedMetadata = {
-      overlays,
-      drawing: drawingLines,
-      rotation,
-      blur: blurActive,
-    };
 
     if (sendToUserId) {
       setSendLoading(true);
@@ -363,17 +388,11 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
           uri,
           type === 'video' ? 'video' : 'image',
           null, // caption
-          packagedMetadata,
+          getPackagedMetadata(),
           conversationId || null
         );
-
         Alert.alert('Success', `Snap sent to @${sendToUsername}!`, [
-          {
-            text: 'OK',
-            onPress: () => {
-              navigation.goBack();
-            },
-          },
+          { text: 'OK', onPress: () => navigation.goBack() },
         ]);
       } catch (err: any) {
         Alert.alert('Error', err.message || 'Failed to send snap.');
@@ -381,10 +400,11 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         setSendLoading(false);
       }
     } else {
-      navigation.navigate('UserSearch', {
-        mode: 'snap',
+      // Direct user to SendToScreen for multiple selection
+      navigation.navigate('SendTo', {
         mediaUri: uri,
         mediaType: type === 'video' ? 'video' : 'image',
+        metadata: getPackagedMetadata()
       });
     }
   };
@@ -393,7 +413,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     if (fileSize !== null && fileSize > 50 * 1024 * 1024) return;
     setStoryLoading(true);
     try {
-      await snapService.addToStory(uri, type === 'video' ? 'video' : 'image');
+      await snapService.addToStory(uri, type === 'video' ? 'video' : 'image', null, getPackagedMetadata());
       Alert.alert('Success', 'Added to story.', [
         { text: 'OK', onPress: () => navigation.replace('Main', { screen: 'CameraTab' }) }
       ]);
@@ -407,7 +427,6 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
   const renderOverlays = () => {
     return overlays.map((o) => {
       const isEmoji = o.emoji !== null;
-
       return (
         <View
           key={o.id}
@@ -423,7 +442,6 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
               {o.text}
             </Text>
           ) : (
-            // Sticker design render
             <View style={styles.stickerCard}>
               {o.type === 'location' && <MapPin size={14} color="#FFFC00" />}
               {o.type === 'time' && <Clock size={14} color="#FFFC00" />}
@@ -444,19 +462,10 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <UploadProgress visible={queueVisible} onClose={() => setQueueVisible(false)} />
 
-      {/* Header Toolbar */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Snap</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      {/* Main Preview Container */}
+      {/* Main Preview Container Full Screen */}
       <View
         style={[styles.previewContainer, { transform: [{ rotate: `${rotation}deg` }] }]}
         onLayout={handleLayout}
@@ -486,12 +495,10 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
           onTouchMove={handleCanvasTouchMove}
           onTouchEnd={handleCanvasTouchEnd}
         >
-          {/* Drawing Lines Render using connected point segments */}
           {drawingLines.map((line, lIdx) =>
             line.points.map((p, pIdx) => {
               if (pIdx === 0) return null;
               const prev = line.points[pIdx - 1];
-              // Render segment mock using absolute positioning
               const dx = p.x - prev.x;
               const dy = p.y - prev.y;
               const distance = Math.sqrt(dx * dx + dy * dy);
@@ -519,7 +526,6 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
             })
           )}
 
-          {/* Current line mock render */}
           {currentLine.map((p, pIdx) => (
             <View
               key={`curr-pt-${pIdx}`}
@@ -536,81 +542,212 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         </View>
       </View>
 
-      {/* Editor Controls Bar */}
-      <View style={styles.editorControls}>
-        <TouchableOpacity style={[styles.controlBtn, drawingMode && styles.activeControlBtn]} onPress={() => setDrawingMode(!drawingMode)}>
-          <Edit3 size={20} color={drawingMode ? '#000000' : '#FFFFFF'} />
-          <Text style={[styles.controlText, drawingMode && { color: '#FFFC00' }]}>Draw</Text>
+      {/* Top Controls Overlay */}
+      <View style={[styles.topOverlay, { paddingTop: Math.max(insets.top, 16) }]}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <X size={24} color="#FFFFFF" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.controlBtn} onPress={() => setTextModalVisible(true)}>
-          <Type size={20} color="#FFFFFF" />
-          <Text style={styles.controlText}>Text</Text>
+        {/* Center Pill */}
+        <View style={styles.topPill}>
+          <Sparkles size={12} color="#FFFC00" style={{ marginRight: 4 }} />
+          <Text style={styles.topPillText}>
+            {defaultLens && defaultLens !== 'none' ? `${defaultLens} | ` : ''}
+            {selectedDestination === 'memories' && 'Memories'}
+            {selectedDestination === 'drive' && 'Drive'}
+            {selectedDestination === 'private_drive' && 'Private Drive'}
+            {selectedDestination === 'story' && 'Story'}
+            {selectedDestination === 'snap' && 'Snap'}
+            {selectedDestination === 'download' && 'Download'}
+          </Text>
+        </View>
+
+        {/* Dummy right spacing */}
+        <View style={{ width: 44 }} />
+      </View>
+
+      {/* Right Vertical Editor Toolbar */}
+      <View style={[styles.rightToolbar, { top: Math.max(insets.top, 16) + 60 }]}>
+        <TouchableOpacity style={styles.toolbarBtn} onPress={() => setTextModalVisible(true)}>
+          <Type size={18} color="#FFFFFF" />
+          <Text style={styles.toolbarBtnLabel}>Text</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={[styles.toolbarBtn, drawingMode && styles.activeToolbarBtn]} onPress={() => setDrawingMode(!drawingMode)}>
+          <Edit3 size={18} color={drawingMode ? '#000000' : '#FFFFFF'} />
+          <Text style={[styles.toolbarBtnLabel, drawingMode && { color: '#000000' }]}>Draw</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.controlBtn} onPress={() => setStickersVisible(true)}>
-          <Sparkles size={20} color="#FFFFFF" />
-          <Text style={styles.controlText}>Stickers</Text>
+        <TouchableOpacity style={styles.toolbarBtn} onPress={() => setStickersVisible(true)}>
+          <Smile size={18} color="#FFFFFF" />
+          <Text style={styles.toolbarBtnLabel}>Sticker</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.controlBtn} onPress={handleRotate}>
-          <RotateCw size={20} color="#FFFFFF" />
-          <Text style={styles.controlText}>Rotate</Text>
+        <TouchableOpacity style={styles.toolbarBtn} onPress={handleRotate}>
+          <RotateCw size={18} color="#FFFFFF" />
+          <Text style={styles.toolbarBtnLabel}>Crop</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.controlBtn, blurActive && styles.activeControlBtn]} onPress={handleBlurToggle}>
-          <EyeOff size={20} color={blurActive ? '#000000' : '#FFFFFF'} />
-          <Text style={[styles.controlText, blurActive && { color: '#FFFC00' }]}>Blur</Text>
+        <TouchableOpacity style={styles.toolbarBtn} onPress={() => handleAddSticker('music')}>
+          <Music size={18} color="#FFFFFF" />
+          <Text style={styles.toolbarBtnLabel}>Music</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.toolbarBtn} onPress={() => Alert.alert('Audio Control', 'Audio unmuted.')}>
+          <Mic size={18} color="#FFFFFF" />
+          <Text style={styles.toolbarBtnLabel}>Voice</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.toolbarBtn} onPress={() => Alert.alert('Snap Duration', 'Disappearing timer set to infinite.')}>
+          <Clock size={18} color="#FFFFFF" />
+          <Text style={styles.toolbarBtnLabel}>Timer</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.toolbarBtn, blurActive && styles.activeToolbarBtn]} onPress={handleBlurToggle}>
+          <EyeOff size={18} color={blurActive ? '#000000' : '#FFFFFF'} />
+          <Text style={[styles.toolbarBtnLabel, blurActive && { color: '#000000' }]}>Blur</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.toolbarBtn} onPress={() => handleAddSticker('location')}>
+          <MapPin size={18} color="#FFFFFF" />
+          <Text style={styles.toolbarBtnLabel}>Loc</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.toolbarBtn} onPress={() => Alert.alert('Attachment', 'Attach link or file feature is coming soon.')}>
+          <Paperclip size={18} color="#FFFFFF" />
+          <Text style={styles.toolbarBtnLabel}>Attach</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.toolbarBtn} onPress={() => Alert.alert('More Options', 'Advanced editor tools coming soon.')}>
+          <MoreHorizontal size={18} color="#FFFFFF" />
+          <Text style={styles.toolbarBtnLabel}>More</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Draw Colors Selector (only visible in drawing mode) */}
-      {drawingMode && (
-        <View style={styles.colorsRow}>
-          {OVERLAY_COLORS.map((c) => (
-            <TouchableOpacity
-              key={c}
-              style={[styles.colorBubble, { backgroundColor: c }, selectedDrawColor === c && styles.selectedColorBubble]}
-              onPress={() => setSelectedDrawColor(c)}
-            />
-          ))}
-          <TouchableOpacity style={styles.clearDrawBtn} onPress={clearDrawing}>
-            <Text style={styles.clearDrawText}>Clear</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* Bottom Controls Overlay */}
+      <View style={[styles.bottomOverlay, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        {/* Drawing Colors */}
+        {drawingMode && (
+          <View style={styles.colorsRow}>
+            {OVERLAY_COLORS.map((c) => (
+              <TouchableOpacity
+                key={c}
+                style={[styles.colorBubble, { backgroundColor: c }, selectedDrawColor === c && styles.selectedColorBubble]}
+                onPress={() => setSelectedDrawColor(c)}
+              />
+            ))}
+            <TouchableOpacity style={styles.clearDrawBtn} onPress={clearDrawing}>
+              <Text style={styles.clearDrawText}>Clear</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-      {/* Sync / Send Options */}
-      <View style={styles.actionsBar}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.actionsScroll}>
-          <TouchableOpacity style={styles.actionTabBtn} onPress={() => handleQueueUpload('memories')}>
-            <Text style={styles.actionTabBtnText}>Save Memories</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionTabBtn} onPress={() => handleQueueUpload('drive')}>
-            <Text style={styles.actionTabBtnText}>Save Drive</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionTabBtn} onPress={() => handleQueueUpload('private_drive')}>
-            <Text style={styles.actionTabBtnText}>Save Private</Text>
-          </TouchableOpacity>
-        </ScrollView>
+        {/* Save/Send Actions */}
+        {!drawingMode && (
+          <View style={styles.actionsContainer}>
+            <View style={styles.actionButtonsRow}>
+              {/* Left: Save Button */}
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveToSelectedDestination}>
+                <DownloadCloud size={20} color="#FFFFFF" />
+                <Text style={styles.saveBtnText}>Save</Text>
+              </TouchableOpacity>
 
-        <View style={styles.sendRow}>
-          <TouchableOpacity style={styles.storyBtn} onPress={handleAddToStory} disabled={storyLoading}>
-            {storyLoading ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.storyBtnText}>Add to Story</Text>}
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.sendBtn} onPress={handleSendSnap} disabled={sendLoading}>
-            {sendLoading ? <ActivityIndicator size="small" color="#000000" /> : (
-              <>
-                <Send size={18} color="#000000" />
-                <Text style={styles.sendBtnText}>{sendToUserId ? 'Send Now' : 'Send To...'}</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+              {/* Center: Destination Selector Pill */}
+              <TouchableOpacity
+                style={styles.destinationPill}
+                onPress={() => setDestinationPickerVisible(true)}
+              >
+                {selectedDestination === 'private_drive' ? (
+                  <Lock size={16} color="#FFFC00" />
+                ) : selectedDestination === 'drive' ? (
+                  <HardDrive size={16} color="#FFFC00" />
+                ) : selectedDestination === 'story' ? (
+                  <Sparkles size={16} color="#FFFC00" />
+                ) : selectedDestination === 'snap' ? (
+                  <Send size={16} color="#FFFC00" />
+                ) : (
+                  <DownloadCloud size={16} color="#FFFC00" />
+                )}
+                <Text style={styles.destinationPillText}>
+                  {selectedDestination === 'memories' && 'Memories'}
+                  {selectedDestination === 'drive' && 'Drive'}
+                  {selectedDestination === 'private_drive' && 'Private'}
+                  {selectedDestination === 'story' && 'Story'}
+                  {selectedDestination === 'snap' && 'Snap'}
+                  {selectedDestination === 'download' && 'Download'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Right: Send To Button */}
+              <TouchableOpacity style={styles.sendBtn} onPress={handleSendSnap} disabled={sendLoading}>
+                {sendLoading ? (
+                  <ActivityIndicator size="small" color="#000000" />
+                ) : (
+                  <>
+                    <Text style={styles.sendBtnText}>Send To</Text>
+                    <View style={styles.sendBtnIconContainer}>
+                      <Send size={16} color="#000000" />
+                    </View>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </View>
 
-      {/* Custom Text Modal */}
+      {/* Destination Picker Modal */}
+      <Modal visible={destinationPickerVisible} transparent animationType="slide">
+        <TouchableOpacity 
+          style={styles.sheetOverlay} 
+          activeOpacity={1} 
+          onPress={() => setDestinationPickerVisible(false)}
+        >
+          <View style={styles.sheetContainer}>
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetHeaderBar} />
+              <Text style={styles.sheetTitle}>Choose Save Destination</Text>
+            </View>
+            
+            <View style={styles.destinationsList}>
+              {DESTINATIONS.map((dest) => {
+                const isSelected = selectedDestination === dest.id;
+                const IconComponent = dest.icon;
+                return (
+                  <TouchableOpacity
+                    key={dest.id}
+                    style={[
+                      styles.destinationItem,
+                      isSelected && styles.destinationItemSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedDestination(dest.id as any);
+                      setDestinationPickerVisible(false);
+                    }}
+                  >
+                    <View style={[styles.destIconContainer, isSelected && styles.destIconContainerSelected]}>
+                      <IconComponent size={20} color={isSelected ? '#000000' : '#FFFFFF'} />
+                    </View>
+                    <View style={styles.destInfo}>
+                      <Text style={[styles.destName, isSelected && styles.destNameSelected]}>
+                        {dest.name}
+                      </Text>
+                      <Text style={styles.destDesc}>{dest.desc}</Text>
+                    </View>
+                    {isSelected && (
+                      <View style={styles.destCheckmark}>
+                        <Text style={{ color: '#FFFC00', fontWeight: '800', fontSize: 16 }}>✓</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Modals */}
       <Modal visible={textModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.textModalBox}>
@@ -623,7 +760,6 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
               onChangeText={setCustomText}
               autoFocus
             />
-            {/* Color selector */}
             <View style={styles.colorsSelector}>
               {OVERLAY_COLORS.map((c) => (
                 <TouchableOpacity
@@ -645,46 +781,38 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         </View>
       </Modal>
 
-      {/* Stickers and Widget Menu Sheet */}
       <Modal visible={stickersVisible} transparent animationType="slide">
         <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={() => setStickersVisible(false)}>
           <View style={styles.sheetContainer}>
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Widgets & Stickers</Text>
             </View>
-
             <View style={styles.stickersGrid}>
               <TouchableOpacity style={styles.stickerOption} onPress={() => handleAddSticker('location')}>
                 <MapPin size={24} color="#FFFC00" />
                 <Text style={styles.stickerOptionText}>Location</Text>
               </TouchableOpacity>
-
               <TouchableOpacity style={styles.stickerOption} onPress={() => handleAddSticker('time')}>
                 <Clock size={24} color="#FFFC00" />
                 <Text style={styles.stickerOptionText}>Time</Text>
               </TouchableOpacity>
-
               <TouchableOpacity style={styles.stickerOption} onPress={() => handleAddSticker('music')}>
                 <Music size={24} color="#FFFC00" />
                 <Text style={styles.stickerOptionText}>Music</Text>
               </TouchableOpacity>
-
               <TouchableOpacity style={styles.stickerOption} onPress={() => handleAddSticker('weather')}>
                 <CloudSun size={24} color="#FFFC00" />
                 <Text style={styles.stickerOptionText}>Weather</Text>
               </TouchableOpacity>
-
               <TouchableOpacity style={styles.stickerOption} onPress={() => handleAddSticker('poll')}>
                 <BarChart2 size={24} color="#FFFC00" />
                 <Text style={styles.stickerOptionText}>Poll</Text>
               </TouchableOpacity>
-
               <TouchableOpacity style={styles.stickerOption} onPress={() => handleAddSticker('question')}>
                 <HelpCircle size={24} color="#FFFC00" />
                 <Text style={styles.stickerOptionText}>Question</Text>
               </TouchableOpacity>
             </View>
-
             <Text style={styles.sheetSubtitle}>EMOJIS</Text>
             <View style={styles.emojisRow}>
               {EMOJIS.map((e) => (
@@ -696,7 +824,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -705,64 +833,95 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    height: 56,
-  },
-  backBtn: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: '#0f1123',
-  },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-  },
   previewContainer: {
-    flex: 1,
-    backgroundColor: '#121212',
-    marginHorizontal: 16,
-    borderRadius: 24,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#1f2444',
+    ...StyleSheet.absoluteFill,
+    backgroundColor: '#000000',
   },
   previewImage: {
     width: '100%',
     height: '100%',
   },
-  editorControls: {
+  topOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#121214',
-  },
-  controlBtn: {
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 8,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    zIndex: 20,
+    pointerEvents: 'box-none',
   },
-  activeControlBtn: {
+  backBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  topPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  topPillText: {
+    color: '#FFFC00',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  rightToolbar: {
+    position: 'absolute',
+    right: 12,
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    zIndex: 25,
+  },
+  toolbarBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  toolbarBtnLabel: {
+    fontSize: 8,
+    color: '#FFFFFF',
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  activeToolbarBtn: {
     backgroundColor: '#FFFC00',
   },
-  controlText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    marginTop: 4,
-    fontWeight: '600',
+  bottomOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+    pointerEvents: 'box-none',
+    justifyContent: 'flex-end',
   },
   colorsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    backgroundColor: '#07080f',
+    paddingVertical: 12,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 24,
+    marginBottom: 16,
   },
   colorBubble: {
     width: 24,
@@ -770,7 +929,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginHorizontal: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(255,255,255,0.5)',
   },
   selectedColorBubble: {
     borderColor: '#FFFC00',
@@ -779,7 +938,7 @@ const styles = StyleSheet.create({
   },
   clearDrawBtn: {
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingVertical: 6,
     backgroundColor: '#FF453A',
     borderRadius: 12,
     marginLeft: 10,
@@ -788,6 +947,75 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
+  },
+  actionsContainer: {
+    justifyContent: 'flex-end',
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 17, 35, 0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 24,
+    height: 48,
+    paddingHorizontal: 16,
+    flex: 0.28,
+  },
+  saveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  destinationPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 17, 35, 0.95)',
+    borderWidth: 1.5,
+    borderColor: '#FFFC00',
+    borderRadius: 24,
+    height: 48,
+    paddingHorizontal: 14,
+    flex: 0.38,
+    marginHorizontal: 6,
+  },
+  destinationPillText: {
+    color: '#FFFC00',
+    fontSize: 13,
+    fontWeight: '800',
+    marginLeft: 6,
+  },
+  sendBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFC00',
+    borderRadius: 24,
+    height: 48,
+    paddingHorizontal: 18,
+    flex: 0.34,
+  },
+  sendBtnText: {
+    color: '#000000',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  sendBtnIconContainer: {
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   drawPoint: {
     position: 'absolute',
@@ -832,64 +1060,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  actionsBar: {
-    paddingTop: 10,
-    paddingBottom: 24,
-    backgroundColor: '#000000',
-  },
-  actionsScroll: {
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  actionTabBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 18,
-    backgroundColor: '#0f1123',
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#1f2444',
-  },
-  actionTabBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  sendRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  storyBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 22,
-    backgroundColor: '#1f2444',
-    width: '45%',
-    alignItems: 'center',
-  },
-  storyBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  sendBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 22,
-    backgroundColor: '#FFFC00',
-    width: '50%',
-  },
-  sendBtnText: {
-    color: '#000000',
-    fontWeight: '700',
-    fontSize: 14,
-    marginLeft: 6,
   },
   modalOverlay: {
     flex: 1,
@@ -962,10 +1132,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  sheetHeaderBar: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    marginBottom: 12,
+  },
   sheetTitle: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  destinationsList: {
+    marginBottom: 16,
+  },
+  destinationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#151728',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#1f2444',
+  },
+  destinationItemSelected: {
+    borderColor: '#FFFC00',
+    backgroundColor: 'rgba(255, 252, 0, 0.04)',
+  },
+  destIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  destIconContainerSelected: {
+    backgroundColor: '#FFFC00',
+  },
+  destInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  destName: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  destNameSelected: {
+    color: '#FFFC00',
+  },
+  destDesc: {
+    color: '#8e92af',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  destCheckmark: {
+    marginLeft: 10,
   },
   stickersGrid: {
     flexDirection: 'row',

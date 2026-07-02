@@ -3,6 +3,14 @@
     "name": "TeleVault",
     "slug": "TeleVault",
     "version": "1.0.0",
+    "updates": {
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "enabled": true
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",

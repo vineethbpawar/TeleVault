@@ -393,15 +393,15 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    minHeight: 56,
+    paddingVertical: 12,
+    minHeight: 60,
     justifyContent: 'center',
   },
   headerTitle: {
     color: '#FFFFFF',
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: -0.5,
   },
   headerMainRow: {
     flexDirection: 'row',

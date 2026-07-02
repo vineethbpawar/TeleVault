@@ -714,16 +714,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    height: 56,
+    height: 60,
   },
   backButton: {
     padding: 8,
   },
   headerTitle: {
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: -0.5,
   },
   queueBtn: {
     padding: 8,

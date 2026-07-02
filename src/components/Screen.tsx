@@ -13,16 +13,20 @@ export const Screen: React.FC<ScreenProps> = ({
   children,
   backgroundColor = '#000000',
   scroll = false,
-  edges = ['top', 'bottom'],
+  edges = ['top', 'bottom', 'left', 'right'],
 }) => {
   const insets = useSafeAreaInsets();
 
   const includeTop = edges.includes('top');
   const includeBottom = edges.includes('bottom');
+  const includeLeft = edges.includes('left');
+  const includeRight = edges.includes('right');
 
   const paddingStyle = {
     paddingTop: includeTop ? insets.top : 0,
     paddingBottom: includeBottom ? insets.bottom : 0,
+    paddingLeft: includeLeft ? insets.left : 0,
+    paddingRight: includeRight ? insets.right : 0,
   };
 
   const contentStyle = [

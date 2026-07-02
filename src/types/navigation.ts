@@ -56,6 +56,11 @@ export type AppStackParamList = {
   ChatHub: undefined;
   UserProfile: { userId: string; username: string };
   MyProfile: undefined;
+  SendTo: {
+    mediaUri: string;
+    mediaType: 'image' | 'video';
+    metadata?: any;
+  };
 };
 
 
