@@ -27,6 +27,10 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
     (file.mime_type && file.mime_type.startsWith('video/')) ||
     (file.file_name && /\.(mp4|mov|mkv|3gp|avi|webm)$/i.test(file.file_name));
 
+  const isImage = file.file_type === 'image' ||
+    (file.mime_type && file.mime_type.startsWith('image/')) ||
+    (file.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(file.file_name));
+
   const isVideoUri = (uri: string | null | undefined): boolean => {
     if (!uri) return false;
     return /\.(mp4|mov|mkv|3gp|avi|webm)($|\?)/i.test(uri) || uri.includes('/video/');
@@ -52,13 +56,13 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
     }
 
     // Resolve preview for image or video
-    if (file.file_type === 'image' || file.file_type === 'video' || file.local_thumbnail_uri) {
+    if (isImage || isVideo || file.local_thumbnail_uri) {
       setLoading(true);
       setError(false);
       previewCacheService.resolveFilePreview({
         id: file.id,
         file_name: file.file_name,
-        file_type: file.file_type,
+        file_type: isImage ? 'image' : (isVideo ? 'video' : 'document'),
         mime_type: file.mime_type,
         local_thumbnail_uri: file.local_thumbnail_uri,
         telegram_file_id: file.telegram_file_id,
@@ -121,7 +125,7 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
           <ActivityIndicator size="small" color="#FFFC00" />
           {isVideo ? (
             <FileVideo size={16} color="#FFFC00" style={{ marginTop: 4 }} />
-          ) : file.file_type === 'image' ? (
+          ) : isImage ? (
             <FileImage size={16} color="#FFFC00" style={{ marginTop: 4 }} />
           ) : (
             <File size={16} color="#FFFC00" style={{ marginTop: 4 }} />
@@ -182,7 +186,7 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
       );
     }
 
-    if (file.file_type === 'image') {
+    if (isImage) {
       if (resolvedUri && !error) {
         return (
           <Image

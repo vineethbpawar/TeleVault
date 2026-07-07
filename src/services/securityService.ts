@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import { storageService } from './storageService';
 
 const APP_PIN_KEY = 'app_pin';
 const LOCK_DRIVE_ENABLED_KEY = 'lock_drive_enabled';
@@ -8,69 +8,69 @@ const CHAT_LOCK_ENABLED_KEY = 'chat_lock_enabled'; // Placeholder
 
 export const securityService = {
   async createPin(pin: string): Promise<void> {
-    await SecureStore.setItemAsync(APP_PIN_KEY, pin);
+    await storageService.setItem(APP_PIN_KEY, pin);
   },
 
   async verifyPin(pin: string): Promise<boolean> {
-    const savedPin = await SecureStore.getItemAsync(APP_PIN_KEY);
+    const savedPin = await storageService.getItem(APP_PIN_KEY);
     return savedPin === pin;
   },
 
   async changePin(oldPin: string, newPin: string): Promise<boolean> {
     const isCorrect = await this.verifyPin(oldPin);
     if (isCorrect) {
-      await SecureStore.setItemAsync(APP_PIN_KEY, newPin);
+      await storageService.setItem(APP_PIN_KEY, newPin);
       return true;
     }
     return false;
   },
 
   async disablePin(): Promise<void> {
-    await SecureStore.deleteItemAsync(APP_PIN_KEY);
-    await SecureStore.setItemAsync(LOCK_DRIVE_ENABLED_KEY, 'false');
-    await SecureStore.setItemAsync(LOCK_PRIVATE_DRIVE_ENABLED_KEY, 'false');
-    await SecureStore.setItemAsync(BIOMETRICS_ENABLED_KEY, 'false');
-    await SecureStore.setItemAsync(CHAT_LOCK_ENABLED_KEY, 'false');
+    await storageService.removeItem(APP_PIN_KEY);
+    await storageService.setItem(LOCK_DRIVE_ENABLED_KEY, 'false');
+    await storageService.setItem(LOCK_PRIVATE_DRIVE_ENABLED_KEY, 'false');
+    await storageService.setItem(BIOMETRICS_ENABLED_KEY, 'false');
+    await storageService.setItem(CHAT_LOCK_ENABLED_KEY, 'false');
   },
 
   async isDriveLockEnabled(): Promise<boolean> {
-    const enabled = await SecureStore.getItemAsync(LOCK_DRIVE_ENABLED_KEY);
+    const enabled = await storageService.getItem(LOCK_DRIVE_ENABLED_KEY);
     return enabled === 'true';
   },
 
   async setDriveLockEnabled(enabled: boolean): Promise<void> {
-    await SecureStore.setItemAsync(LOCK_DRIVE_ENABLED_KEY, enabled ? 'true' : 'false');
+    await storageService.setItem(LOCK_DRIVE_ENABLED_KEY, enabled ? 'true' : 'false');
   },
 
   async isPrivateDriveLockEnabled(): Promise<boolean> {
-    const enabled = await SecureStore.getItemAsync(LOCK_PRIVATE_DRIVE_ENABLED_KEY);
+    const enabled = await storageService.getItem(LOCK_PRIVATE_DRIVE_ENABLED_KEY);
     return enabled === 'true';
   },
 
   async setPrivateDriveLockEnabled(enabled: boolean): Promise<void> {
-    await SecureStore.setItemAsync(LOCK_PRIVATE_DRIVE_ENABLED_KEY, enabled ? 'true' : 'false');
+    await storageService.setItem(LOCK_PRIVATE_DRIVE_ENABLED_KEY, enabled ? 'true' : 'false');
   },
 
   async isBiometricsEnabled(): Promise<boolean> {
-    const enabled = await SecureStore.getItemAsync(BIOMETRICS_ENABLED_KEY);
+    const enabled = await storageService.getItem(BIOMETRICS_ENABLED_KEY);
     return enabled === 'true';
   },
 
   async setBiometricsEnabled(enabled: boolean): Promise<void> {
-    await SecureStore.setItemAsync(BIOMETRICS_ENABLED_KEY, enabled ? 'true' : 'false');
+    await storageService.setItem(BIOMETRICS_ENABLED_KEY, enabled ? 'true' : 'false');
   },
 
   async isChatLockEnabled(): Promise<boolean> {
-    const enabled = await SecureStore.getItemAsync(CHAT_LOCK_ENABLED_KEY);
+    const enabled = await storageService.getItem(CHAT_LOCK_ENABLED_KEY);
     return enabled === 'true';
   },
 
   async setChatLockEnabled(enabled: boolean): Promise<void> {
-    await SecureStore.setItemAsync(CHAT_LOCK_ENABLED_KEY, enabled ? 'true' : 'false');
+    await storageService.setItem(CHAT_LOCK_ENABLED_KEY, enabled ? 'true' : 'false');
   },
 
   async hasPin(): Promise<boolean> {
-    const pin = await SecureStore.getItemAsync(APP_PIN_KEY);
+    const pin = await storageService.getItem(APP_PIN_KEY);
     return pin !== null && pin !== '';
   }
 };

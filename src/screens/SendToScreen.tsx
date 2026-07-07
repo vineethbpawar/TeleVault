@@ -9,6 +9,7 @@ import {
   Alert,
   TextInput,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { Send, Search, X, Sparkles, DownloadCloud, HardDrive, Lock, Users, ArrowLeft } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -69,9 +70,20 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleQueueUploadDest = async (destination: 'memories' | 'drive' | 'private_drive') => {
     let fileSize = 0;
     try {
-      const info = await FileSystem.getInfoAsync(mediaUri);
-      if (info.exists) {
-        fileSize = info.size;
+      if (Platform.OS === 'web') {
+        if (mediaUri.startsWith('blob:')) {
+          const res = await fetch(mediaUri);
+          const blob = await res.blob();
+          fileSize = blob.size;
+        } else if (mediaUri.startsWith('data:')) {
+          const base64Str = mediaUri.split(',')[1];
+          fileSize = atob(base64Str).length;
+        }
+      } else {
+        const info = await FileSystem.getInfoAsync(mediaUri);
+        if (info.exists) {
+          fileSize = info.size;
+        }
       }
     } catch (err) {
       console.warn('Failed to fetch file size for queue', err);

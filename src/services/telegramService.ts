@@ -1,6 +1,67 @@
-import * as SecureStore from 'expo-secure-store';
+import { storageService } from './storageService';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../lib/supabase';
+import { Platform } from 'react-native';
+
+async function uploadFileHelper(
+  url: string,
+  localUri: string,
+  fieldName: string,
+  parameters: Record<string, string>
+): Promise<{ status: number; body: string }> {
+  if (Platform.OS === 'web') {
+    try {
+      let blob: Blob;
+      if (localUri.startsWith('data:')) {
+        const arr = localUri.split(',');
+        const mime = arr[0].match(/:(.*?);/)![1];
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        blob = new Blob([u8arr], { type: mime });
+      } else {
+        const res = await fetch(localUri);
+        blob = await res.blob();
+      }
+
+      const formData = new FormData();
+      const fileName = parameters.caption || 'file';
+      formData.append(fieldName, blob, fileName);
+
+      Object.keys(parameters).forEach((key) => {
+        formData.append(key, parameters[key]);
+      });
+
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const bodyText = await response.text();
+      return {
+        status: response.status,
+        body: bodyText,
+      };
+    } catch (err: any) {
+      console.error('Web upload helper failed:', err);
+      throw err;
+    }
+  } else {
+    const uploadResult = await FileSystem.uploadAsync(url, localUri, {
+      fieldName: fieldName,
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      parameters: parameters,
+    });
+    return {
+      status: uploadResult.status,
+      body: uploadResult.body,
+    };
+  }
+}
 
 const BOT_TOKEN_KEY = 'telegram_bot_token';
 const CHANNEL_ID_KEY = 'telegram_channel_id';
@@ -18,8 +79,8 @@ export interface TelegramUploadResult {
 
 export const telegramService = {
   async saveTelegramConfig(botToken: string, channelId: string): Promise<void> {
-    await SecureStore.setItemAsync(BOT_TOKEN_KEY, botToken.trim());
-    await SecureStore.setItemAsync(CHANNEL_ID_KEY, channelId.trim());
+    await storageService.setItem(BOT_TOKEN_KEY, botToken.trim());
+    await storageService.setItem(CHANNEL_ID_KEY, channelId.trim());
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -45,8 +106,8 @@ export const telegramService = {
   },
 
   async getTelegramConfig(): Promise<TelegramConfig> {
-    let botToken = await SecureStore.getItemAsync(BOT_TOKEN_KEY);
-    let channelId = await SecureStore.getItemAsync(CHANNEL_ID_KEY);
+    let botToken = await storageService.getItem(BOT_TOKEN_KEY);
+    let channelId = await storageService.getItem(CHANNEL_ID_KEY);
 
     if (!botToken || !channelId) {
       try {
@@ -61,8 +122,8 @@ export const telegramService = {
           if (data && !error) {
             botToken = data.bot_token;
             channelId = data.channel_id;
-            if (botToken) await SecureStore.setItemAsync(BOT_TOKEN_KEY, botToken);
-            if (channelId) await SecureStore.setItemAsync(CHANNEL_ID_KEY, channelId);
+            if (botToken) await storageService.setItem(BOT_TOKEN_KEY, botToken);
+            if (channelId) await storageService.setItem(CHANNEL_ID_KEY, channelId);
           }
         }
       } catch (err) {
@@ -74,8 +135,8 @@ export const telegramService = {
   },
 
   async deleteTelegramConfig(): Promise<void> {
-    await SecureStore.deleteItemAsync(BOT_TOKEN_KEY);
-    await SecureStore.deleteItemAsync(CHANNEL_ID_KEY);
+    await storageService.removeItem(BOT_TOKEN_KEY);
+    await storageService.removeItem(CHANNEL_ID_KEY);
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -107,8 +168,8 @@ export const telegramService = {
       if (error) throw error;
 
       if (data) {
-        if (data.bot_token) await SecureStore.setItemAsync(BOT_TOKEN_KEY, data.bot_token);
-        if (data.channel_id) await SecureStore.setItemAsync(CHANNEL_ID_KEY, data.channel_id);
+        if (data.bot_token) await storageService.setItem(BOT_TOKEN_KEY, data.bot_token);
+        if (data.channel_id) await storageService.setItem(CHANNEL_ID_KEY, data.channel_id);
         return true;
       }
       return false;
@@ -158,13 +219,29 @@ export const telegramService = {
       throw new Error('Telegram configuration is missing. Please set your Bot Token and Channel ID in Settings.');
     }
 
-    // Check file size using FileSystem.getInfoAsync
-    const fileInfo = await FileSystem.getInfoAsync(localUri);
-    if (!fileInfo.exists) {
-      throw new Error('File does not exist locally.');
+    let fileSizeInMB = 0;
+    if (Platform.OS === 'web') {
+      try {
+        if (localUri.startsWith('data:')) {
+          const arr = localUri.split(',');
+          const bstr = atob(arr[1]);
+          fileSizeInMB = bstr.length / (1024 * 1024);
+        } else {
+          const res = await fetch(localUri);
+          const blob = await res.blob();
+          fileSizeInMB = blob.size / (1024 * 1024);
+        }
+      } catch (err) {
+        console.warn('Web file size check failed:', err);
+      }
+    } else {
+      const fileInfo = await FileSystem.getInfoAsync(localUri);
+      if (!fileInfo.exists) {
+        throw new Error('File does not exist locally.');
+      }
+      fileSizeInMB = fileInfo.size / (1024 * 1024);
     }
 
-    const fileSizeInMB = fileInfo.size / (1024 * 1024);
     if (fileSizeInMB > 50) {
       throw new Error('File exceeds 50 MB limit.');
     }
@@ -183,14 +260,9 @@ export const telegramService = {
     try {
       const url = `https://api.telegram.org/bot${botToken}/${endpoint}`;
       
-      const uploadResult = await FileSystem.uploadAsync(url, localUri, {
-        fieldName: fieldName,
-        httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        parameters: {
-          chat_id: channelId,
-          caption: fileName,
-        },
+      const uploadResult = await uploadFileHelper(url, localUri, fieldName, {
+        chat_id: channelId,
+        caption: fileName,
       });
 
       if (uploadResult.status < 200 || uploadResult.status >= 300) {
@@ -325,14 +397,9 @@ export const telegramService = {
 
       const url = `https://api.telegram.org/bot${botToken}/${endpoint}`;
       
-      const uploadResult = await FileSystem.uploadAsync(url, data.localUri, {
-        fieldName: fieldName,
-        httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        parameters: {
-          chat_id: channelId,
-          caption: formattedCaption,
-        },
+      const uploadResult = await uploadFileHelper(url, data.localUri, fieldName, {
+        chat_id: channelId,
+        caption: formattedCaption,
       });
 
       if (uploadResult.status < 200 || uploadResult.status >= 300) {
@@ -385,22 +452,19 @@ export const telegramService = {
       throw new Error('Telegram configuration is missing. Please set your Bot Token and Channel ID in Settings.');
     }
 
-    const fileInfo = await FileSystem.getInfoAsync(chunkUri);
-    if (!fileInfo.exists) {
-      throw new Error('Chunk file does not exist locally.');
+    if (Platform.OS !== 'web') {
+      const fileInfo = await FileSystem.getInfoAsync(chunkUri);
+      if (!fileInfo.exists) {
+        throw new Error('Chunk file does not exist locally.');
+      }
     }
 
     const url = `https://api.telegram.org/bot${botToken}/sendDocument`;
 
     try {
-      const uploadResult = await FileSystem.uploadAsync(url, chunkUri, {
-        fieldName: 'document',
-        httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        parameters: {
-          chat_id: channelId,
-          caption: caption,
-        },
+      const uploadResult = await uploadFileHelper(url, chunkUri, 'document', {
+        chat_id: channelId,
+        caption: caption,
       });
 
       if (uploadResult.status < 200 || uploadResult.status >= 300) {
@@ -473,6 +537,9 @@ export const telegramService = {
 
   async downloadTelegramFileToCache(fileId: string, fileName: string): Promise<string> {
     const downloadUrl = await this.getTelegramFileDownloadUrl(fileId);
+    if (Platform.OS === 'web') {
+      return downloadUrl;
+    }
     const safeName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
     const localUri = `${FileSystem.cacheDirectory}${Date.now()}_${safeName}`;
 

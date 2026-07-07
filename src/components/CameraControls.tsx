@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Text, Platform } from 'react-native';
 import { Grid, Image as ImageIcon } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UploadDestination } from '../types/camera';
@@ -31,6 +31,21 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
   const touchStartTimeRef = useRef(0);
   const isRecordingStartedRef = useRef(false);
   const longPressTimeoutRef = useRef<any>(null);
+  const globalMouseMoveRef = useRef<any>(null);
+  const globalMouseUpRef = useRef<any>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (Platform.OS === 'web') {
+        if (globalMouseMoveRef.current) {
+          window.removeEventListener('mousemove', globalMouseMoveRef.current);
+        }
+        if (globalMouseUpRef.current) {
+          window.removeEventListener('mouseup', globalMouseUpRef.current);
+        }
+      }
+    };
+  }, []);
 
   const handleTouchStart = (e: any) => {
     initialTouchY.current = e.nativeEvent.pageY;
@@ -72,6 +87,74 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
     isRecordingStartedRef.current = false;
   };
 
+  // Web recording gesture flow helpers
+  const startRecordingFlowWeb = (clientY: number) => {
+    initialTouchY.current = clientY;
+    startZoomRef.current = zoom;
+    touchStartTimeRef.current = Date.now();
+    isRecordingStartedRef.current = false;
+
+    if (Platform.OS === 'web') {
+      const handleGlobalMouseMove = (e: MouseEvent) => {
+        moveRecordingFlowWeb(e.clientY);
+      };
+      
+      const handleGlobalMouseUp = () => {
+        if (globalMouseMoveRef.current) {
+          window.removeEventListener('mousemove', globalMouseMoveRef.current);
+          globalMouseMoveRef.current = null;
+        }
+        if (globalMouseUpRef.current) {
+          window.removeEventListener('mouseup', globalMouseUpRef.current);
+          globalMouseUpRef.current = null;
+        }
+        endRecordingFlowWeb();
+      };
+
+      globalMouseMoveRef.current = handleGlobalMouseMove;
+      globalMouseUpRef.current = handleGlobalMouseUp;
+
+      window.addEventListener('mousemove', handleGlobalMouseMove);
+      window.addEventListener('mouseup', handleGlobalMouseUp);
+    }
+
+    console.log('[RECORD_TRACE] Hold timer started');
+    longPressTimeoutRef.current = setTimeout(() => {
+      console.log('[RECORD_TRACE] Hold timer completed');
+      isRecordingStartedRef.current = true;
+      console.log('[RECORD_TRACE] startRecording()');
+      onStartRecording();
+    }, 350);
+  };
+
+  const moveRecordingFlowWeb = (clientY: number) => {
+    const currentY = clientY;
+    if ((isRecording || isRecordingStartedRef.current) && onZoomChange) {
+      const dy = initialTouchY.current - currentY;
+      const sensitivity = 250;
+      const newZoom = Math.max(0, Math.min(1, startZoomRef.current + (dy / sensitivity)));
+      onZoomChange(newZoom);
+    }
+  };
+
+  const endRecordingFlowWeb = (isCancel = false) => {
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+
+    const duration = Date.now() - touchStartTimeRef.current;
+
+    if (isRecording || isRecordingStartedRef.current) {
+      console.log('[RECORD_TRACE] stopRecording()');
+      onStopRecording();
+    } else if (duration < 350 && !isCancel) {
+      onCapture();
+    }
+
+    isRecordingStartedRef.current = false;
+  };
+
   const bottomNavHeight = 64 + insets.bottom;
   return (
     <View style={[styles.container, { bottom: bottomNavHeight }]} pointerEvents="box-none">
@@ -90,20 +173,59 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
         </TouchableOpacity>
 
         {/* Capture Button wrapper for gestures */}
-        <View
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onTouchCancel={handleTouchEnd}
-          style={styles.captureContainer}
-        >
-          <View 
-            style={[styles.captureOuterCircle, isRecording && styles.captureOuterCircleRecording]}
-            pointerEvents="none"
+        {Platform.OS === 'web' ? (
+          <View
+            {...({
+              onMouseDown: (e: any) => {
+                console.log('[RECORD_TRACE] MouseDown');
+                startRecordingFlowWeb(e.clientY);
+              },
+              onMouseMove: (e: any) => {
+                moveRecordingFlowWeb(e.clientY);
+              },
+              onMouseUp: (e: any) => {
+                console.log('[RECORD_TRACE] MouseUp');
+                endRecordingFlowWeb();
+              },
+              onTouchStart: (e: any) => {
+                console.log('[RECORD_TRACE] TouchStart');
+                const touch = e.touches[0] || e.changedTouches[0];
+                if (touch) startRecordingFlowWeb(touch.clientY);
+              },
+              onTouchMove: (e: any) => {
+                const touch = e.touches[0] || e.changedTouches[0];
+                if (touch) moveRecordingFlowWeb(touch.clientY);
+              },
+              onTouchEnd: (e: any) => {
+                console.log('[RECORD_TRACE] TouchEnd');
+                endRecordingFlowWeb();
+              },
+            } as any)}
+            style={styles.captureContainer}
           >
-            <View style={[styles.captureInnerCircle, isRecording && styles.captureInnerCircleRecording]} />
+            <View 
+              style={[styles.captureOuterCircle, isRecording && styles.captureOuterCircleRecording]}
+              pointerEvents="none"
+            >
+              <View style={[styles.captureInnerCircle, isRecording && styles.captureInnerCircleRecording]} />
+            </View>
           </View>
-        </View>
+        ) : (
+          <View
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
+            style={styles.captureContainer}
+          >
+            <View 
+              style={[styles.captureOuterCircle, isRecording && styles.captureOuterCircleRecording]}
+              pointerEvents="none"
+            >
+              <View style={[styles.captureInnerCircle, isRecording && styles.captureInnerCircleRecording]} />
+            </View>
+          </View>
+        )}
 
         <TouchableOpacity
           style={styles.bottomIconButton}

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { telegramService } from './telegramService';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as VideoThumbnails from 'expo-video-thumbnails';
+import { Platform } from 'react-native';
 
 const CACHE_PREFIX = 'televault_preview_';
 const CACHE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour expiry for Telegram getFile URLs
@@ -114,6 +115,13 @@ export const previewCacheService = {
     if (fileType === 'image') {
       const localUri = file.local_uri || file.local_thumbnail_uri;
       if (localUri) {
+        if (Platform.OS === 'web') {
+          return {
+            type: 'image',
+            previewUri: localUri,
+            fallbackIcon,
+          };
+        }
         try {
           const info = await FileSystem.getInfoAsync(localUri);
           if (info.exists) {
@@ -180,12 +188,16 @@ export const previewCacheService = {
 
       // Locate video path
       if (file.local_uri) {
-        try {
-          const info = await FileSystem.getInfoAsync(file.local_uri);
-          if (info.exists) {
-            playableUri = file.local_uri;
-          }
-        } catch (e) {}
+        if (Platform.OS === 'web') {
+          playableUri = file.local_uri;
+        } else {
+          try {
+            const info = await FileSystem.getInfoAsync(file.local_uri);
+            if (info.exists) {
+              playableUri = file.local_uri;
+            }
+          } catch (e) {}
+        }
       }
 
       if (!playableUri && file.media_url) {
@@ -217,23 +229,33 @@ export const previewCacheService = {
       let hasCachedThumb = false;
 
       if (file.local_thumbnail_uri) {
-        try {
-          const info = await FileSystem.getInfoAsync(file.local_thumbnail_uri);
-          if (info.exists) {
-            previewUri = file.local_thumbnail_uri;
-            hasLocalThumb = true;
-          }
-        } catch (e) {}
+        if (Platform.OS === 'web') {
+          previewUri = file.local_thumbnail_uri;
+          hasLocalThumb = true;
+        } else {
+          try {
+            const info = await FileSystem.getInfoAsync(file.local_thumbnail_uri);
+            if (info.exists) {
+              previewUri = file.local_thumbnail_uri;
+              hasLocalThumb = true;
+            }
+          } catch (e) {}
+        }
       }
 
       if (!previewUri && file.id) {
         try {
           const cachedThumb = await AsyncStorage.getItem(`televault_vid_thumb_${file.id}`);
           if (cachedThumb) {
-            const info = await FileSystem.getInfoAsync(cachedThumb);
-            if (info.exists) {
+            if (Platform.OS === 'web') {
               previewUri = cachedThumb;
               hasCachedThumb = true;
+            } else {
+              const info = await FileSystem.getInfoAsync(cachedThumb);
+              if (info.exists) {
+                previewUri = cachedThumb;
+                hasCachedThumb = true;
+              }
             }
           }
         } catch (e) {}
@@ -249,18 +271,26 @@ export const previewCacheService = {
           if (__DEV__) {
             console.log(`[VIDEO_PREVIEW_DEV] Starting dynamic thumbnail generation for: ${file.file_name} from: ${playableUri}`);
           }
-          const thumb = await VideoThumbnails.getThumbnailAsync(playableUri, { time: 500 });
-          if (thumb && thumb.uri) {
-            previewUri = thumb.uri;
+          if (Platform.OS === 'web') {
+            const thumbDataUrl = await getWebVideoThumbnail(playableUri);
+            previewUri = thumbDataUrl;
             if (file.id) {
-              await AsyncStorage.setItem(`televault_vid_thumb_${file.id}`, thumb.uri);
-            }
-            if (__DEV__) {
-              console.log(`[VIDEO_PREVIEW_DEV] Dynamic thumbnail generation SUCCESS: ${thumb.uri}`);
+              await AsyncStorage.setItem(`televault_vid_thumb_${file.id}`, thumbDataUrl);
             }
           } else {
-            if (__DEV__) {
-              console.log(`[VIDEO_PREVIEW_DEV] Dynamic thumbnail generation FAILED: Empty response`);
+            const thumb = await VideoThumbnails.getThumbnailAsync(playableUri, { time: 500 });
+            if (thumb && thumb.uri) {
+              previewUri = thumb.uri;
+              if (file.id) {
+                await AsyncStorage.setItem(`televault_vid_thumb_${file.id}`, thumb.uri);
+              }
+              if (__DEV__) {
+                console.log(`[VIDEO_PREVIEW_DEV] Dynamic thumbnail generation SUCCESS: ${thumb.uri}`);
+              }
+            } else {
+              if (__DEV__) {
+                console.log(`[VIDEO_PREVIEW_DEV] Dynamic thumbnail generation FAILED: Empty response`);
+              }
             }
           }
         } catch (e: any) {
@@ -281,6 +311,13 @@ export const previewCacheService = {
 
     // 3. Document / other resolution
     if (file.local_uri) {
+      if (Platform.OS === 'web') {
+        return {
+          type: fileType,
+          previewUri: file.local_uri,
+          fallbackIcon,
+        };
+      }
       try {
         const info = await FileSystem.getInfoAsync(file.local_uri);
         if (info.exists) {
@@ -324,5 +361,46 @@ export const previewCacheService = {
     };
   }
 };
+
+async function getWebVideoThumbnail(videoUri: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (typeof document === 'undefined') {
+      reject(new Error('Document is undefined.'));
+      return;
+    }
+    const video = document.createElement('video');
+    video.src = videoUri;
+    video.crossOrigin = 'anonymous';
+    video.playsInline = true;
+    video.muted = true;
+    video.play().catch(() => {});
+    video.pause();
+
+    video.onloadeddata = () => {
+      video.currentTime = 0.5;
+    };
+
+    video.onseeked = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg'));
+        } else {
+          reject(new Error('Failed to get 2D canvas context'));
+        }
+      } catch (err) {
+        reject(err);
+      }
+    };
+
+    video.onerror = (err) => {
+      reject(err);
+    };
+  });
+}
 
 export default previewCacheService;

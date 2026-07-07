@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
+  Platform,
 } from 'react-native';
 import { ArrowLeft, Send, Sparkles, X, Type, Edit3, RotateCw, EyeOff, Music, CloudSun, BarChart2, HelpCircle, MapPin, Clock, DownloadCloud, Lock, HardDrive, Mic, Smile, Paperclip, MoreHorizontal } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -113,11 +114,34 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
 
   // Fetch local file info
   useEffect(() => {
-    FileSystem.getInfoAsync(uri).then((info) => {
-      if (info.exists) {
-        setFileSize(info.size);
+    if (Platform.OS === 'web') {
+      if (uri.startsWith('blob:')) {
+        fetch(uri)
+          .then((r) => r.blob())
+          .then((blob) => setFileSize(blob.size))
+          .catch((err) => {
+            console.error('Failed to get blob size:', err);
+            setFileSize(0);
+          });
+      } else if (uri.startsWith('data:')) {
+        try {
+          const base64Str = uri.split(',')[1];
+          const decodedLength = atob(base64Str).length;
+          setFileSize(decodedLength);
+        } catch (err) {
+          console.error('Failed to parse base64 size:', err);
+          setFileSize(0);
+        }
+      } else {
+        setFileSize(0);
       }
-    });
+    } else {
+      FileSystem.getInfoAsync(uri).then((info) => {
+        if (info.exists) {
+          setFileSize(info.size);
+        }
+      });
+    }
   }, [uri]);
 
   useEffect(() => {
@@ -332,10 +356,42 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     let localThumbnailUri: string | null = null;
     if (type === 'video') {
       try {
-        const VideoThumbnails = require('expo-video-thumbnails');
-        const thumb = await VideoThumbnails.getThumbnailAsync(uri, { time: 500 });
-        if (thumb && thumb.uri) {
-          localThumbnailUri = thumb.uri;
+        if (Platform.OS === 'web') {
+          localThumbnailUri = await new Promise<string>((resolve, reject) => {
+            const video = document.createElement('video');
+            video.src = uri;
+            video.crossOrigin = 'anonymous';
+            video.playsInline = true;
+            video.muted = true;
+            video.play().catch(() => {});
+            video.pause();
+            video.onloadeddata = () => {
+              video.currentTime = 0.5;
+            };
+            video.onseeked = () => {
+              try {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                  resolve(canvas.toDataURL('image/jpeg'));
+                } else {
+                  reject(new Error('Failed to get 2D canvas context'));
+                }
+              } catch (err) {
+                reject(err);
+              }
+            };
+            video.onerror = (err) => reject(err);
+          });
+        } else {
+          const VideoThumbnails = require('expo-video-thumbnails');
+          const thumb = await VideoThumbnails.getThumbnailAsync(uri, { time: 500 });
+          if (thumb && thumb.uri) {
+            localThumbnailUri = thumb.uri;
+          }
         }
       } catch (e) {
         console.warn('Failed to pre-generate video thumbnail on save:', e);
@@ -358,13 +414,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
       });
 
       showToast('Saving in background...');
-      if (destination === 'memories') {
-        navigation.replace('Main', { screen: 'MemoriesTab' });
-      } else if (destination === 'private_drive') {
-        navigation.replace('PrivateDrive');
-      } else {
-        navigation.replace('Main', { screen: 'DriveTab' });
-      }
+      navigation.navigate('Main', { screen: 'CameraTab' });
     } catch (error: any) {
       console.error('Queue add failed:', error);
       Alert.alert('Queue Error', 'Failed to schedule media upload.');
