@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Alert, SafeAreaView, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Alert, SafeAreaView, ScrollView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -73,6 +73,11 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const [locationText, setLocationText] = useState('📍 Fetching Location...');
 
   const cameraRef = useRef<any>(null);
+  const webMediaRecorderRef = useRef<any>(null);
+  const webAudioStreamRef = useRef<any>(null);
+  const webChunksRef = useRef<any[]>([]);
+  const webStreamRef = useRef<any>(null);
+  const webVideoRef = useRef<any>(null);
   const isFocused = useIsFocused();
 
   const recordingIntervalRef = useRef<any>(null);
@@ -82,6 +87,42 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   // Two-Finger Pinch Zoom Refs
   const initialPinchDistRef = useRef<number | null>(null);
   const initialPinchZoomRef = useRef<number>(0);
+
+  // Web getUserMedia setup effect
+  useEffect(() => {
+    if (Platform.OS === 'web' && isFocused) {
+      let active = true;
+      setCameraReady(false);
+      navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing === 'back' ? 'environment' : 'user' },
+        audio: true
+      }).catch(() => {
+        // Fallback to video-only if audio is denied or not available
+        return navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facing === 'back' ? 'environment' : 'user' }
+        });
+      }).then(stream => {
+        if (active) {
+          webStreamRef.current = stream;
+          if (webVideoRef.current) {
+            webVideoRef.current.srcObject = stream;
+          }
+          setCameraReady(true);
+        }
+      }).catch(err => {
+        console.error('Failed to get getUserMedia stream on Web:', err);
+      });
+
+      return () => {
+        active = false;
+        setCameraReady(false);
+        if (webStreamRef.current) {
+          webStreamRef.current.getTracks().forEach((t: any) => t.stop());
+          webStreamRef.current = null;
+        }
+      };
+    }
+  }, [isFocused, facing]);
 
   // Fetch Supabase User Profile
   useEffect(() => {
@@ -228,12 +269,55 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const executePhotoCapture = async () => {
+    if (!cameraReady) {
+      Alert.alert('Camera Not Ready', 'Please wait for the camera to initialize.');
+      return;
+    }
+
+    if (Platform.OS === 'web') {
+      try {
+        console.log('[RECORD_TRACE] Web photo capture initiated.');
+        if (webVideoRef.current) {
+          const video = webVideoRef.current;
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const dataUri = canvas.toDataURL('image/jpeg', 0.9);
+            console.log('[RECORD_TRACE] Captured Web photo data URI length:', dataUri.length);
+            navigation.navigate('Preview', {
+              uri: dataUri,
+              type: 'image',
+              fromGallery: false,
+              file_type: 'image',
+              mime_type: 'image/jpeg',
+              defaultLens: selectedLens,
+              locationText: selectedLens === 'location' ? locationText : undefined,
+              defaultDestination,
+              sendToUserId,
+              sendToUsername,
+              conversationId,
+            } as any);
+            setZoom(0);
+          } else {
+            throw new Error('Failed to get canvas 2D context');
+          }
+        } else {
+          throw new Error('Web video element not available');
+        }
+      } catch (error: any) {
+        console.error('Capture error:', error);
+        Alert.alert('Error', error.message || 'An error occurred during photo capture.');
+      }
+      return;
+    }
+
     if (cameraRef.current) {
       try {
-        const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.8,
-          skipProcessing: false,
-        });
+        const options = { quality: 0.8, skipProcessing: false };
+        const photo = await cameraRef.current.takePictureAsync(options);
         if (photo && photo.uri) {
           navigation.navigate('Preview', {
             uri: photo.uri,
@@ -278,7 +362,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
 
-    if (!micPermission.granted) {
+    if (Platform.OS !== 'web' && !micPermission.granted) {
       try {
         const status = await requestMicPermission();
         if (!status.granted) {
@@ -294,59 +378,142 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     setRecordingDuration(0);
 
     // Swap mode to video if needed
-    if (cameraMode !== 'video') {
+    if (Platform.OS !== 'web' && cameraMode !== 'video') {
       setCameraMode('video');
       await new Promise((resolve) => setTimeout(resolve, 600));
     }
 
-    if (!cameraRef.current) {
-      setIsStartingRecording(false);
-      return;
-    }
+    if (Platform.OS === 'web') {
+      try {
+        console.log('[RECORD_TRACE] Web video recording start triggered.');
+        if (!webStreamRef.current) {
+          throw new Error('No active Web MediaStream available.');
+        }
 
-    try {
-      setIsRecording(true);
-      setIsStartingRecording(false);
+        console.log('[RECORD_TRACE] 1. Hold gesture start detected.');
+        webChunksRef.current = [];
+        let recorder: MediaRecorder;
+        
+        let mimeType = 'video/webm;codecs=vp9';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = 'video/webm;codecs=vp8';
+        }
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = 'video/webm';
+        }
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = '';
+        }
 
-      // Duration timer
-      recordingIntervalRef.current = setInterval(() => {
-        setRecordingDuration((prev) => {
-          const next = prev + 1;
-          if (next >= maxDuration) {
-            stopRecording();
+        const options = mimeType ? { mimeType } : undefined;
+        console.log('[RECORD_TRACE] 2. Creating MediaRecorder with MIME type:', mimeType || 'Default');
+        recorder = new MediaRecorder(webStreamRef.current, options);
+        webMediaRecorderRef.current = recorder;
+
+        recorder.ondataavailable = (event: BlobEvent) => {
+          if (event.data && event.data.size > 0) {
+            console.log('[RECORD_TRACE] 4. dataavailable event fired. Chunk size:', event.data.size);
+            webChunksRef.current.push(event.data);
           }
-          return next;
+        };
+
+        recorder.onstop = async () => {
+          console.log('[RECORD_TRACE] 6. MediaRecorder.onstop fired. Chunks collected:', webChunksRef.current.length);
+          const blob = new Blob(webChunksRef.current, { type: mimeType || 'video/webm' });
+          console.log('[RECORD_TRACE] 7. Blob created. Size:', blob.size, 'Type:', blob.type);
+          
+          const fileUri = URL.createObjectURL(blob);
+          console.log('[RECORD_TRACE] 8. URL.createObjectURL generated URI:', fileUri);
+
+          console.log('[RECORD_TRACE] 9. Navigating PreviewScreen with URI:', fileUri);
+          navigation.navigate('Preview', {
+            uri: fileUri,
+            type: 'video',
+            fromGallery: false,
+            file_type: 'video',
+            mime_type: mimeType || 'video/webm',
+            defaultLens: selectedLens,
+            locationText: selectedLens === 'location' ? locationText : undefined,
+            defaultDestination,
+            sendToUserId,
+            sendToUsername,
+            conversationId,
+          } as any);
+          setZoom(0); // Reset zoom
+        };
+
+        console.log('[RECORD_TRACE] 3. Calling MediaRecorder.start().');
+        recorder.start(100);
+
+        setIsRecording(true);
+        setIsStartingRecording(false);
+
+        // Duration timer
+        recordingIntervalRef.current = setInterval(() => {
+          setRecordingDuration((prev) => {
+            const next = prev + 1;
+            if (next >= maxDuration) {
+              stopRecording();
+            }
+            return next;
+          });
+        }, 1000);
+
+      } catch (err: any) {
+        console.error('Web recording start failed:', err);
+        cleanupRecordingState();
+        Alert.alert('Recording Failed', err.message || 'Could not start web recording.');
+      }
+    } else {
+      if (!cameraRef.current) {
+        setIsStartingRecording(false);
+        return;
+      }
+
+      try {
+        setIsRecording(true);
+        setIsStartingRecording(false);
+
+        // Duration timer
+        recordingIntervalRef.current = setInterval(() => {
+          setRecordingDuration((prev) => {
+            const next = prev + 1;
+            if (next >= maxDuration) {
+              stopRecording();
+            }
+            return next;
+          });
+        }, 1000);
+
+        const video = await cameraRef.current.recordAsync({
+          quality: '720p',
+          maxDuration: maxDuration,
         });
-      }, 1000);
 
-      const video = await cameraRef.current.recordAsync({
-        quality: '720p',
-        maxDuration: maxDuration,
-      });
-
-      if (video && video.uri) {
-        navigation.navigate('Preview', {
-          uri: video.uri,
-          type: 'video',
-          fromGallery: false,
-          file_type: 'video',
-          mime_type: 'video/mp4',
-          defaultLens: selectedLens,
-          locationText: selectedLens === 'location' ? locationText : undefined,
-          defaultDestination,
-          sendToUserId,
-          sendToUsername,
-          conversationId,
-        } as any);
-        setZoom(0); // Reset zoom!
+        if (video && video.uri) {
+          navigation.navigate('Preview', {
+            uri: video.uri,
+            type: 'video',
+            fromGallery: false,
+            file_type: 'video',
+            mime_type: 'video/mp4',
+            defaultLens: selectedLens,
+            locationText: selectedLens === 'location' ? locationText : undefined,
+            defaultDestination,
+            sendToUserId,
+            sendToUsername,
+            conversationId,
+          } as any);
+          setZoom(0); // Reset zoom!
+        }
+      } catch (error: any) {
+        if (__DEV__) {
+          console.error('Video recording failed in recordAsync:', error);
+        }
+        cleanupRecordingState();
+        const userMsg = error.message || 'Could not start recording. Please try again.';
+        Alert.alert('Recording Failed', userMsg);
       }
-    } catch (error: any) {
-      if (__DEV__) {
-        console.error('Video recording failed in recordAsync:', error);
-      }
-      cleanupRecordingState();
-      const userMsg = error.message || 'Could not start recording. Please try again.';
-      Alert.alert('Recording Failed', userMsg);
     }
   };
 
@@ -371,11 +538,22 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
       recordingTimeoutRef.current = null;
     }
 
-    if (cameraRef.current && isRecording) {
-      try {
-        cameraRef.current.stopRecording();
-      } catch (err) {
-        console.warn('stopRecording failed:', err);
+    if (Platform.OS === 'web') {
+      console.log('[RECORD_TRACE] 5. stopRecording called. Stopping Web MediaRecorder.');
+      if (webMediaRecorderRef.current && webMediaRecorderRef.current.state !== 'inactive') {
+        webMediaRecorderRef.current.stop();
+      }
+      if (webAudioStreamRef.current) {
+        webAudioStreamRef.current.getTracks().forEach((track: any) => track.stop());
+        webAudioStreamRef.current = null;
+      }
+    } else {
+      if (cameraRef.current && isRecording) {
+        try {
+          cameraRef.current.stopRecording();
+        } catch (err) {
+          console.warn('stopRecording failed:', err);
+        }
       }
     }
     cleanupRecordingState();
@@ -390,7 +568,9 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     setRecordingDuration(0);
     setZoom(0); // Reset zoom!
     settingsService.getSettings().then((settings) => {
-      setCameraMode(settings.defaultCameraMode === 'Video' ? 'video' : 'picture');
+      if (Platform.OS !== 'web') {
+        setCameraMode(settings.defaultCameraMode === 'Video' ? 'video' : 'picture');
+      }
     });
   };
 
@@ -654,91 +834,189 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           onTouchMove={handleCameraTouchMove}
           onTouchEnd={handleCameraTouchEnd}
         >
-          <CameraView
-            style={StyleSheet.absoluteFill}
-            facing={facing}
-            flash={flash}
-            mode={cameraMode}
-            zoom={zoom}
-            ref={cameraRef}
-            onCameraReady={() => setCameraReady(true)}
-          >
-            {renderLiveOverlay()}
+          {Platform.OS === 'web' ? (
+            <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
+              <video
+                ref={webVideoRef}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  bottom: 0,
+                  right: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  transform: `scale(${1 + zoom * 3})`,
+                  transition: 'transform 0.05s ease-out',
+                }}
+                playsInline
+                muted
+                autoPlay
+              />
+              {renderLiveOverlay()}
 
-            {/* Upper Safe Overlay (Avatar, Pill, Settings) */}
-            <View style={[styles.newTopBar, { top: insets.top > 0 ? insets.top + 10 : 20 }]}>
-              <TouchableOpacity
-                style={styles.profileShortcut}
-                onPress={() => navigation.navigate('MyProfile')}
-                activeOpacity={0.8}
-              >
-                <UserAvatar
-                  name={profile?.full_name || profile?.username || 'User'}
-                  avatarUrl={profile?.avatar_url}
-                  size={36}
-                />
-              </TouchableOpacity>
+              {/* Upper Safe Overlay (Avatar, Pill, Settings) */}
+              <View style={[styles.newTopBar, { top: insets.top > 0 ? insets.top + 10 : 20 }]}>
+                <TouchableOpacity
+                  style={styles.profileShortcut}
+                  onPress={() => navigation.navigate('MyProfile')}
+                  activeOpacity={0.8}
+                >
+                  <UserAvatar
+                    name={profile?.full_name || profile?.username || 'User'}
+                    avatarUrl={profile?.avatar_url}
+                    size={36}
+                  />
+                </TouchableOpacity>
 
-              <View style={styles.modePill}>
-                <Text style={styles.modePillText}>
-                  {defaultDestination === 'memories' ? 'Memories' : defaultDestination === 'drive' ? 'Drive' : 'Vault'}
-                </Text>
+                <View style={styles.modePill}>
+                  <Text style={styles.modePillText}>
+                    {defaultDestination === 'memories' ? 'Memories' : defaultDestination === 'drive' ? 'Drive' : 'Vault'}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.toolsTriggerButton, showToolsPanel && styles.toolsTriggerButtonActive]}
+                  onPress={() => setShowToolsPanel((prev) => !prev)}
+                  activeOpacity={0.8}
+                >
+                  <Settings size={20} color={showToolsPanel ? '#000000' : '#FFFFFF'} />
+                </TouchableOpacity>
               </View>
 
-              <TouchableOpacity
-                style={[styles.toolsTriggerButton, showToolsPanel && styles.toolsTriggerButtonActive]}
-                onPress={() => setShowToolsPanel((prev) => !prev)}
-                activeOpacity={0.8}
-              >
-                <Settings size={20} color={showToolsPanel ? '#000000' : '#FFFFFF'} />
-              </TouchableOpacity>
+              {/* Tools Quick Panel Dropdown */}
+              {renderToolsPanel()}
+
+              {/* Timer Countdown Visual */}
+              {countdown !== null && (
+                <View style={styles.countdownContainer}>
+                  <Text style={styles.countdownText}>{countdown}</Text>
+                </View>
+              )}
+
+              {/* Recording Indicator */}
+              {isRecording && (
+                <View style={[styles.recordingIndicator, { top: insets.top > 0 ? insets.top + 60 : 80 }]}>
+                  <View style={styles.recordingRedDot} />
+                  <Text style={styles.recordingTimerText}>{formatDuration(recordingDuration)}</Text>
+                </View>
+              )}
+
+              {/* Selected Lens/Filter indicator label */}
+              {selectedLens !== 'original' && !isRecording && (
+                <View style={[styles.activeFilterPill, { bottom: 64 + insets.bottom + 185 }]}>
+                  <Text style={styles.activeFilterPillText}>{selectedLens.toUpperCase()}</Text>
+                </View>
+              )}
+
+              {/* Live Filter Tray */}
+              {renderFilterTray()}
+
+              {/* Zoom Indicator Pill */}
+              <View style={[styles.zoomPill, { bottom: bottomNavHeight + 105 }]}>
+                <Text style={styles.zoomPillText}>{getZoomDisplay()}</Text>
+              </View>
+
+              {/* Bottom Controls */}
+              <CameraControls
+                onCapture={handleCapture}
+                onStartRecording={handleStartRecording}
+                onStopRecording={handleStopRecording}
+                isRecording={isRecording}
+                onGalleryPress={handleGalleryPress}
+                onMemoriesPress={() => navigation.navigate('MemoriesTab')}
+                zoom={zoom}
+                onZoomChange={setZoom}
+              />
             </View>
-
-            {/* Tools Quick Panel Dropdown */}
-            {renderToolsPanel()}
-
-            {/* Timer Countdown Visual */}
-            {countdown !== null && (
-              <View style={styles.countdownContainer}>
-                <Text style={styles.countdownText}>{countdown}</Text>
-              </View>
-            )}
-
-            {/* Recording Indicator */}
-            {isRecording && (
-              <View style={[styles.recordingIndicator, { top: insets.top > 0 ? insets.top + 60 : 80 }]}>
-                <View style={styles.recordingRedDot} />
-                <Text style={styles.recordingTimerText}>{formatDuration(recordingDuration)}</Text>
-              </View>
-            )}
-
-            {/* Selected Lens/Filter indicator label */}
-            {selectedLens !== 'original' && !isRecording && (
-              <View style={[styles.activeFilterPill, { bottom: 64 + insets.bottom + 185 }]}>
-                <Text style={styles.activeFilterPillText}>{selectedLens.toUpperCase()}</Text>
-              </View>
-            )}
-
-            {/* Live Filter Tray */}
-            {renderFilterTray()}
-
-            {/* Zoom Indicator Pill */}
-            <View style={[styles.zoomPill, { bottom: bottomNavHeight + 105 }]}>
-              <Text style={styles.zoomPillText}>{getZoomDisplay()}</Text>
-            </View>
-
-            {/* Bottom Controls */}
-            <CameraControls
-              onCapture={handleCapture}
-              onStartRecording={handleStartRecording}
-              onStopRecording={handleStopRecording}
-              isRecording={isRecording}
-              onGalleryPress={handleGalleryPress}
-              onMemoriesPress={() => navigation.navigate('MemoriesTab')}
+          ) : (
+            <CameraView
+              style={StyleSheet.absoluteFill}
+              facing={facing}
+              flash={flash}
+              mode={cameraMode}
               zoom={zoom}
-              onZoomChange={setZoom}
-            />
-          </CameraView>
+              ref={cameraRef}
+              onCameraReady={() => setCameraReady(true)}
+            >
+              {renderLiveOverlay()}
+
+              {/* Upper Safe Overlay (Avatar, Pill, Settings) */}
+              <View style={[styles.newTopBar, { top: insets.top > 0 ? insets.top + 10 : 20 }]}>
+                <TouchableOpacity
+                  style={styles.profileShortcut}
+                  onPress={() => navigation.navigate('MyProfile')}
+                  activeOpacity={0.8}
+                >
+                  <UserAvatar
+                    name={profile?.full_name || profile?.username || 'User'}
+                    avatarUrl={profile?.avatar_url}
+                    size={36}
+                  />
+                </TouchableOpacity>
+
+                <View style={styles.modePill}>
+                  <Text style={styles.modePillText}>
+                    {defaultDestination === 'memories' ? 'Memories' : defaultDestination === 'drive' ? 'Drive' : 'Vault'}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.toolsTriggerButton, showToolsPanel && styles.toolsTriggerButtonActive]}
+                  onPress={() => setShowToolsPanel((prev) => !prev)}
+                  activeOpacity={0.8}
+                >
+                  <Settings size={20} color={showToolsPanel ? '#000000' : '#FFFFFF'} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Tools Quick Panel Dropdown */}
+              {renderToolsPanel()}
+
+              {/* Timer Countdown Visual */}
+              {countdown !== null && (
+                <View style={styles.countdownContainer}>
+                  <Text style={styles.countdownText}>{countdown}</Text>
+                </View>
+              )}
+
+              {/* Recording Indicator */}
+              {isRecording && (
+                <View style={[styles.recordingIndicator, { top: insets.top > 0 ? insets.top + 60 : 80 }]}>
+                  <View style={styles.recordingRedDot} />
+                  <Text style={styles.recordingTimerText}>{formatDuration(recordingDuration)}</Text>
+                </View>
+              )}
+
+              {/* Selected Lens/Filter indicator label */}
+              {selectedLens !== 'original' && !isRecording && (
+                <View style={[styles.activeFilterPill, { bottom: 64 + insets.bottom + 185 }]}>
+                  <Text style={styles.activeFilterPillText}>{selectedLens.toUpperCase()}</Text>
+                </View>
+              )}
+
+              {/* Live Filter Tray */}
+              {renderFilterTray()}
+
+              {/* Zoom Indicator Pill */}
+              <View style={[styles.zoomPill, { bottom: bottomNavHeight + 105 }]}>
+                <Text style={styles.zoomPillText}>{getZoomDisplay()}</Text>
+              </View>
+
+              {/* Bottom Controls */}
+              <CameraControls
+                onCapture={handleCapture}
+                onStartRecording={handleStartRecording}
+                onStopRecording={handleStopRecording}
+                isRecording={isRecording}
+                onGalleryPress={handleGalleryPress}
+                onMemoriesPress={() => navigation.navigate('MemoriesTab')}
+                zoom={zoom}
+                onZoomChange={setZoom}
+              />
+            </CameraView>
+          )}
         </View>
       ) : (
         <View style={styles.inactiveBackground} />

@@ -6,6 +6,7 @@ import { mediaOptimizationService } from './mediaOptimizationService';
 import { settingsService } from './settingsService';
 import { largeFileService, NORMAL_TELEGRAM_LIMIT_BYTES } from './largeFileService';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Platform } from 'react-native';
 
 const QUEUE_STORAGE_KEY = 'televault_upload_queue';
 let isProcessing = false;
@@ -223,9 +224,26 @@ export const uploadQueueService = {
       }
 
       // Check the actual file size from disk for final safety
-      const fileInfo = await FileSystem.getInfoAsync(finalUri);
-      if (fileInfo.exists) {
-        finalSize = fileInfo.size;
+      if (Platform.OS === 'web') {
+        if (finalSize <= 0) {
+          try {
+            if (finalUri.startsWith('blob:')) {
+              const res = await fetch(finalUri);
+              const blob = await res.blob();
+              finalSize = blob.size;
+            } else if (finalUri.startsWith('data:')) {
+              const base64Str = finalUri.split(',')[1];
+              finalSize = atob(base64Str).length;
+            }
+          } catch (err) {
+            console.warn('Failed to calculate size in processQueueItem:', err);
+          }
+        }
+      } else {
+        const fileInfo = await FileSystem.getInfoAsync(finalUri);
+        if (fileInfo.exists) {
+          finalSize = fileInfo.size;
+        }
       }
 
       // If it is a chunked upload, delegate to largeFileService

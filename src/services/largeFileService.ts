@@ -2,6 +2,19 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../lib/supabase';
 import { telegramService } from './telegramService';
 import { LargeFile, LargeFileChunk, LargeFileStatus, LargeUploadProgress, ChunkedUploadOptions } from '../types/largeFile';
+import { Platform } from 'react-native';
+
+async function deleteFileHelper(tempUri: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    try {
+      if (tempUri.startsWith('blob:')) {
+        URL.revokeObjectURL(tempUri);
+      }
+    } catch (_) {}
+  } else {
+    await FileSystem.deleteAsync(tempUri, { idempotent: true });
+  }
+}
 
 export const NORMAL_TELEGRAM_LIMIT_BYTES = 50 * 1024 * 1024;
 export const CHUNK_SIZE_BYTES = 45 * 1024 * 1024;
@@ -98,6 +111,30 @@ export const largeFileService = {
   ): Promise<string> {
     const position = index * chunkSize;
     const length = Math.min(chunkSize, totalSize - position);
+
+    if (Platform.OS === 'web') {
+      let blob: Blob;
+      if (uri.startsWith('blob:')) {
+        const res = await fetch(uri);
+        blob = await res.blob();
+      } else if (uri.startsWith('data:')) {
+        const arr = uri.split(',');
+        const mime = arr[0].match(/:(.*?);/)![1];
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        blob = new Blob([u8arr], { type: mime });
+      } else {
+        const res = await fetch(uri);
+        blob = await res.blob();
+      }
+      const slicedBlob = blob.slice(position, position + length);
+      return URL.createObjectURL(slicedBlob);
+    }
+
     const tempUri = `${FileSystem.cacheDirectory}chunk_${index}_${Date.now()}.tmp`;
 
     const base64Data = await FileSystem.readAsStringAsync(uri, {
@@ -247,7 +284,7 @@ export const largeFileService = {
           .eq('id', chunk.id);
 
         try {
-          await FileSystem.deleteAsync(tempUri, { idempotent: true });
+          await deleteFileHelper(tempUri);
         } catch (_) {}
 
         chunk.status = 'completed';
@@ -281,7 +318,7 @@ export const largeFileService = {
 
         if (tempUri) {
           try {
-            await FileSystem.deleteAsync(tempUri, { idempotent: true });
+            await deleteFileHelper(tempUri);
           } catch (_) {}
         }
 
@@ -377,7 +414,7 @@ export const largeFileService = {
     } finally {
       if (tempUri) {
         try {
-          await FileSystem.deleteAsync(tempUri, { idempotent: true });
+          await deleteFileHelper(tempUri);
         } catch (_) {}
       }
     }

@@ -3,16 +3,17 @@ import {
   StyleSheet,
   View,
   Text,
-  TextInput,
   FlatList,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
+  Modal,
+  TouchableOpacity,
+  Clipboard,
+  Keyboard,
 } from 'react-native';
-import { ArrowLeft, Send, Camera, Eye } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
 import { chatService } from '../services/chatService';
@@ -20,27 +21,107 @@ import { snapService } from '../services/snapService';
 import { ChatMessage } from '../types/chat';
 import { supabase } from '../lib/supabase';
 
+// Reusable Components
+import ChatBubble from '../components/ChatBubble';
+import SnapBubble from '../components/SnapBubble';
+import MessageComposer from '../components/MessageComposer';
+import ConversationHeader from '../components/ConversationHeader';
+import TypingIndicator from '../components/TypingIndicator';
+import ReactionBar from '../components/ReactionBar';
+import MediaViewer from '../components/MediaViewer';
+
 type Props = NativeStackScreenProps<AppStackParamList, 'ChatRoom'>;
 
 export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
   const { conversationId: initialConversationId, otherUserId, otherUsername, otherFullName } = route.params;
 
+  const insets = useSafeAreaInsets();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
   const [conversationId, setConversationId] = useState<string | undefined>(initialConversationId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // Realtime & Presence
+  const [isOtherOnline, setIsOtherOnline] = useState(false);
+  const [isOtherTyping, setIsOtherTyping] = useState(false);
+  const [reactionsMap, setReactionsMap] = useState<Record<string, string[]>>({});
+  const activeChannelRef = useRef<any>(null);
+
+  // UI state
+  const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null);
+  const [longPressedMessage, setLongPressedMessage] = useState<ChatMessage | null>(null);
+  const [mediaViewerVisible, setMediaViewerVisible] = useState(false);
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<'image' | 'video' | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const pollingIntervalRef = useRef<any>(null);
-  const isRealtimeSubscribed = useRef<boolean>(false);
+  const offlineQueue = useRef<ChatMessage[]>([]);
 
+  // Keyboard height/visibility tracking for list scrolling and safe layout insets
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setKeyboardVisible(true);
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardVisible(false);
+      }
+    );
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  // Fetch current user id
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setCurrentUserId(user.id);
+      }
+    });
+  }, []);
+
+  // Offline queue resend poller (runs every 8 seconds)
+  useEffect(() => {
+    const timer = setInterval(async () => {
+      if (offlineQueue.current.length === 0 || !conversationId) return;
+      const toRetry = [...offlineQueue.current];
+      offlineQueue.current = [];
+
+      for (const msg of toRetry) {
+        try {
+          const realMsg = await chatService.sendMessage(
+            msg.conversation_id,
+            msg.receiver_id,
+            msg.message_text || ''
+          );
+          setMessages((prev) =>
+            prev.map((m) => (m.id === msg.id ? { ...realMsg, status: 'sent' } : m))
+          );
+        } catch (err) {
+          offlineQueue.current.push(msg); // Add back to queue
+        }
+      }
+    }, 8000);
+
+    return () => clearInterval(timer);
+  }, [conversationId]);
+
+  // Polling fallback if supabase realtime connection fails
   const startPolling = (convId: string) => {
     if (pollingIntervalRef.current) return;
-    if (__DEV__) {
-      console.log(`[ChatRoom] Starting fallback polling for conversation ${convId}`);
-    }
     pollingIntervalRef.current = setInterval(async () => {
       try {
         const latestMessages = await chatService.getMessages(convId);
@@ -51,11 +132,11 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
             if (idx !== -1) {
               merged[idx] = msg;
             } else {
-              const tempIndex = merged.findIndex(
+              const tempIdx = merged.findIndex(
                 (m) => m.id.startsWith('temp-') && m.message_text === msg.message_text
               );
-              if (tempIndex !== -1) {
-                merged[tempIndex] = msg;
+              if (tempIdx !== -1) {
+                merged[tempIdx] = msg;
               } else {
                 merged.push(msg);
               }
@@ -63,34 +144,23 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
           });
           return merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
         });
-      } catch (pollErr) {
-        console.error('[ChatRoom] Fallback polling fetch error:', pollErr);
+      } catch (err) {
+        console.warn('Polling error:', err);
       }
-    }, 5000);
+    }, 6000);
   };
 
   const stopPolling = () => {
     if (pollingIntervalRef.current) {
-      if (__DEV__) {
-        console.log('[ChatRoom] Stopping fallback polling');
-      }
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
     }
   };
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setCurrentUserId(user.id);
-      }
-    });
-  }, []);
-
+  // Main chat initialization & Realtime Subscription
   useEffect(() => {
     let activeId = conversationId;
-    let subscription: any = null;
-    let subscriptionTimeout: any = null;
+    let channel: any = null;
 
     const initChat = async () => {
       if (!activeId) {
@@ -99,7 +169,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
           activeId = conv.id;
           setConversationId(conv.id);
         } catch (error) {
-          console.error('Failed to initialize conversation:', error);
+          console.error('Conversation creation failed:', error);
           setLoading(false);
           return;
         }
@@ -110,19 +180,46 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         setMessages(data);
         await chatService.markMessagesRead(activeId);
       } catch (error) {
-        console.error('Fetch Messages Error:', error);
+        console.error('Fetch messages failed:', error);
       } finally {
         setLoading(false);
       }
 
-      subscription = chatService.subscribeToMessages(
-        activeId,
-        (newMsg) => {
+      // Setup Supabase Realtime channel for messages, typing indicator and reactions
+      channel = supabase.channel(`chat:${activeId}`, {
+        config: {
+          broadcast: { self: false },
+          presence: { key: currentUserId || 'unknown' },
+        },
+      });
+
+      activeChannelRef.current = channel;
+
+      // 1. Listen for new inserts in Supabase database
+      channel.on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `conversation_id=eq.${activeId}`,
+        },
+        async (payload: any) => {
+          const newMsg = payload.new as ChatMessage;
+          if (newMsg.snap_id) {
+            const { data: snap } = await supabase
+              .from('snaps')
+              .select('*')
+              .eq('id', newMsg.snap_id)
+              .single();
+            newMsg.snap = snap;
+          }
+
           setMessages((prev) => {
             const exists = prev.some((m) => m.id === newMsg.id);
-            if (exists) {
-              return prev.map((m) => (m.id === newMsg.id ? newMsg : m));
-            }
+            if (exists) return prev;
+
+            // Merge optimistic local message if they have the same text
             if (newMsg.sender_id === currentUserId) {
               const tempIndex = prev.findIndex(
                 (m) => m.id.startsWith('temp-') && m.message_text === newMsg.message_text
@@ -135,56 +232,79 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
             }
             return [...prev, newMsg];
           });
+
           if (currentUserId && newMsg.receiver_id === currentUserId) {
             chatService.markMessagesRead(activeId!);
           }
-        },
-        (status) => {
-          if (__DEV__) {
-            console.log(`[ChatRoom] Subscription status: ${status}`);
-          }
-          if (status === 'SUBSCRIBED') {
-            isRealtimeSubscribed.current = true;
-            stopPolling();
-          } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            isRealtimeSubscribed.current = false;
-            if (activeId) startPolling(activeId);
-          }
         }
       );
+
+      // 2. Listen to status updates (read receipts)
+      channel.on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `conversation_id=eq.${activeId}`,
+        },
+        (payload: any) => {
+          const updatedMsg = payload.new as ChatMessage;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === updatedMsg.id ? { ...m, status: updatedMsg.status } : m))
+          );
+        }
+      );
+
+      // 3. Listen to typing broadcast
+      channel.on('broadcast', { event: 'typing' }, ({ payload }: any) => {
+        if (payload.userId === otherUserId) {
+          setIsOtherTyping(payload.isTyping);
+        }
+      });
+
+      // 4. Listen to reactions broadcast
+      channel.on('broadcast', { event: 'reaction' }, ({ payload }: any) => {
+        setReactionsMap((prev) => {
+          const { messageId, emoji } = payload;
+          const current = prev[messageId] || [];
+          if (!current.includes(emoji)) {
+            return { ...prev, [messageId]: [...current, emoji] };
+          }
+          return prev;
+        });
+      });
+
+      // 5. Track online state via Presence
+      channel
+        .on('presence', { event: 'sync' }, () => {
+          const state = channel.presenceState();
+          const isOnline = Object.keys(state).some((key) => key === otherUserId);
+          setIsOtherOnline(isOnline);
+        })
+        .subscribe((status: string) => {
+          if (status === 'SUBSCRIBED') {
+            stopPolling();
+            channel.track({ online: true });
+          } else {
+            startPolling(activeId!);
+          }
+        });
     };
 
     initChat();
 
-    subscriptionTimeout = setTimeout(() => {
-      if (!isRealtimeSubscribed.current && activeId) {
-        if (__DEV__) {
-          console.log('[ChatRoom] Subscription timeout reached, starting fallback polling');
-        }
-        startPolling(activeId);
-      }
-    }, 3000);
-
     return () => {
-      if (subscriptionTimeout) {
-        clearTimeout(subscriptionTimeout);
-      }
-      if (subscription) {
-        if (__DEV__) {
-          console.log('[ChatRoom] Cleaning up subscription channel');
-        }
-        supabase.removeChannel(subscription);
+      if (channel) {
+        supabase.removeChannel(channel);
       }
       stopPolling();
     };
   }, [conversationId, currentUserId, otherUserId]);
 
-  const handleSend = async () => {
-    const text = inputText.trim();
-    if (!text || !conversationId || !currentUserId) return;
-
-    setInputText('');
-    setSending(true);
+  // Send message flow with optimistic UI
+  const handleSend = async (text: string) => {
+    if (!conversationId || !currentUserId) return;
 
     const tempId = `temp-${Date.now()}`;
     const optimisticMsg: ChatMessage = {
@@ -194,32 +314,200 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
       receiver_id: otherUserId,
       message_type: 'text',
       message_text: text,
-      status: 'sent',
+      status: 'sending',
       created_at: new Date().toISOString(),
     };
 
-    // Add optimistic message instantly to UI
+    // Include reply reference in optimistic local state
+    if (replyToMessage) {
+      (optimisticMsg as any).reply_to = replyToMessage;
+      setReplyToMessage(null);
+    }
+
     setMessages((prev) => [...prev, optimisticMsg]);
 
     try {
       const realMsg = await chatService.sendMessage(conversationId, otherUserId, text);
-      setMessages((prev) => {
-        const exists = prev.some((m) => m.id === realMsg.id);
-        if (exists) {
-          return prev.filter((m) => m.id !== tempId);
-        }
-        return prev.map((m) => (m.id === tempId ? realMsg : m));
-      });
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...realMsg, status: 'sent' } : m))
+      );
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to send message.');
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-    } finally {
-      setSending(false);
+      // Mark as failed and append to offline queue
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, status: 'failed' as any } : m))
+      );
+      offlineQueue.current.push(optimisticMsg);
     }
   };
 
+  const broadcastTyping = (isTyping: boolean) => {
+    if (activeChannelRef.current) {
+      activeChannelRef.current.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: { userId: currentUserId, isTyping },
+      });
+    }
+  };
+
+  const handleOpenSnap = async (snap: any) => {
+    if (!snap) return;
+    const isReceiver = snap.receiver_id === currentUserId;
+
+    if (isReceiver && snap.is_viewed) {
+      Alert.alert('Opened', 'This view-once snap has already been viewed.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const mediaUrl = await snapService.resolveTelegramUrl(snap.telegram_file_id);
+      setLoading(false);
+
+      // Navigate to SnapViewer
+      navigation.navigate('SnapViewer', {
+        snapId: snap.id,
+        mediaUrl,
+        mediaType: snap.media_type,
+        caption: snap.caption || undefined,
+        senderUsername: otherUsername,
+        isStory: false,
+      });
+
+      // Locally mark snap opened
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.snap_id === snap.id) {
+            return {
+              ...m,
+              status: 'read',
+              snap: { ...m.snap, is_viewed: true },
+            };
+          }
+          return m;
+        })
+      );
+    } catch (err: any) {
+      setLoading(false);
+      Alert.alert('Error', err.message || 'Failed to resolve snap.');
+    }
+  };
+
+  const handleReact = (message: ChatMessage, emoji: string) => {
+    setReactionsMap((prev) => {
+      const current = prev[message.id] || [];
+      if (!current.includes(emoji)) {
+        return { ...prev, [message.id]: [...current, emoji] };
+      }
+      return prev;
+    });
+
+    if (activeChannelRef.current) {
+      activeChannelRef.current.send({
+        type: 'broadcast',
+        event: 'reaction',
+        payload: { messageId: message.id, emoji },
+      });
+    }
+
+    setLongPressedMessage(null);
+  };
+
+  const handleCopyMessage = (msgText: string) => {
+    Clipboard.setString(msgText);
+    setLongPressedMessage(null);
+  };
+
+  const handleDeleteMessage = async (msg: ChatMessage) => {
+    try {
+      await supabase.from('chat_messages').delete().eq('id', msg.id);
+      setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+    } catch (err) {
+      Alert.alert('Error', 'Failed to delete message.');
+    }
+    setLongPressedMessage(null);
+  };
+
+  // Pre-process messages to insert date headers and calculate grouping
+  const getProcessedMessagesList = () => {
+    const list: any[] = [];
+    let lastDateStr = '';
+
+    messages.forEach((msg, idx) => {
+      const msgDate = new Date(msg.created_at);
+      const dateStr = msgDate.toDateString();
+
+      // Date Group Header
+      if (dateStr !== lastDateStr) {
+        let label = dateStr;
+        const today = new Date().toDateString();
+        const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toDateString();
+        if (dateStr === today) {
+          label = 'Today';
+        } else if (dateStr === yesterday) {
+          label = 'Yesterday';
+        } else {
+          label = msgDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+        list.push({ id: `date-${dateStr}`, type: 'date-header', label });
+        lastDateStr = dateStr;
+      }
+
+      // Grouping: hide avatar if next message is within 2 minutes by the same sender
+      const nextMsg = messages[idx + 1];
+      const isSameSender = nextMsg && nextMsg.sender_id === msg.sender_id;
+      const timeDiff = nextMsg ? new Date(nextMsg.created_at).getTime() - msgDate.getTime() : Infinity;
+      const isGrouped = isSameSender && timeDiff < 2 * 60 * 1000;
+
+      list.push({
+        ...msg,
+        type: 'message',
+        showAvatar: !isGrouped,
+        reactions: reactionsMap[msg.id] || [],
+      });
+    });
+
+    return list;
+  };
+
+  const renderItem = ({ item }: { item: any }) => {
+    if (item.type === 'date-header') {
+      return (
+        <View style={styles.dateHeaderContainer}>
+          <View style={styles.dateHeaderLine} />
+          <Text style={styles.dateHeaderText}>{item.label}</Text>
+          <View style={styles.dateHeaderLine} />
+        </View>
+      );
+    }
+
+    const isMe = item.sender_id === currentUserId;
+
+    if (item.message_type === 'snap') {
+      return (
+        <SnapBubble
+          snap={item.snap || { id: item.snap_id, media_type: 'image', is_viewed: item.status === 'read' }}
+          isMe={isMe}
+          onOpen={() => handleOpenSnap(item.snap)}
+          senderName={otherUsername}
+        />
+      );
+    }
+
+    return (
+      <ChatBubble
+        message={item}
+        isMe={isMe}
+        showAvatar={item.showAvatar}
+        senderName={otherUsername}
+        onSwipeToReply={(msg) => setReplyToMessage(msg)}
+        onLongPress={(msg) => setLongPressedMessage(msg)}
+        replyToMessage={(item as any).reply_to}
+      />
+    );
+  };
+
   const handleSnapPress = () => {
-    // Open camera screen, passing params to send directly to this user after capture
     navigation.navigate('Main', {
       screen: 'CameraTab',
       params: {
@@ -230,177 +518,119 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     } as any);
   };
 
-  const handleOpenSnap = (snap: any) => {
-    if (!snap) return;
-
-    // Direct snap opening behavior:
-    // If it's sent to current user, we check view_once, etc.
-    const isReceiver = snap.receiver_id === currentUserId;
-
-    if (isReceiver && snap.is_viewed) {
-      Alert.alert('Opened', 'This view-once snap has already been viewed.');
-      return;
-    }
-
-    // Resolve URL and Navigate to Viewer
-    setLoading(true);
-    snapService.resolveTelegramUrl(snap.telegram_file_id)
-      .then((mediaUrl) => {
-        setLoading(false);
-        navigation.navigate('SnapViewer', {
-          snapId: snap.id,
-          mediaUrl,
-          mediaType: snap.media_type,
-          caption: snap.caption || undefined,
-          senderUsername: otherUsername,
-          isStory: false,
-        });
-      })
-      .catch((err) => {
-        setLoading(false);
-        Alert.alert('Error', err.message || 'Failed to resolve snap from Telegram.');
-      });
-  };
-
-  const formatMessageTime = (timeStr: string): string => {
-    try {
-      const d = new Date(timeStr);
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch (_) {
-      return '';
-    }
-  };
-
-  const renderMessageItem = ({ item }: { item: ChatMessage }) => {
-    const isMe = item.sender_id === currentUserId;
-
-    if (item.message_type === 'snap') {
-      const snap = item.snap;
-      const isViewed = snap?.is_viewed || item.status === 'read';
-      const snapTypeLabel = snap?.media_type === 'video' ? 'Video Snap' : 'Photo Snap';
-
-      return (
-        <View style={[styles.messageRow, isMe ? styles.myRow : styles.otherRow]}>
-          <View style={[styles.bubble, isMe ? styles.myBubble : styles.otherBubble, styles.snapBubble]}>
-            <TouchableOpacity 
-              style={styles.snapContent} 
-              onPress={() => handleOpenSnap(snap)}
-              activeOpacity={0.8}
-            >
-              <Camera size={24} color={isMe ? '#000000' : '#FFFC00'} />
-              <View style={styles.snapInfo}>
-                <Text style={[styles.snapText, isMe ? styles.myText : styles.otherText]}>
-                  {snapTypeLabel}
-                </Text>
-                <Text style={styles.snapSubtext}>
-                  {isViewed ? 'Opened' : 'Tap to view'}
-                </Text>
-              </View>
-              {!isViewed && !isMe && <View style={styles.unreadDot} />}
-            </TouchableOpacity>
-            <Text style={[styles.timeText, isMe ? styles.myTime : styles.otherTime]}>
-              {formatMessageTime(item.created_at)}
-            </Text>
-          </View>
-        </View>
-      );
-    }
-
-    return (
-      <View style={[styles.messageRow, isMe ? styles.myRow : styles.otherRow]}>
-        <View style={[styles.bubble, isMe ? styles.myBubble : styles.otherBubble]}>
-          <Text style={[styles.messageText, isMe ? styles.myText : styles.otherText]}>
-            {item.message_text}
-          </Text>
-          <Text style={[styles.timeText, isMe ? styles.myTime : styles.otherTime]}>
-            {formatMessageTime(item.created_at)}
-          </Text>
-        </View>
-      </View>
-    );
-  };
-
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
-          onPress={() => navigation.navigate('UserProfile', { userId: otherUserId, username: otherUsername })}
-          activeOpacity={0.7}
-        >
-          <View style={styles.headerAvatar}>
-            <Text style={styles.headerAvatarText}>
-              {(otherFullName || otherUsername).substring(0, 1).toUpperCase()}
-            </Text>
-          </View>
-          <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerName} numberOfLines={1}>
-              {otherFullName || `@${otherUsername}`}
-            </Text>
-            <Text style={styles.headerUsername}>@{otherUsername}</Text>
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.headerCameraBtn} onPress={handleSnapPress}>
-          <Camera size={22} color="#FFFC00" />
-        </TouchableOpacity>
-      </View>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <ConversationHeader
+        otherFullName={otherFullName || null}
+        otherUsername={otherUsername}
+        isOnline={isOtherOnline}
+        onBack={() => navigation.goBack()}
+        onProfilePress={() =>
+          navigation.navigate('UserProfile', { userId: otherUserId, username: otherUsername })
+        }
+        onSnapPress={handleSnapPress}
+      />
 
-      {/* Messages */}
-      {loading && messages.length === 0 ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFFC00" />
-        </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessageItem}
-          contentContainerStyle={styles.messageList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>Say hi 👋</Text>
-              <Text style={styles.emptySubtext}>
-                Messages are backed up to your private Telegram storage bot log.
-              </Text>
-            </View>
-          }
-        />
-      )}
-
-      {/* Input */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.cameraBtn} onPress={handleSnapPress}>
-            <Camera size={24} color="#FFFC00" />
-          </TouchableOpacity>
-          <TextInput
-            style={styles.input}
-            placeholder="Send a chat message..."
-            placeholderTextColor="#8E8E93"
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
+        <View style={{ flex: 1 }}>
+          {loading && messages.length === 0 ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#FFFC00" />
+            </View>
+          ) : (
+            <FlatList
+              ref={flatListRef}
+              data={getProcessedMessagesList()}
+              keyExtractor={(item) => item.id}
+              renderItem={renderItem}
+              contentContainerStyle={styles.listContent}
+              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+              onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyTitle}>Secure Vault Connection</Text>
+                  <Text style={styles.emptySubtitle}>
+                    Chat backups are logged privately to your personal Telegram Bot Log.
+                  </Text>
+                </View>
+              }
+            />
+          )}
+
+          {isOtherTyping && <TypingIndicator />}
+        </View>
+
+        <View style={{ backgroundColor: '#0A0A0A', paddingBottom: keyboardVisible ? 0 : insets.bottom }}>
+          <MessageComposer
+            onSend={handleSend}
+            onCameraPress={handleSnapPress}
+            onGalleryPress={handleSnapPress}
+            onTyping={broadcastTyping}
+            replyToMessage={replyToMessage}
+            onClearReply={() => setReplyToMessage(null)}
           />
-          <TouchableOpacity
-            style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]}
-            onPress={handleSend}
-            disabled={!inputText.trim() || sending}
-          >
-            <Send size={20} color={inputText.trim() ? '#000000' : '#8E8E93'} />
-          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+
+      {/* Message Reaction & Options Overlay Modal */}
+      <Modal
+        visible={longPressedMessage !== null}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setLongPressedMessage(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setLongPressedMessage(null)}
+        >
+          <View style={styles.modalContent}>
+            {longPressedMessage && (
+              <>
+                <ReactionBar onReact={(emoji) => handleReact(longPressedMessage, emoji)} />
+
+                <View style={styles.optionsList}>
+                  <TouchableOpacity
+                    style={styles.optionBtn}
+                    onPress={() => {
+                      setReplyToMessage(longPressedMessage);
+                      setLongPressedMessage(null);
+                    }}
+                  >
+                    <Text style={styles.optionText}>Reply</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.optionBtn}
+                    onPress={() => handleCopyMessage(longPressedMessage.message_text || '')}
+                  >
+                    <Text style={styles.optionText}>Copy Text</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.optionBtn, styles.deleteOptionBtn]}
+                    onPress={() => handleDeleteMessage(longPressedMessage)}
+                  >
+                    <Text style={styles.deleteOptionText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <MediaViewer
+        visible={mediaViewerVisible}
+        mediaUrl={mediaUrl}
+        mediaType={mediaType}
+        onClose={() => setMediaViewerVisible(false)}
+      />
+    </View>
   );
 };
 
@@ -409,195 +639,92 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    height: 56,
-    borderBottomWidth: 1,
-    borderColor: '#1E1E1E',
-  },
-  headerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFFC00',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  headerAvatarText: {
-    color: '#000000',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  backBtn: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: '#1E1E1E',
-    marginRight: 12,
-  },
-  headerTitleContainer: {
-    flex: 1,
-  },
-  headerName: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  headerUsername: {
-    color: '#8E8E93',
-    fontSize: 12,
-    marginTop: 1,
-  },
-  headerCameraBtn: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: '#1E1E1E',
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  messageList: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-  messageRow: {
-    flexDirection: 'row',
-    marginBottom: 12,
-    width: '100%',
-  },
-  myRow: {
-    justifyContent: 'flex-end',
-  },
-  otherRow: {
-    justifyContent: 'flex-start',
-  },
-  bubble: {
-    maxWidth: '75%',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    position: 'relative',
-  },
-  myBubble: {
-    backgroundColor: '#FFFC00',
-    borderBottomRightRadius: 4,
-  },
-  otherBubble: {
-    backgroundColor: '#1E1E1E',
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: '#2C2C2E',
-  },
-  snapBubble: {
-    minWidth: 160,
-  },
-  messageText: {
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  myText: {
-    color: '#000000',
-  },
-  otherText: {
-    color: '#FFFFFF',
-  },
-  timeText: {
-    fontSize: 10,
-    marginTop: 4,
-    alignSelf: 'flex-end',
-  },
-  myTime: {
-    color: 'rgba(0, 0, 0, 0.5)',
-  },
-  otherTime: {
-    color: '#8E8E93',
-  },
-  snapContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  snapInfo: {
-    marginLeft: 10,
-    flex: 1,
-  },
-  snapText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  snapSubtext: {
-    fontSize: 11,
-    color: '#8E8E93',
-    marginTop: 1,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FFFC00',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderTopWidth: 0,
-    backgroundColor: '#000000',
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-  },
-  cameraBtn: {
-    padding: 10,
-    borderRadius: 22,
-    backgroundColor: '#1C1C1E',
-    marginRight: 8,
-    marginBottom: 2,
-  },
-  input: {
-    flex: 1,
-    color: '#FFFFFF',
-    backgroundColor: '#1C1C1E',
-    borderRadius: 20,
-    paddingHorizontal: 16,
+  listContent: {
+    paddingHorizontal: 8,
     paddingTop: 12,
-    paddingBottom: 12,
-    minHeight: 44,
-    maxHeight: 120,
-    fontSize: 15,
-    borderWidth: 0,
+    paddingBottom: 20,
   },
-  sendBtn: {
-    padding: 10,
-    borderRadius: 22,
-    backgroundColor: '#FFFC00',
-    marginLeft: 8,
+  dateHeaderContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 2,
+    marginVertical: 14,
   },
-  sendBtnDisabled: {
-    backgroundColor: '#1C1C1E',
+  dateHeaderLine: {
+    flex: 1,
+    height: 0.5,
+    backgroundColor: '#1E1E1E',
+    marginHorizontal: 16,
+  },
+  dateHeaderText: {
+    color: '#8E8E93',
+    fontSize: 10.5,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 80,
+    marginTop: 100,
     paddingHorizontal: 32,
   },
-  emptyText: {
+  emptyTitle: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
+    fontWeight: '700',
+    marginBottom: 6,
   },
-  emptySubtext: {
+  emptySubtitle: {
     color: '#8E8E93',
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '80%',
+    backgroundColor: '#0F0F0F',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#1E1E1E',
+    padding: 16,
+  },
+  optionsList: {
+    marginTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#1E1E1E',
+    paddingTop: 8,
+  },
+  optionBtn: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  optionText: {
+    color: '#FFFFFF',
+    fontSize: 14.5,
+    fontWeight: '600',
+  },
+  deleteOptionBtn: {
+    borderTopWidth: 1,
+    borderTopColor: '#1E1E1E',
+    marginTop: 4,
+    paddingTop: 14,
+  },
+  deleteOptionText: {
+    color: '#FF3B30',
+    fontSize: 14.5,
+    fontWeight: '700',
   },
 });
 

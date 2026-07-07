@@ -1,7 +1,20 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
+
+async function webExportHelper(content: string, fileName: string, mimeType: string): Promise<void> {
+  if (typeof document === 'undefined') return;
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 export const exportHelper = {
   /**
@@ -49,6 +62,10 @@ export const exportHelper = {
         txtContent += `\n========================================================\n\n`;
       }
 
+      if (Platform.OS === 'web') {
+        await webExportHelper(txtContent, 'televault_chats_backup.txt', 'text/plain;charset=utf-8');
+        return;
+      }
       const fileUri = `${FileSystem.documentDirectory}televault_chats_backup.txt`;
       await FileSystem.writeAsStringAsync(fileUri, txtContent, { encoding: FileSystem.EncodingType.UTF8 });
       await this.shareFile(fileUri, 'Export Chats TXT');
@@ -73,6 +90,10 @@ export const exportHelper = {
 
       if (error) throw error;
 
+      if (Platform.OS === 'web') {
+        await webExportHelper(JSON.stringify(messages, null, 2), 'televault_chats_backup.json', 'application/json;charset=utf-8');
+        return;
+      }
       const fileUri = `${FileSystem.documentDirectory}televault_chats_backup.json`;
       await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(messages, null, 2));
       await this.shareFile(fileUri, 'Export Chats JSON');
@@ -110,6 +131,10 @@ export const exportHelper = {
         telegram_file_id: f.telegram_file_id,
       }));
 
+      if (Platform.OS === 'web') {
+        await webExportHelper(JSON.stringify(cleanFiles, null, 2), 'televault_drive_files_list.json', 'application/json;charset=utf-8');
+        return;
+      }
       const fileUri = `${FileSystem.documentDirectory}televault_drive_files_list.json`;
       await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(cleanFiles, null, 2));
       await this.shareFile(fileUri, 'Export Drive Files');
@@ -144,6 +169,10 @@ export const exportHelper = {
         telegram_file_id: m.telegram_file_id,
       }));
 
+      if (Platform.OS === 'web') {
+        await webExportHelper(JSON.stringify(cleanMemories, null, 2), 'televault_memories_list.json', 'application/json;charset=utf-8');
+        return;
+      }
       const fileUri = `${FileSystem.documentDirectory}televault_memories_list.json`;
       await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(cleanMemories, null, 2));
       await this.shareFile(fileUri, 'Export Memories List');
@@ -179,6 +208,10 @@ export const exportHelper = {
         system: 'TeleVault Expo React Native',
       };
 
+      if (Platform.OS === 'web') {
+        await webExportHelper(JSON.stringify(metadata, null, 2), 'televault_account_metadata.json', 'application/json;charset=utf-8');
+        return;
+      }
       const fileUri = `${FileSystem.documentDirectory}televault_account_metadata.json`;
       await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(metadata, null, 2));
       await this.shareFile(fileUri, 'Export Account Metadata');

@@ -1,4 +1,4 @@
-import { Image } from 'react-native';
+import { Image, Platform } from 'react-native';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { OptimizedMedia } from '../types/camera';
@@ -16,6 +16,23 @@ const getImageSize = (uri: string): Promise<{ width: number; height: number }> =
 
 export const mediaOptimizationService = {
   async optimizeImageForUpload(uri: string, maxWidth = 1600, quality = 0.75): Promise<OptimizedMedia> {
+    if (Platform.OS === 'web') {
+      try {
+        let size = 0;
+        if (uri.startsWith('blob:')) {
+          const res = await fetch(uri);
+          const blob = await res.blob();
+          size = blob.size;
+        } else if (uri.startsWith('data:')) {
+          const base64Str = uri.split(',')[1];
+          size = atob(base64Str).length;
+        }
+        return { uri, fileSize: size };
+      } catch (err) {
+        return { uri, fileSize: 0 };
+      }
+    }
+
     try {
       // 1. Get original file info
       const fileInfo = await FileSystem.getInfoAsync(uri);

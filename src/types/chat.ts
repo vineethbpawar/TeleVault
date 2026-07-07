@@ -25,7 +25,7 @@ export interface Conversation {
   other_user?: UserProfile;
 }
 
-export type ChatMessageStatus = 'sent' | 'delivered' | 'read';
+export type ChatMessageStatus = 'sending' | 'failed' | 'sent' | 'delivered' | 'read';
 
 export interface ChatMessage {
   id: string;
