@@ -44,7 +44,8 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "export:web": "expo export --platform web && cp public/manifest.json dist/ && cp public/icon-192.png dist/ && cp public/icon-512.png dist/"
   },
   "private": true
 }

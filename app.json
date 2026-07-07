@@ -36,7 +36,10 @@
       "package": "com.anonymous.TeleVault"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png",
+      "backgroundColor": "#0B0E1B",
+      "themeColor": "#0B0E1B"
     },
     "plugins": [
       "expo-background-task",

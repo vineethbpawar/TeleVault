@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npx expo export --platform web",
+  "buildCommand": "npm run export:web",
   "outputDirectory": "dist",
   "rewrites": [
     {
@@ -8,4 +8,3 @@
     }
   ]
 }
-
