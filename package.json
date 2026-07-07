@@ -45,7 +45,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "export:web": "expo export --platform web && cp public/manifest.json dist/ && cp public/icon-192.png dist/ && cp public/icon-512.png dist/"
+    "export:web": "expo export --platform web && cp public/manifest.json dist/ && cp public/icon-192.png dist/ && cp public/icon-512.png dist/ && npx tsc public/sw.ts --outFile dist/sw.js --lib webworker,es2022 --skipLibCheck --target es2022 --noEmit false --ignoreConfig --ignoreDeprecations 6.0"
   },
   "private": true
 }
