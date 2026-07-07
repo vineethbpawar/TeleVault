@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Alert, SafeAreaView, ScrollView, Platform } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Alert, SafeAreaView, ScrollView, Platform, AppState, AppStateStatus } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -71,6 +71,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showToolsPanel, setShowToolsPanel] = useState(false);
   const [profile, setProfile] = useState<{ username?: string; avatar_url?: string; full_name?: string } | null>(null);
   const [locationText, setLocationText] = useState('📍 Fetching Location...');
+  const [hasNativeZoom, setHasNativeZoom] = useState(false);
 
   const cameraRef = useRef<any>(null);
   const webMediaRecorderRef = useRef<any>(null);
@@ -88,41 +89,101 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const initialPinchDistRef = useRef<number | null>(null);
   const initialPinchZoomRef = useRef<number>(0);
 
-  // Web getUserMedia setup effect
+  // Web getUserMedia setup effect with AppState listener
   useEffect(() => {
     if (Platform.OS === 'web' && isFocused) {
       let active = true;
-      setCameraReady(false);
-      navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing === 'back' ? 'environment' : 'user' },
-        audio: true
-      }).catch(() => {
-        // Fallback to video-only if audio is denied or not available
-        return navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facing === 'back' ? 'environment' : 'user' }
-        });
-      }).then(stream => {
-        if (active) {
-          webStreamRef.current = stream;
-          if (webVideoRef.current) {
-            webVideoRef.current.srcObject = stream;
-          }
-          setCameraReady(true);
-        }
-      }).catch(err => {
-        console.error('Failed to get getUserMedia stream on Web:', err);
-      });
+      let streamInstance: MediaStream | null = null;
 
-      return () => {
-        active = false;
+      const startCamera = () => {
+        setCameraReady(false);
+        navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facing === 'back' ? 'environment' : 'user' },
+          audio: true
+        }).catch(() => {
+          // Fallback to video-only if audio is denied or not available
+          return navigator.mediaDevices.getUserMedia({
+            video: { facingMode: facing === 'back' ? 'environment' : 'user' }
+          });
+        }).then(stream => {
+          if (active) {
+            streamInstance = stream;
+            webStreamRef.current = stream;
+            if (webVideoRef.current) {
+              webVideoRef.current.srcObject = stream;
+            }
+            const videoTrack = stream.getVideoTracks()[0];
+            if (videoTrack && typeof videoTrack.getCapabilities === 'function') {
+              const caps = videoTrack.getCapabilities() as any;
+              setHasNativeZoom(!!caps.zoom);
+            } else {
+              setHasNativeZoom(false);
+            }
+            setCameraReady(true);
+          } else {
+            stream.getTracks().forEach(t => t.stop());
+          }
+        }).catch(err => {
+          console.error('Failed to get getUserMedia stream on Web:', err);
+        });
+      };
+
+      const stopCamera = () => {
         setCameraReady(false);
         if (webStreamRef.current) {
           webStreamRef.current.getTracks().forEach((t: any) => t.stop());
           webStreamRef.current = null;
         }
+        if (streamInstance) {
+          streamInstance.getTracks().forEach(t => t.stop());
+          streamInstance = null;
+        }
+      };
+
+      startCamera();
+
+      // Pause/resume camera tracks on App background/foreground changes
+      const handleAppStateChange = (nextAppState: AppStateStatus) => {
+        if (nextAppState === 'active') {
+          startCamera();
+        } else {
+          stopCamera();
+        }
+      };
+
+      const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+      return () => {
+        active = false;
+        subscription.remove();
+        stopCamera();
       };
     }
   }, [isFocused, facing]);
+
+  // Web native hardware zoom constraint application
+  useEffect(() => {
+    if (Platform.OS === 'web' && webStreamRef.current && hasNativeZoom) {
+      const videoTrack = webStreamRef.current.getVideoTracks()[0];
+      if (videoTrack && typeof videoTrack.getCapabilities === 'function') {
+        try {
+          const caps = videoTrack.getCapabilities() as any;
+          if (caps.zoom) {
+            const min = caps.zoom.min || 1;
+            const max = caps.zoom.max || 1;
+            const targetZoom = min + zoom * (max - min);
+            videoTrack.applyConstraints({
+              advanced: [{ zoom: targetZoom }]
+            } as any).catch((err: any) => {
+              console.warn('[ZOOM_WARN] Failed to apply native zoom constraint:', err);
+            });
+          }
+        } catch (err) {
+          console.warn('[ZOOM_WARN] Capabilities query failed:', err);
+        }
+      }
+    }
+  }, [zoom, hasNativeZoom]);
 
   // Fetch Supabase User Profile
   useEffect(() => {
@@ -284,7 +345,17 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           canvas.height = video.videoHeight;
           const ctx = canvas.getContext('2d');
           if (ctx) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            if (!hasNativeZoom && zoom > 0) {
+              // Simulate zoom by center-cropping the video frame
+              const scale = 1 + zoom * 3; // maps [0, 1] to [1, 4]
+              const sWidth = video.videoWidth / scale;
+              const sHeight = video.videoHeight / scale;
+              const sx = (video.videoWidth - sWidth) / 2;
+              const sy = (video.videoHeight - sHeight) / 2;
+              ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+            } else {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            }
             const dataUri = canvas.toDataURL('image/jpeg', 0.9);
             console.log('[RECORD_TRACE] Captured Web photo data URI length:', dataUri.length);
             navigation.navigate('Preview', {
@@ -847,7 +918,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
                   width: '100%',
                   height: '100%',
                   objectFit: 'cover',
-                  transform: `scale(${1 + zoom * 3})`,
+                  transform: hasNativeZoom ? 'scale(1)' : `scale(${1 + zoom * 3})`,
                   transition: 'transform 0.05s ease-out',
                 }}
                 playsInline

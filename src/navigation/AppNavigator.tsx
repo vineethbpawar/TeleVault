@@ -83,21 +83,22 @@ export const AppNavigator: React.FC = () => {
       if (currSession) {
         setRestoringConfig(true);
         await checkUsername(currSession.user.id, currSession.user.email);
-        try {
-          await telegramService.initConfig();
+        setRestoringConfig(false);
+        setLoading(false);
+
+        // Defer Telegram initialization to the background to speed up startup
+        telegramService.initConfig().then(async () => {
           const config = await telegramService.getTelegramConfig();
           if (!config.botToken || !config.channelId) {
-            Alert.alert('Configuration Warning', 'Telegram storage not configured.');
+            console.warn('Telegram storage not configured.');
           }
-        } catch (err) {
+        }).catch(err => {
           console.error('Failed restoring Telegram config:', err);
-        } finally {
-          setRestoringConfig(false);
-        }
+        });
       } else {
         setHasUsername(null);
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     // Get initial session

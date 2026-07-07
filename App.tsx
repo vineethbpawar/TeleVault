@@ -4,27 +4,41 @@ import { NavigationContainer } from '@react-navigation/native';
 import AppNavigator from './src/navigation/AppNavigator';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { uploadQueueService } from './src/services/uploadQueueService';
-import { backgroundUploadService } from './src/services/backgroundUploadTask';
 import { ToastBanner } from './src/components/ToastBanner';
 
 export default function App() {
   useEffect(() => {
-    // Register background task on startup
-    backgroundUploadService.registerBackgroundUploadTask();
+    // Defer non-critical background initialization to improve PWA startup speed
+    const timer = setTimeout(() => {
+      try {
+        const { backgroundUploadService } = require('./src/services/backgroundUploadTask');
+        const { uploadQueueService } = require('./src/services/uploadQueueService');
 
-    // Start upload queue processing on launch
-    uploadQueueService.processUploadQueue();
+        // Register background task on startup
+        backgroundUploadService.registerBackgroundUploadTask();
+
+        // Start upload queue processing on launch
+        uploadQueueService.processUploadQueue();
+      } catch (err) {
+        console.warn('[STARTUP_OPTIMIZATION] Failed lazy-loading background services:', err);
+      }
+    }, 1000);
 
     // Listen to app status changes
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
         console.log('App returned to foreground. Resuming pending uploads...');
-        uploadQueueService.processUploadQueue();
+        try {
+          const { uploadQueueService } = require('./src/services/uploadQueueService');
+          uploadQueueService.processUploadQueue();
+        } catch (err) {
+          console.warn('[STARTUP_OPTIMIZATION] Failed resuming upload queue:', err);
+        }
       }
     });
 
     return () => {
+      clearTimeout(timer);
       subscription.remove();
     };
   }, []);
