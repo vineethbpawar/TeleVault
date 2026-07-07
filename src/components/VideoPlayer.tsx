@@ -13,24 +13,53 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style }) => {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [trackWidth, setTrackWidth] = useState(0);
+  const [controlsVisible, setControlsVisible] = useState(true);
 
   const player = useVideoPlayer(source, (playerInstance) => {
     playerInstance.loop = false;
     playerInstance.play();
   });
 
-  // Sync player properties to local React state periodically (every 200ms)
+  // Use event listeners from expo-video instead of interval polling for performance and accuracy
   useEffect(() => {
-    const timer = setInterval(() => {
-      if (player) {
-        setIsPlaying(player.playing);
-        setCurrentTime(player.currentTime);
+    if (!player) return;
+
+    const timeSub = player.addListener('timeUpdate', (event: any) => {
+      setCurrentTime(event.currentTime);
+    });
+
+    const playingSub = player.addListener('playingChange', (event: any) => {
+      setIsPlaying(event.isPlaying);
+    });
+
+    const statusSub = player.addListener('statusChange', () => {
+      if (player.duration) {
         setDuration(player.duration);
       }
-    }, 200);
+    });
 
-    return () => clearInterval(timer);
+    // Initial sync
+    setIsPlaying(player.playing);
+    setCurrentTime(player.currentTime);
+    setDuration(player.duration);
+
+    return () => {
+      timeSub.remove();
+      playingSub.remove();
+      statusSub.remove();
+    };
   }, [player]);
+
+  // Auto-hide controls after 3 seconds of active playback
+  useEffect(() => {
+    let timer: any;
+    if (isPlaying && controlsVisible) {
+      timer = setTimeout(() => {
+        setControlsVisible(false);
+      }, 3000);
+    }
+    return () => clearTimeout(timer);
+  }, [isPlaying, controlsVisible]);
 
   const togglePlayback = () => {
     if (isPlaying) {
@@ -47,6 +76,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style }) => {
   const handleReplay = () => {
     player.currentTime = 0;
     player.play();
+    setControlsVisible(true);
   };
 
   const handleProgressPress = (e: any) => {
@@ -59,6 +89,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style }) => {
     }
   };
 
+  const handleContainerPress = () => {
+    setControlsVisible((prev) => !prev);
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -67,52 +101,58 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style }) => {
 
   return (
     <View style={[styles.container, style]}>
-      {/* Aspect Ratio Video Container */}
-      <View style={styles.videoWrapper}>
+      {/* Tappable Video Container */}
+      <TouchableOpacity
+        style={styles.videoWrapper}
+        onPress={handleContainerPress}
+        activeOpacity={1}
+      >
         <VideoView
           style={styles.video}
           player={player}
-          nativeControls={false} // Disable native controls in favor of premium overlay UI
+          nativeControls={false} // Custom overlay controls used
         />
-      </View>
+      </TouchableOpacity>
 
-      {/* Control Overlay */}
-      <View style={styles.controlsContainer}>
-        {/* Play / Pause / Replay Buttons Row */}
-        <View style={styles.buttonsRow}>
-          <TouchableOpacity style={styles.controlBtn} onPress={togglePlayback} activeOpacity={0.8}>
-            {isPlaying ? (
-              <Pause size={24} color="#FFFC00" />
-            ) : (
-              <Play size={24} color="#FFFC00" style={{ marginLeft: 2 }} />
-            )}
-          </TouchableOpacity>
+      {/* Control Overlay with fade-in / visibility conditional */}
+      {controlsVisible && (
+        <View style={styles.controlsContainer}>
+          {/* Play / Pause / Replay Buttons Row */}
+          <View style={styles.buttonsRow}>
+            <TouchableOpacity style={styles.controlBtn} onPress={togglePlayback} activeOpacity={0.8}>
+              {isPlaying ? (
+                <Pause size={24} color="#FFFC00" />
+              ) : (
+                <Play size={24} color="#FFFC00" style={{ marginLeft: 2 }} />
+              )}
+            </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.controlBtn, { marginLeft: 16 }]} onPress={handleReplay} activeOpacity={0.8}>
-            <RotateCcw size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Seekable Progress Bar & Duration Counter */}
-        <View style={styles.progressBarRow}>
-          <View
-            style={styles.progressBarTrack}
-            onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
-            onTouchStart={handleProgressPress}
-          >
-            <View
-              style={[
-                styles.progressBarFill,
-                { width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` },
-              ]}
-            />
+            <TouchableOpacity style={[styles.controlBtn, { marginLeft: 16 }]} onPress={handleReplay} activeOpacity={0.8}>
+              <RotateCcw size={20} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
 
-          <Text style={styles.timeText}>
-            {formatTime(currentTime)} / {formatTime(duration)}
-          </Text>
+          {/* Seekable Progress Bar & Duration Counter */}
+          <View style={styles.progressBarRow}>
+            <View
+              style={styles.progressBarTrack}
+              onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+              onTouchStart={handleProgressPress}
+            >
+              <View
+                style={[
+                  styles.progressBarFill,
+                  { width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` },
+                ]}
+              />
+            </View>
+
+            <Text style={styles.timeText}>
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </Text>
+          </View>
         </View>
-      </View>
+      )}
     </View>
   );
 };

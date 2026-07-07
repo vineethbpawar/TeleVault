@@ -10,30 +10,29 @@ export default function App() {
   useEffect(() => {
     // Defer non-critical background initialization to improve PWA startup speed
     const timer = setTimeout(() => {
-      try {
-        const { backgroundUploadService } = require('./src/services/backgroundUploadTask');
-        const { uploadQueueService } = require('./src/services/uploadQueueService');
-
+      Promise.all([
+        import('./src/services/backgroundUploadTask'),
+        import('./src/services/uploadQueueService')
+      ]).then(([{ backgroundUploadService }, { uploadQueueService }]) => {
         // Register background task on startup
         backgroundUploadService.registerBackgroundUploadTask();
 
         // Start upload queue processing on launch
         uploadQueueService.processUploadQueue();
-      } catch (err) {
+      }).catch(err => {
         console.warn('[STARTUP_OPTIMIZATION] Failed lazy-loading background services:', err);
-      }
+      });
     }, 1000);
 
     // Listen to app status changes
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
         console.log('App returned to foreground. Resuming pending uploads...');
-        try {
-          const { uploadQueueService } = require('./src/services/uploadQueueService');
+        import('./src/services/uploadQueueService').then(({ uploadQueueService }) => {
           uploadQueueService.processUploadQueue();
-        } catch (err) {
+        }).catch(err => {
           console.warn('[STARTUP_OPTIMIZATION] Failed resuming upload queue:', err);
-        }
+        });
       }
     });
 

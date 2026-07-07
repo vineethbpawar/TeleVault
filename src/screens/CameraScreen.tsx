@@ -96,6 +96,16 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
       let streamInstance: MediaStream | null = null;
 
       const startCamera = () => {
+        // Resume existing active stream when possible to minimize prompts
+        const isStreamActive = webStreamRef.current && webStreamRef.current.getVideoTracks().some((t: any) => t.readyState === 'live');
+        if (isStreamActive) {
+          if (webVideoRef.current && webVideoRef.current.srcObject !== webStreamRef.current) {
+            webVideoRef.current.srcObject = webStreamRef.current;
+          }
+          setCameraReady(true);
+          return;
+        }
+
         setCameraReady(false);
         navigator.mediaDevices.getUserMedia({
           video: { facingMode: facing === 'back' ? 'environment' : 'user' },
