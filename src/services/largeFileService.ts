@@ -174,13 +174,15 @@ export const largeFileService = {
       chunk_file_name: string;
       original_file_name: string;
       total_chunks: number;
-    }
+    },
+    signal?: AbortSignal,
+    itemId?: string
   ): Promise<{ telegramMessageId: string; telegramFileId: string }> {
     const caption = `📦 Part ${chunkInfo.chunk_index + 1}/${chunkInfo.total_chunks}\n` +
                     `File: ${chunkInfo.original_file_name}\n` +
                     `ID: ${chunkInfo.large_file_id}`;
 
-    return await telegramService.sendFileChunkToTelegram(chunkUri, caption);
+    return await telegramService.sendFileChunkToTelegram(chunkUri, caption, undefined, signal, itemId);
   },
 
   async uploadLargeFileInChunks(
@@ -211,7 +213,9 @@ export const largeFileService = {
   async resumeLargeFileUpload(
     largeFileId: string,
     localUri: string,
-    onProgress?: (progress: LargeUploadProgress) => void
+    onProgress?: (progress: LargeUploadProgress) => void,
+    signal?: AbortSignal,
+    itemId?: string
   ): Promise<void> {
     const { data: largeFile, error: fileError } = await supabase
       .from('large_files')
@@ -245,6 +249,10 @@ export const largeFileService = {
         continue;
       }
 
+      if (signal?.aborted) {
+        throw new Error('Upload aborted by user');
+      }
+
       await supabase
         .from('large_file_chunks')
         .update({ status: 'uploading', error_message: null })
@@ -265,13 +273,17 @@ export const largeFileService = {
 
         tempUri = await this.sliceChunk(localUri, chunk.chunk_index, largeFile.total_size, largeFile.chunk_size);
 
+        if (signal?.aborted) {
+          throw new Error('Upload aborted by user');
+        }
+
         const uploadResult = await this.uploadChunkToTelegram(tempUri, {
           large_file_id: largeFileId,
           chunk_index: chunk.chunk_index,
           chunk_file_name: chunk.chunk_file_name,
           original_file_name: largeFile.original_file_name,
           total_chunks: totalChunks,
-        });
+        }, signal, itemId);
 
         await supabase
           .from('large_file_chunks')

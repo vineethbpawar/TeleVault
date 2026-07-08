@@ -1,7 +1,7 @@
 const sw = self as any;
 
-const CACHE_NAME = 'televault-cache-v1';
-const ASSETS_TO_CACHE = [
+const CACHE_NAME = 'televault-cache-v2';
+const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
@@ -13,7 +13,7 @@ const ASSETS_TO_CACHE = [
 sw.addEventListener('install', (event: any) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+      return cache.addAll(STATIC_ASSETS);
     })
   );
   sw.skipWaiting();
@@ -25,6 +25,7 @@ sw.addEventListener('activate', (event: any) => {
       return Promise.all(
         cacheNames.map((cache) => {
           if (cache !== CACHE_NAME) {
+            console.log('[Service Worker] Deleting old cache:', cache);
             return caches.delete(cache);
           }
         })
@@ -37,27 +38,63 @@ sw.addEventListener('activate', (event: any) => {
 sw.addEventListener('fetch', (event: any) => {
   if (event.request.method !== 'GET') return;
 
-  const url = new URL(event.request.url);
+  const request = event.request;
+  const url = new URL(request.url);
+
+  // Only handle requests to our own origin
   if (url.origin !== sw.location.origin) return;
 
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (response && response.status === 200 && response.type === 'basic') {
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
+  // For HTML navigation requests, implement a network-first strategy falling back to cached index.html
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          return response;
+        })
+        .catch(() => {
+          return caches.match('/index.html').then((cached) => cached || Response.error());
+        })
+    );
+    return;
+  }
+
+  // Cache-first strategy for versioned expo bundles (e.g. assets containing hashes)
+  const isVersionedAsset = url.pathname.includes('/_expo/static/') || url.pathname.match(/\.[a-f0-9]{8,32}\./);
+
+  if (isVersionedAsset) {
+    event.respondWith(
+      caches.match(request).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
         }
-        return response;
-      })
-      .catch(() => {
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) {
-            return cachedResponse;
+        return fetch(request).then((response) => {
+          if (response && response.status === 200) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
           }
-          return caches.match('/index.html') as Promise<Response>;
+          return response;
         });
       })
+    );
+    return;
+  }
+
+  // Stale-While-Revalidate strategy for other static assets
+  event.respondWith(
+    caches.match(request).then((cachedResponse) => {
+      const fetchPromise = fetch(request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const copy = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        }
+        return networkResponse;
+      }).catch(() => {
+        return null;
+      });
+
+      return cachedResponse || fetchPromise.then((res) => res || Response.error());
+    })
   );
 });

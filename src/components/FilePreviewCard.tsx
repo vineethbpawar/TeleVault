@@ -10,6 +10,7 @@ interface FilePreviewCardProps {
   size?: number;
   variant: 'grid' | 'row' | 'recent';
   onPress?: () => void;
+  onLongPress?: () => void;
 }
 
 export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
@@ -17,6 +18,7 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
   size,
   variant,
   onPress,
+  onLongPress,
 }) => {
   const [resolvedUri, setResolvedUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -256,6 +258,7 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
     <TouchableOpacity
       style={getContainerStyle()}
       onPress={onPress}
+      onLongPress={onLongPress}
       activeOpacity={0.8}
     >
       {renderContent()}

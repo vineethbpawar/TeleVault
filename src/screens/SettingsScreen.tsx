@@ -1043,6 +1043,20 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
             <TouchableOpacity
               style={styles.itemRow}
+              onPress={() => navigation.navigate('StorageAnalytics' as any)}
+            >
+              <View style={styles.itemLeft}>
+                <Database size={20} color="#30D158" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Storage Analytics Dashboard</Text>
+                  <Text style={styles.itemSubtitle}>View Telegram storage stats, channel balance, and caches</Text>
+                </View>
+              </View>
+              <ChevronRight size={18} color="#8E8E93" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.itemRow}
               onPress={() => navigation.navigate('ChunkManager')}
             >
               <View style={styles.itemLeft}>

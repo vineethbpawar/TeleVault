@@ -17,6 +17,7 @@ export type MainTabParamList = {
 
 export type AppStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
+  StorageAnalytics: undefined;
   Main: NavigatorScreenParams<MainTabParamList>;
   TelegramConnect: { fromSettings?: boolean } | undefined;
   Preview: {

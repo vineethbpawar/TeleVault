@@ -36,18 +36,7 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ visible, onClose
   };
 
   const handleCancel = async (item: UploadQueueItem) => {
-    if (item.large_file_id) {
-      try {
-        const { largeFileService } = require('../services/largeFileService');
-        await largeFileService.cancelLargeFileUpload(item.large_file_id);
-      } catch (err) {
-        console.error('Error cancelling large file upload:', err);
-      }
-    }
-    await uploadQueueService.updateUploadQueueItem(item.id, {
-      status: 'failed',
-      error_message: 'Upload cancelled by user',
-    });
+    await uploadQueueService.cancelUpload(item.id);
   };
 
   const handleClearCompleted = () => {
@@ -62,6 +51,8 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ visible, onClose
         return <AlertCircle size={18} color="#FF453A" />;
       case 'uploading':
         return <ActivityIndicator size="small" color="#FFFC00" />;
+      case 'paused':
+        return <Clock size={18} color="#FF9500" />;
       default:
         return <Clock size={18} color="#8E8E93" />;
     }
@@ -87,6 +78,9 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ visible, onClose
     }
     if (item.status === 'failed') {
       return item.error_message || 'Failed';
+    }
+    if (item.status === 'paused') {
+      return 'Paused';
     }
     if (item.status === 'pending') {
       return item.stage || 'Queued';
@@ -190,15 +184,42 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ visible, onClose
                     </View>
 
                     <View style={styles.itemActions}>
-                      {isUploading && item.upload_mode === 'chunked' && (
-                        <TouchableOpacity
-                          style={styles.cancelBtn}
-                          onPress={() => handleCancel(item)}
-                          activeOpacity={0.7}
-                        >
-                          <X size={14} color="#FF9500" />
-                          <Text style={styles.cancelBtnText}>Cancel</Text>
-                        </TouchableOpacity>
+                      {isUploading && (
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                          <TouchableOpacity
+                            style={[styles.smallActionBtn, { backgroundColor: '#FF9500' }]}
+                            onPress={() => uploadQueueService.pauseUpload(item.id)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.smallActionBtnText}>Pause</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.smallActionBtn, { backgroundColor: '#3A3A3C' }]}
+                            onPress={() => uploadQueueService.cancelUpload(item.id)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.smallActionBtnText}>Cancel</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+
+                      {item.status === 'paused' && (
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                          <TouchableOpacity
+                            style={[styles.smallActionBtn, { backgroundColor: '#30D158' }]}
+                            onPress={() => uploadQueueService.resumeUpload(item.id)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[styles.smallActionBtnText, { color: '#000000', fontWeight: '700' }]}>Resume</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.smallActionBtn, { backgroundColor: '#3A3A3C' }]}
+                            onPress={() => uploadQueueService.cancelUpload(item.id)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.smallActionBtnText}>Cancel</Text>
+                          </TouchableOpacity>
+                        </View>
                       )}
 
                       {isFailed && (
@@ -442,6 +463,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(255, 69, 58, 0.1)',
     borderRadius: 16,
+  },
+  smallActionBtn: {
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  smallActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
   },
   footer: {
     paddingHorizontal: 20,

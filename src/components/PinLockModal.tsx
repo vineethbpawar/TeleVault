@@ -9,6 +9,7 @@ interface PinLockModalProps {
   onClose: () => void;
   onSuccess: () => void;
   mode?: 'verify' | 'create';
+  undismissable?: boolean;
 }
 
 export const PinLockModal: React.FC<PinLockModalProps> = ({
@@ -16,12 +17,32 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
   onClose,
   onSuccess,
   mode = 'verify',
+  undismissable = false,
 }) => {
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [step, setStep] = useState<'enter' | 'confirm'>('enter');
   const [error, setError] = useState('');
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutSec, setLockoutSec] = useState(0);
+
+  // Lockout countdown timer
+  useEffect(() => {
+    if (lockoutSec <= 0) return;
+    const interval = setInterval(() => {
+      setLockoutSec((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setFailedAttempts(0);
+          setError('');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [lockoutSec]);
 
   // Check biometric support
   useEffect(() => {
@@ -40,18 +61,21 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
       setPin('');
       setConfirmPin('');
       setStep('enter');
-      setError('');
+      if (lockoutSec <= 0) {
+        setError('');
+      }
 
-      if (mode === 'verify') {
+      if (mode === 'verify' && lockoutSec <= 0) {
         // Auto trigger biometrics
         setTimeout(() => {
           triggerBiometrics();
         }, 500);
       }
     }
-  }, [visible, biometricsAvailable]);
+  }, [visible, biometricsAvailable, lockoutSec]);
 
   const triggerBiometrics = async () => {
+    if (lockoutSec > 0) return;
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     const isEnrolled = await LocalAuthentication.isEnrolledAsync();
     const isEnabled = await securityService.isBiometricsEnabled();
@@ -63,6 +87,7 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
           fallbackLabel: 'Enter PIN',
         });
         if (result.success) {
+          setFailedAttempts(0);
           onSuccess();
         }
       } catch (err) {
@@ -72,6 +97,7 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
   };
 
   const handleKeyPress = (num: string) => {
+    if (lockoutSec > 0) return;
     setError('');
     const currentInput = step === 'enter' ? pin : confirmPin;
     if (currentInput.length >= 4) return;
@@ -85,6 +111,7 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
   };
 
   const handleBackspace = () => {
+    if (lockoutSec > 0) return;
     setError('');
     const currentInput = step === 'enter' ? pin : confirmPin;
     if (currentInput.length === 0) return;
@@ -100,14 +127,23 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
   // Monitor input length to auto-trigger verification
   useEffect(() => {
     const checkPin = async () => {
+      if (lockoutSec > 0) return;
       if (mode === 'verify') {
         if (pin.length === 4) {
           const isValid = await securityService.verifyPin(pin);
           if (isValid) {
+            setFailedAttempts(0);
             onSuccess();
           } else {
-            setError('Incorrect PIN. Please try again.');
+            const nextFailed = failedAttempts + 1;
+            setFailedAttempts(nextFailed);
             setPin('');
+            if (nextFailed >= 5) {
+              setLockoutSec(30);
+              setError('Too many incorrect attempts. Locked for 30 seconds.');
+            } else {
+              setError(`Incorrect PIN. ${5 - nextFailed} attempts remaining.`);
+            }
           }
         }
       } else {
@@ -130,9 +166,12 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
     };
 
     checkPin();
-  }, [pin, confirmPin]);
+  }, [pin, confirmPin, lockoutSec]);
 
   const getHeading = () => {
+    if (lockoutSec > 0) {
+      return 'Temporarily Locked';
+    }
     if (mode === 'verify') {
       return 'Enter PIN';
     }
@@ -140,6 +179,9 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
   };
 
   const getSubheading = () => {
+    if (lockoutSec > 0) {
+      return `Try again in ${lockoutSec} seconds`;
+    }
     if (mode === 'verify') {
       return 'Please enter your 4-digit security PIN';
     }
@@ -169,9 +211,10 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
     return (
       <TouchableOpacity
         key={val}
-        style={styles.keypadButton}
+        style={[styles.keypadButton, lockoutSec > 0 && { opacity: 0.3 }]}
         onPress={() => handleKeyPress(val)}
         activeOpacity={0.7}
+        disabled={lockoutSec > 0}
       >
         <Text style={styles.keypadText}>{val}</Text>
       </TouchableOpacity>
@@ -182,11 +225,13 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
     <Modal visible={visible} animationType="slide" transparent={false}>
       <SafeAreaView style={styles.container}>
         {/* Header Close button */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <X size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
+        {!undismissable && (
+          <View style={styles.header}>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <X size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.contentContainer}>
           <View style={styles.iconCircle}>
@@ -196,7 +241,7 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
           <Text style={styles.heading}>{getHeading()}</Text>
           <Text style={styles.subheading}>{getSubheading()}</Text>
 
-          {renderDots()}
+          {lockoutSec <= 0 && renderDots()}
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </View>
@@ -219,9 +264,12 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
                 style={styles.keypadButton}
                 onPress={triggerBiometrics}
                 activeOpacity={0.7}
+                disabled={lockoutSec > 0}
               >
-                <Fingerprint size={28} color="#FFFC00" />
+                <Fingerprint size={28} color={lockoutSec > 0 ? "#555" : "#FFFC00"} />
               </TouchableOpacity>
+            ) : undismissable ? (
+              <View style={styles.keypadButton} />
             ) : (
               <TouchableOpacity
                 style={styles.keypadButton}
@@ -236,9 +284,10 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
 
             {/* Delete/Backspace */}
             <TouchableOpacity
-              style={styles.keypadButton}
+              style={[styles.keypadButton, lockoutSec > 0 && { opacity: 0.3 }]}
               onPress={handleBackspace}
               activeOpacity={0.7}
+              disabled={lockoutSec > 0}
             >
               <Delete size={24} color="#FFFFFF" />
             </TouchableOpacity>

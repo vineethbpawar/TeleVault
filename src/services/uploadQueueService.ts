@@ -10,11 +10,106 @@ import { Platform } from 'react-native';
 
 const QUEUE_STORAGE_KEY = 'televault_upload_queue';
 let isProcessing = false;
+let isRecovered = false;
+const activeControllers = new Map<string, AbortController>();
+const activeNativeTasks = new Map<string, any>();
 
 type QueueListener = (queue: UploadQueueItem[]) => void;
 let listeners: QueueListener[] = [];
 
 export const uploadQueueService = {
+  activeNativeTasks,
+  activeControllers,
+
+  registerNativeUploadTask(itemId: string, task: any) {
+    activeNativeTasks.set(itemId, task);
+  },
+
+  unregisterNativeUploadTask(itemId: string) {
+    activeNativeTasks.delete(itemId);
+  },
+
+  async pauseUpload(id: string): Promise<void> {
+    console.log(`[Queue] Pausing upload: ${id}`);
+    const controller = activeControllers.get(id);
+    if (controller) {
+      controller.abort();
+      activeControllers.delete(id);
+    }
+
+    const task = activeNativeTasks.get(id);
+    if (task) {
+      try {
+        await task.cancelAsync();
+      } catch (_) {}
+      activeNativeTasks.delete(id);
+    }
+
+    await this.updateUploadQueueItem(id, {
+      status: 'paused',
+      stage: 'Paused',
+    });
+  },
+
+  async resumeUpload(id: string): Promise<void> {
+    console.log(`[Queue] Resuming upload: ${id}`);
+    await this.updateUploadQueueItem(id, {
+      status: 'pending',
+      stage: 'Queued',
+      progress: 0,
+      retry_count: 0, // Reset retry count on manual resume
+    });
+    this.processUploadQueue().catch(err => {
+      console.error('Failed to trigger queue on resume:', err);
+    });
+  },
+
+  async cancelUpload(id: string): Promise<void> {
+    console.log(`[Queue] Cancelling upload: ${id}`);
+    const controller = activeControllers.get(id);
+    if (controller) {
+      controller.abort();
+      activeControllers.delete(id);
+    }
+
+    const task = activeNativeTasks.get(id);
+    if (task) {
+      try {
+        await task.cancelAsync();
+      } catch (_) {}
+      activeNativeTasks.delete(id);
+    }
+
+    await this.removeUploadQueueItem(id);
+  },
+
+  async recoverUploadQueue(): Promise<void> {
+    console.log('[Queue] Running upload queue recovery check...');
+    try {
+      const queue = await this.getUploadQueue();
+      let changed = false;
+      const recovered = queue.map(item => {
+        if (item.status === 'uploading') {
+          changed = true;
+          return {
+            ...item,
+            status: 'pending' as const,
+            stage: 'Recovered',
+            progress: 0,
+          };
+        }
+        return item;
+      });
+
+      if (changed) {
+        await this.saveUploadQueue(recovered);
+        await this.notifyListeners();
+      }
+    } catch (err) {
+      console.error('Queue recovery failed:', err);
+    }
+  },
+
   subscribeToQueue(listener: QueueListener): () => void {
     listeners.push(listener);
     // Initial call
@@ -157,6 +252,11 @@ export const uploadQueueService = {
   },
 
   async processUploadQueue(): Promise<void> {
+    if (!isRecovered) {
+      isRecovered = true;
+      await this.recoverUploadQueue();
+    }
+
     const settings = await settingsService.getSettings();
     const maxConcurrency = settings.uploadMode === 'Fast' ? 2 : 1;
 
@@ -202,6 +302,8 @@ export const uploadQueueService = {
     const itemId = pendingItem.id;
     console.log(`Starting processing for queue item: ${pendingItem.file_name}`);
     let tempEncryptedUri: string | null = null;
+    const controller = new AbortController();
+    activeControllers.set(itemId, controller);
 
     try {
       // 1. Preparing stage
@@ -259,6 +361,10 @@ export const uploadQueueService = {
         }
       }
 
+      if (controller.signal.aborted) {
+        throw new Error('Upload aborted by user');
+      }
+
       // If it is a chunked upload, delegate to largeFileService
       if (finalSize > NORMAL_TELEGRAM_LIMIT_BYTES || pendingItem.upload_mode === 'chunked') {
         let largeFileId = pendingItem.large_file_id;
@@ -291,7 +397,9 @@ export const uploadQueueService = {
               stage: `Uploading part ${progress.uploadedChunks}/${progress.totalChunks}`,
               chunk_progress: `Part ${progress.uploadedChunks}/${progress.totalChunks}`,
             });
-          }
+          },
+          controller.signal,
+          itemId
         );
 
         await this.updateUploadQueueItem(itemId, {
@@ -317,7 +425,13 @@ export const uploadQueueService = {
         finalUri,
         pendingItem.file_type,
         pendingItem.file_name,
-        pendingItem.mime_type
+        pendingItem.mime_type,
+        async (percent) => {
+          const mapped = Math.round(40 + (percent / 100) * 45);
+          await this.updateUploadQueueItem(itemId, { progress: mapped, stage: 'Uploading...' });
+        },
+        controller.signal,
+        itemId
       );
 
       await this.updateUploadQueueItem(itemId, { stage: 'Uploading...', progress: 85 });
@@ -343,6 +457,22 @@ export const uploadQueueService = {
       await this.updateUploadQueueItem(itemId, { status: 'completed', stage: 'Completed', progress: 100 });
       console.log(`Successfully uploaded and saved metadata for ${pendingItem.file_name}`);
     } catch (itemError: any) {
+      activeControllers.delete(itemId);
+
+      // Verify current item status before flagging it as failed
+      const queue = await this.getUploadQueue();
+      const currentItem = queue.find(item => item.id === itemId);
+
+      if (currentItem && currentItem.status === 'paused') {
+        console.log(`[Queue] Item ${pendingItem.file_name} was paused by user.`);
+        return;
+      }
+
+      if (!currentItem) {
+        console.log(`[Queue] Item ${pendingItem.file_name} was cancelled/removed by user.`);
+        return;
+      }
+
       console.error(`Failed to upload queue item ${itemId}:`, itemError);
       const maxRetries = 5;
       const currentRetry = pendingItem.retry_count || 0;
@@ -375,6 +505,7 @@ export const uploadQueueService = {
         });
       }
     } finally {
+      activeControllers.delete(itemId);
       if (tempEncryptedUri && Platform.OS !== 'web') {
         try {
           await FileSystem.deleteAsync(tempEncryptedUri, { idempotent: true });
