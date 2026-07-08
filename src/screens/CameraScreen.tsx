@@ -292,6 +292,10 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleCameraTouchStart = (e: any) => {
     const touches = e.nativeEvent.touches;
     if (touches && touches.length === 2) {
+      if (Platform.OS === 'web') {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (e.nativeEvent && typeof e.nativeEvent.preventDefault === 'function') e.nativeEvent.preventDefault();
+      }
       const dist = calcDistance(touches);
       initialPinchDistRef.current = dist;
       initialPinchZoomRef.current = zoom;
@@ -301,6 +305,10 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleCameraTouchMove = (e: any) => {
     const touches = e.nativeEvent.touches;
     if (touches && touches.length === 2 && initialPinchDistRef.current) {
+      if (Platform.OS === 'web') {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (e.nativeEvent && typeof e.nativeEvent.preventDefault === 'function') e.nativeEvent.preventDefault();
+      }
       const currentDist = calcDistance(touches);
       const ratio = currentDist / initialPinchDistRef.current;
       const zoomFactor = 0.5; // gentle mapping speed
@@ -907,16 +915,35 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const bottomNavHeight = 64 + insets.bottom;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, Platform.OS === 'web' ? {
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
+      WebkitTouchCallout: 'none',
+      WebkitTapHighlightColor: 'transparent',
+      touchAction: 'none',
+    } as any : {}]}>
       {isFocused ? (
         <View 
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, Platform.OS === 'web' ? {
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            WebkitTouchCallout: 'none',
+            WebkitTapHighlightColor: 'transparent',
+            touchAction: 'none',
+          } as any : {}]}
           onTouchStart={handleCameraTouchStart}
           onTouchMove={handleCameraTouchMove}
           onTouchEnd={handleCameraTouchEnd}
         >
           {Platform.OS === 'web' ? (
-            <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
+            <View style={[StyleSheet.absoluteFill, { 
+              overflow: 'hidden',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none',
+              WebkitTapHighlightColor: 'transparent',
+              touchAction: 'none',
+            } as any]}>
               <video
                 ref={webVideoRef}
                 style={{
@@ -930,7 +957,12 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
                   objectFit: 'cover',
                   transform: hasNativeZoom ? 'scale(1)' : `scale(${1 + zoom * 3})`,
                   transition: 'transform 0.05s ease-out',
-                }}
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
+                  WebkitTouchCallout: 'none',
+                  WebkitTapHighlightColor: 'transparent',
+                  touchAction: 'none',
+                } as any}
                 playsInline
                 muted
                 autoPlay
