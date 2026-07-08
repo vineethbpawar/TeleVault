@@ -7,11 +7,42 @@ async function uploadFileHelper(
   url: string,
   localUri: string,
   fieldName: string,
-  parameters: Record<string, string>
+  parameters: Record<string, string>,
+  onProgress?: (percent: number) => void,
+  signal?: AbortSignal,
+  itemId?: string
 ): Promise<{ status: number; body: string }> {
   if (Platform.OS === 'web') {
-    try {
-      let blob: Blob;
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          xhr.abort();
+          reject(new DOMException('Upload aborted', 'AbortError'));
+        });
+      }
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          onProgress(percent);
+        }
+      };
+
+      xhr.onload = () => {
+        resolve({
+          status: xhr.status,
+          body: xhr.responseText,
+        });
+      };
+
+      xhr.onerror = () => {
+        reject(new Error('Network upload error'));
+      };
+
+      const formData = new FormData();
       if (localUri.startsWith('data:')) {
         const arr = localUri.split(',');
         const mime = arr[0].match(/:(.*?);/)![1];
@@ -21,45 +52,80 @@ async function uploadFileHelper(
         while (n--) {
           u8arr[n] = bstr.charCodeAt(n);
         }
-        blob = new Blob([u8arr], { type: mime });
+        const blob = new Blob([u8arr], { type: mime });
+        const fileName = parameters.caption || 'file';
+        formData.append(fieldName, blob, fileName);
       } else {
-        const res = await fetch(localUri);
-        blob = await res.blob();
+        fetch(localUri)
+          .then(res => res.blob())
+          .then(blob => {
+            const fileName = parameters.caption || 'file';
+            formData.append(fieldName, blob, fileName);
+            Object.keys(parameters).forEach((key) => {
+              formData.append(key, parameters[key]);
+            });
+            xhr.send(formData);
+          })
+          .catch(reject);
+        return;
       }
-
-      const formData = new FormData();
-      const fileName = parameters.caption || 'file';
-      formData.append(fieldName, blob, fileName);
 
       Object.keys(parameters).forEach((key) => {
         formData.append(key, parameters[key]);
       });
+      xhr.send(formData);
+    });
+  } else {
+    const { uploadQueueService } = require('./uploadQueueService');
+    const task = FileSystem.createUploadTask(
+      url,
+      localUri,
+      {
+        fieldName: fieldName,
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        parameters: parameters,
+      },
+      (data) => {
+        if (onProgress && data.totalBytesExpectedToSend > 0) {
+          const percent = Math.round((data.totalBytesSent / data.totalBytesExpectedToSend) * 100);
+          onProgress(percent);
+        }
+      }
+    );
 
-      const response = await fetch(url, {
-        method: 'POST',
-        body: formData,
-      });
+    if (itemId) {
+      uploadQueueService.registerNativeUploadTask(itemId, task);
+    }
 
-      const bodyText = await response.text();
+    try {
+      if (signal) {
+        signal.addEventListener('abort', async () => {
+          try {
+            await task.cancelAsync();
+          } catch (_) {}
+        });
+      }
+
+      const result = await task.uploadAsync();
+      if (itemId) {
+        uploadQueueService.unregisterNativeUploadTask(itemId);
+      }
+
+      if (!result) {
+        throw new Error('Upload task returned empty response.');
+      }
+
       return {
-        status: response.status,
-        body: bodyText,
+        status: result.status,
+        body: result.body,
       };
-    } catch (err: any) {
-      console.error('Web upload helper failed:', err);
+    } catch (err) {
+      if (itemId) {
+        uploadQueueService.unregisterNativeUploadTask(itemId);
+      }
       throw err;
     }
-  } else {
-    const uploadResult = await FileSystem.uploadAsync(url, localUri, {
-      fieldName: fieldName,
-      httpMethod: 'POST',
-      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-      parameters: parameters,
-    });
-    return {
-      status: uploadResult.status,
-      body: uploadResult.body,
-    };
   }
 }
 
@@ -69,6 +135,15 @@ const CHANNEL_ID_KEY = 'telegram_channel_id';
 export interface TelegramConfig {
   botToken: string | null;
   channelId: string | null;
+}
+
+export interface TelegramChannelConfig {
+  id: string;
+  name: string;
+  status: 'healthy' | 'unhealthy';
+  filesUploaded: number;
+  bytesUploaded: number;
+  lastUsedAt: string | null;
 }
 
 export interface TelegramUploadResult {
@@ -179,6 +254,96 @@ export const telegramService = {
     }
   },
 
+  async getChannelsList(): Promise<TelegramChannelConfig[]> {
+    try {
+      const stored = await storageService.getItem('telegram_channels_list');
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (_) {}
+    
+    const primary = await storageService.getItem(CHANNEL_ID_KEY);
+    if (primary) {
+      return [{
+        id: primary,
+        name: 'Primary Channel',
+        status: 'healthy',
+        filesUploaded: 0,
+        bytesUploaded: 0,
+        lastUsedAt: new Date().toISOString(),
+      }];
+    }
+    return [];
+  },
+
+  async saveChannelsList(list: TelegramChannelConfig[]): Promise<void> {
+    await storageService.setItem('telegram_channels_list', JSON.stringify(list));
+  },
+
+  async monitorChannelsHealth(): Promise<TelegramChannelConfig[]> {
+    const list = await this.getChannelsList();
+    const botToken = await storageService.getItem(BOT_TOKEN_KEY);
+    if (!botToken || list.length === 0) return list;
+
+    const checkedList = await Promise.all(list.map(async (chan) => {
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${botToken}/getChat?chat_id=${chan.id}`);
+        const data = await res.json();
+        return {
+          ...chan,
+          status: (data.ok ? 'healthy' as const : 'unhealthy' as const),
+          name: data.ok && data.result ? (data.result.title || chan.name) : chan.name,
+        };
+      } catch (_) {
+        return {
+          ...chan,
+          status: 'unhealthy' as const,
+        };
+      }
+    }));
+
+    await this.saveChannelsList(checkedList);
+    return checkedList;
+  },
+
+  async selectTargetChannel(fileSize: number): Promise<string> {
+    const list = await this.getChannelsList();
+    const healthy = list.filter(c => c.status === 'healthy');
+    if (healthy.length === 0) {
+      const primary = await storageService.getItem(CHANNEL_ID_KEY);
+      if (!primary) {
+        throw new Error('No Telegram channels configured.');
+      }
+      return primary;
+    }
+
+    healthy.sort((a, b) => a.bytesUploaded - b.bytesUploaded);
+    const chosen = healthy[0];
+
+    const updatedList = list.map(c => {
+      if (c.id === chosen.id) {
+        return {
+          ...c,
+          filesUploaded: c.filesUploaded + 1,
+          bytesUploaded: c.bytesUploaded + fileSize,
+          lastUsedAt: new Date().toISOString(),
+        };
+      }
+      return c;
+    });
+    await this.saveChannelsList(updatedList);
+
+    return chosen.id;
+  },
+
+  async markChannelStatus(channelId: string, status: 'healthy' | 'unhealthy'): Promise<void> {
+    try {
+      const list = await this.getChannelsList();
+      const updated = list.map(c => c.id === channelId ? { ...c, status } : c);
+      await this.saveChannelsList(updated);
+    } catch (_) {}
+  },
+
   async testTelegramConnection(botToken: string, channelId: string): Promise<boolean> {
     try {
       const trimmedToken = botToken.trim();
@@ -211,12 +376,15 @@ export const telegramService = {
     localUri: string,
     fileType: 'image' | 'video' | 'document',
     fileName: string,
-    mimeType?: string
+    mimeType?: string,
+    onProgress?: (percent: number) => void,
+    signal?: AbortSignal,
+    itemId?: string
   ): Promise<TelegramUploadResult> {
     const { botToken, channelId } = await this.getTelegramConfig();
 
-    if (!botToken || !channelId) {
-      throw new Error('Telegram configuration is missing. Please set your Bot Token and Channel ID in Settings.');
+    if (!botToken) {
+      throw new Error('Telegram configuration is missing. Please set your Bot Token in Settings.');
     }
 
     let fileSizeInMB = 0;
@@ -246,6 +414,13 @@ export const telegramService = {
       throw new Error('File exceeds 50 MB limit.');
     }
 
+    const fileSizeInBytes = Math.round(fileSizeInMB * 1024 * 1024);
+    const targetChannelId = await this.selectTargetChannel(fileSizeInBytes).catch(() => channelId);
+
+    if (!targetChannelId) {
+      throw new Error('Telegram channel ID is missing.');
+    }
+
     let endpoint = 'sendDocument';
     let fieldName = 'document';
 
@@ -257,69 +432,97 @@ export const telegramService = {
       fieldName = 'video';
     }
 
+    let finalChannelId = targetChannelId;
+    let uploadResult;
     try {
       const url = `https://api.telegram.org/bot${botToken}/${endpoint}`;
       
-      const uploadResult = await uploadFileHelper(url, localUri, fieldName, {
-        chat_id: channelId,
-        caption: fileName,
-      });
-
-      if (uploadResult.status < 200 || uploadResult.status >= 300) {
-        let errorMsg = `HTTP Error ${uploadResult.status}`;
-        try {
-          const bodyJson = JSON.parse(uploadResult.body);
-          if (bodyJson.description) {
-            errorMsg = bodyJson.description;
-          }
-        } catch (_) {}
-        throw new Error(errorMsg);
-      }
-
-      const responseData = JSON.parse(uploadResult.body);
-      if (!responseData.ok) {
-        throw new Error(responseData.description || 'Telegram upload API returned error.');
-      }
-
-      const result = responseData.result;
-      const telegramMessageId = String(result.message_id);
-      let telegramFileId = '';
-      let telegramFileUniqueId = '';
-
-      if (fileType === 'image' && result.photo) {
-        const photoArr = result.photo;
-        // Last element is the largest size
-        const largestPhoto = photoArr[photoArr.length - 1];
-        telegramFileId = largestPhoto.file_id;
-        telegramFileUniqueId = largestPhoto.file_unique_id;
-      } else if (fileType === 'video' && result.video) {
-        telegramFileId = result.video.file_id;
-        telegramFileUniqueId = result.video.file_unique_id;
-      } else if (result.document) {
-        telegramFileId = result.document.file_id;
-        telegramFileUniqueId = result.document.file_unique_id;
-      } else {
-        // Fallback to document if it was sent as document
-        const key = Object.keys(result).find(
-          (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
+      uploadResult = await uploadFileHelper(
+        url,
+        localUri,
+        fieldName,
+        {
+          chat_id: finalChannelId,
+          caption: fileName,
+        },
+        onProgress,
+        signal,
+        itemId
+      );
+    } catch (uploadError: any) {
+      console.warn(`[Failover] Upload to channel ${finalChannelId} failed. Trying failover...`, uploadError);
+      await this.markChannelStatus(finalChannelId, 'unhealthy');
+      
+      const fallback = await this.selectTargetChannel(fileSizeInBytes).catch(() => null);
+      if (fallback && fallback !== finalChannelId) {
+        finalChannelId = fallback;
+        const url = `https://api.telegram.org/bot${botToken}/${endpoint}`;
+        uploadResult = await uploadFileHelper(
+          url,
+          localUri,
+          fieldName,
+          {
+            chat_id: finalChannelId,
+            caption: fileName,
+          },
+          onProgress,
+          signal,
+          itemId
         );
-        if (key) {
-          telegramFileId = result[key].file_id;
-          telegramFileUniqueId = result[key].file_unique_id;
-        } else {
-          throw new Error('Telegram response did not return a valid file ID.');
-        }
+      } else {
+        throw uploadError;
       }
-
-      return {
-        telegramMessageId,
-        telegramFileId,
-        telegramFileUniqueId,
-      };
-    } catch (error: any) {
-      console.error('Telegram Upload Error:', error);
-      throw new Error(error.message || 'Telegram upload failed.');
     }
+
+    if (uploadResult.status < 200 || uploadResult.status >= 300) {
+      let errorMsg = `HTTP Error ${uploadResult.status}`;
+      try {
+        const bodyJson = JSON.parse(uploadResult.body);
+        if (bodyJson.description) {
+          errorMsg = bodyJson.description;
+        }
+      } catch (_) {}
+      throw new Error(errorMsg);
+    }
+
+    const responseData = JSON.parse(uploadResult.body);
+    if (!responseData.ok) {
+      throw new Error(responseData.description || 'Telegram upload API returned error.');
+    }
+
+    const result = responseData.result;
+    const telegramMessageId = String(result.message_id);
+    let telegramFileId = '';
+    let telegramFileUniqueId = '';
+
+    if (fileType === 'image' && result.photo) {
+      const photoArr = result.photo;
+      const largestPhoto = photoArr[photoArr.length - 1];
+      telegramFileId = largestPhoto.file_id;
+      telegramFileUniqueId = largestPhoto.file_unique_id;
+    } else if (fileType === 'video' && result.video) {
+      telegramFileId = result.video.file_id;
+      telegramFileUniqueId = result.video.file_unique_id;
+    } else if (result.document) {
+      telegramFileId = result.document.file_id;
+      telegramFileUniqueId = result.document.file_unique_id;
+    } else {
+      const key = Object.keys(result).find(
+        (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
+      );
+      if (key) {
+        telegramFileId = result[key].file_id;
+        telegramFileUniqueId = result[key].file_unique_id;
+      } else {
+        throw new Error('Telegram response did not return a valid file ID.');
+      }
+    }
+
+    return {
+      telegramMessageId,
+      telegramFileId,
+      telegramFileUniqueId,
+    };
   },
 
   async sendChatLogToTelegram(data: {
@@ -350,13 +553,11 @@ export const telegramService = {
         }),
       });
 
-      const resJson = await response.json();
-      if (response.ok && resJson.ok) {
-        return String(resJson.result.message_id);
-      } else {
-        console.warn('Telegram sendMessage returned error:', resJson.description);
-        return null;
+      const resData = await response.json();
+      if (response.ok && resData.ok) {
+        return String(resData.result.message_id);
       }
+      return null;
     } catch (error) {
       console.warn('Failed to send chat log to Telegram:', error);
       return null;
@@ -444,12 +645,30 @@ export const telegramService = {
 
   async sendFileChunkToTelegram(
     chunkUri: string,
-    caption: string
+    caption: string,
+    onProgress?: (percent: number) => void,
+    signal?: AbortSignal,
+    itemId?: string
   ): Promise<{ telegramMessageId: string; telegramFileId: string }> {
     const { botToken, channelId } = await this.getTelegramConfig();
 
-    if (!botToken || !channelId) {
-      throw new Error('Telegram configuration is missing. Please set your Bot Token and Channel ID in Settings.');
+    if (!botToken) {
+      throw new Error('Telegram configuration is missing. Please set your Bot Token in Settings.');
+    }
+
+    let chunkSize = 45 * 1024 * 1024;
+    if (Platform.OS !== 'web') {
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(chunkUri);
+        if (fileInfo.exists) {
+          chunkSize = fileInfo.size;
+        }
+      } catch (_) {}
+    }
+
+    const targetChannelId = await this.selectTargetChannel(chunkSize).catch(() => channelId);
+    if (!targetChannelId) {
+      throw new Error('Telegram channel ID is missing.');
     }
 
     if (Platform.OS !== 'web') {
@@ -461,53 +680,82 @@ export const telegramService = {
 
     const url = `https://api.telegram.org/bot${botToken}/sendDocument`;
 
+    let finalChannelId = targetChannelId;
+    let uploadResult;
     try {
-      const uploadResult = await uploadFileHelper(url, chunkUri, 'document', {
-        chat_id: channelId,
-        caption: caption,
-      });
+      uploadResult = await uploadFileHelper(
+        url,
+        chunkUri,
+        'document',
+        {
+          chat_id: finalChannelId,
+          caption: caption,
+        },
+        onProgress,
+        signal,
+        itemId
+      );
+    } catch (uploadError: any) {
+      console.warn(`[Failover] Chunk upload to channel ${finalChannelId} failed. Trying failover...`, uploadError);
+      await this.markChannelStatus(finalChannelId, 'unhealthy');
 
-      if (uploadResult.status < 200 || uploadResult.status >= 300) {
-        let errorMsg = `HTTP Error ${uploadResult.status}`;
-        try {
-          const bodyJson = JSON.parse(uploadResult.body);
-          if (bodyJson.description) {
-            errorMsg = bodyJson.description;
-          }
-        } catch (_) {}
-        throw new Error(errorMsg);
-      }
-
-      const responseData = JSON.parse(uploadResult.body);
-      if (!responseData.ok) {
-        throw new Error(responseData.description || 'Telegram chunk upload API returned error.');
-      }
-
-      const result = responseData.result;
-      const telegramMessageId = String(result.message_id);
-      let telegramFileId = '';
-
-      if (result.document) {
-        telegramFileId = result.document.file_id;
-      } else {
-        const key = Object.keys(result).find(
-          (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
+      const fallback = await this.selectTargetChannel(chunkSize).catch(() => null);
+      if (fallback && fallback !== finalChannelId) {
+        finalChannelId = fallback;
+        uploadResult = await uploadFileHelper(
+          url,
+          chunkUri,
+          'document',
+          {
+            chat_id: finalChannelId,
+            caption: caption,
+          },
+          onProgress,
+          signal,
+          itemId
         );
-        if (key) {
-          telegramFileId = result[key].file_id;
-        } else {
-          throw new Error('Telegram response did not return a valid file ID for chunk.');
-        }
+      } else {
+        throw uploadError;
       }
-
-      return {
-        telegramMessageId,
-        telegramFileId,
-      };
-    } catch (error: any) {
-      console.error('Telegram Chunk Upload Error:', error);
-      throw new Error(error.message || 'Telegram chunk upload failed.');
     }
+
+    if (uploadResult.status < 200 || uploadResult.status >= 300) {
+      let errorMsg = `HTTP Error ${uploadResult.status}`;
+      try {
+        const bodyJson = JSON.parse(uploadResult.body);
+        if (bodyJson.description) {
+          errorMsg = bodyJson.description;
+        }
+      } catch (_) {}
+      throw new Error(errorMsg);
+    }
+
+    const responseData = JSON.parse(uploadResult.body);
+    if (!responseData.ok) {
+      throw new Error(responseData.description || 'Telegram chunk upload API returned error.');
+    }
+
+    const result = responseData.result;
+    const telegramMessageId = String(result.message_id);
+    let telegramFileId = '';
+
+    if (result.document) {
+      telegramFileId = result.document.file_id;
+    } else {
+      const key = Object.keys(result).find(
+        (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
+      );
+      if (key) {
+        telegramFileId = result[key].file_id;
+      } else {
+        throw new Error('Telegram response did not return a valid file ID for chunk.');
+      }
+    }
+
+    return {
+      telegramMessageId,
+      telegramFileId,
+    };
   },
 
   async getTelegramFileInfo(fileId: string): Promise<any> {

@@ -14,6 +14,10 @@ import {
   Alert,
   AppState,
   AppStateStatus,
+  SectionList,
+  Platform,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { Search, Image as ImageIcon, Video, Calendar, Star, Lock, Eye, AlertTriangle } from 'lucide-react-native';
 import { CompositeScreenProps, useIsFocused } from '@react-navigation/native';
@@ -23,13 +27,13 @@ import { MainTabParamList, AppStackParamList } from '../types/navigation';
 import { fileService } from '../services/fileService';
 import { securityService } from '../services/securityService';
 import { supabase } from '../lib/supabase';
-import { TeleVaultFile } from '../types/file';
+import { TeleVaultFile, TeleVaultFolder } from '../types/file';
 import EmptyState from '../components/EmptyState';
 import PinLockModal from '../components/PinLockModal';
 import AppCard from '../components/AppCard';
 import { previewCacheService } from '../services/previewCacheService';
 import { telegramService } from '../services/telegramService';
-
+import { searchService, SearchFilters } from '../services/searchService';
 import Screen from '../components/Screen';
 import FilePreviewCard from '../components/FilePreviewCard';
 
@@ -43,10 +47,16 @@ const GRID_SIZE = (width - 48) / 3;
 
 interface GroupedMemories {
   title: string;
-  data: TeleVaultFile[];
+  data: TeleVaultFile[][];
 }
 
-const MemoryGridItem: React.FC<{ item: TeleVaultFile; onPress: () => void }> = ({ item, onPress }) => {
+const MemoryGridItem: React.FC<{
+  item: TeleVaultFile;
+  onPress: () => void;
+  onLongPress: () => void;
+  isSelected: boolean;
+  isSelectionMode: boolean;
+}> = ({ item, onPress, onLongPress, isSelected, isSelectionMode }) => {
   return (
     <View style={{ margin: 4, position: 'relative' }}>
       <FilePreviewCard
@@ -54,10 +64,24 @@ const MemoryGridItem: React.FC<{ item: TeleVaultFile; onPress: () => void }> = (
         variant="grid"
         size={GRID_SIZE}
         onPress={onPress}
+        onLongPress={onLongPress}
       />
       {item.is_favorite && (
         <View style={styles.starBadge}>
           <Star size={10} color="#FFFC00" fill="#FFFC00" />
+        </View>
+      )}
+      {isSelectionMode && (
+        <View style={[
+          styles.selectionOverlay,
+          isSelected && styles.selectionOverlaySelected
+        ]}>
+          <View style={[
+            styles.checkbox,
+            isSelected && styles.checkboxSelected
+          ]}>
+            {isSelected && <Text style={styles.checkboxCheck}>✓</Text>}
+          </View>
         </View>
       )}
     </View>
@@ -80,18 +104,74 @@ const OnThisDayGridItem: React.FC<{ item: TeleVaultFile; onPress: () => void }> 
   );
 };
 
+const FolderPickerModal: React.FC<{
+  visible: boolean;
+  onClose: () => void;
+  onSelect: (folderId: string | null) => void;
+}> = ({ visible, onClose, onSelect }) => {
+  const [folders, setFolders] = useState<TeleVaultFolder[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setLoading(true);
+      fileService.fetchDriveFolders(null)
+        .then(setFolders)
+        .catch(console.error)
+        .finally(() => setLoading(false));
+    }
+  }, [visible]);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalBg}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Select Target Folder</Text>
+          {loading ? (
+            <ActivityIndicator size="small" color="#FFFC00" style={{ marginVertical: 20 }} />
+          ) : (
+            <ScrollView style={{ maxHeight: 250, marginVertical: 12 }}>
+              <TouchableOpacity onPress={() => onSelect(null)} style={styles.folderRow}>
+                <Text style={styles.folderRowText}>📁 Root Drive</Text>
+              </TouchableOpacity>
+              {folders.map(f => (
+                <TouchableOpacity key={f.id} onPress={() => onSelect(f.id)} style={styles.folderRow}>
+                  <Text style={styles.folderRowText}>📁 {f.name}</Text>
+                </TouchableOpacity>
+              ))}
+              {folders.length === 0 && (
+                <Text style={styles.modalEmptyText}>No folders found in drive.</Text>
+              )}
+            </ScrollView>
+          )}
+          <View style={styles.modalActions}>
+            <TouchableOpacity onPress={onClose} style={styles.modalCancelBtn}>
+              <Text style={styles.modalCancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
 export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
   const [files, setFiles] = useState<TeleVaultFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Tabs: all, image, video, favorites, private
-  const [filterType, setFilterType] = useState<'all' | 'image' | 'video' | 'favorites' | 'private'>('all');
+  // Tabs: all, image, video, favorites, archive, trash, private
+  const [filterType, setFilterType] = useState<'all' | 'image' | 'video' | 'favorites' | 'archive' | 'trash' | 'private'>('all');
   
   // Pin Lock Modal for Private Memories
   const [pinVisible, setPinVisible] = useState(false);
   const [isUnlocked, setIsUnlocked] = useState(false);
+
+  // Selection & Bulk modes
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [folderPickerVisible, setFolderPickerVisible] = useState(false);
 
   const isFocused = useIsFocused();
   const [configReady, setConfigReady] = useState<boolean | null>(telegramService.configReady);
@@ -110,7 +190,6 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
       
       // If private mode is active and unlocked, load private memories
       if (filterType === 'private' && isUnlocked) {
-        // Fetch files where is_private = true, is_drive_file = false
         const { data: privData, error } = await supabase
           .from('files')
           .select('*')
@@ -123,6 +202,10 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
         }
       }
       setFiles(data);
+      if (data && data.length > 0) {
+        previewCacheService.pregenerateThumbnailsInBackground(data);
+        previewCacheService.evictCacheIfLimitExceeded(50 * 1024 * 1024);
+      }
     } catch (error) {
       console.error('Failed to load memories:', error);
     } finally {
@@ -183,28 +266,30 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const getFilteredFiles = () => {
-    return files.filter((file) => {
-      const matchesSearch = file.file_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        (file.caption && file.caption.toLowerCase().includes(searchQuery.toLowerCase()));
-      
-      const matchesType = 
-        filterType === 'all' || 
-        filterType === 'private' || // Private filters loaded separately
-        (filterType === 'image' && file.file_type === 'image') ||
-        (filterType === 'video' && file.file_type === 'video') ||
-        (filterType === 'favorites' && file.is_favorite === true);
-      
-      return matchesSearch && matchesType;
-    });
+    const filters: SearchFilters = {
+      query: searchQuery,
+      fileType: (filterType === 'image' || filterType === 'video') ? filterType : 'all',
+      isFavorite: filterType === 'favorites' ? true : undefined,
+      isArchived: filterType === 'archive' ? true : undefined,
+      isDeleted: filterType === 'trash' ? true : undefined,
+    };
+    // If not looking at archive or trash specifically, exclude them
+    if (filterType !== 'archive') filters.isArchived = false;
+    if (filterType !== 'trash') filters.isDeleted = false;
+
+    return searchService.filterFiles(files, filters);
   };
 
-  // "On This Day" filtering: memories uploaded on this calendar date in any past year
   const getOnThisDayMemories = () => {
     const todayMonth = new Date().getMonth();
     const todayDate = new Date().getDate();
     const currentYear = new Date().getFullYear();
 
     return files.filter((file) => {
+      // Exclude archived and soft deleted items from On This Day throwing back
+      const meta = file.overlay_metadata || {};
+      if (meta.is_archived || meta.deleted_at) return false;
+
       const fileDate = new Date(file.created_at);
       const isPastYear = fileDate.getFullYear() < currentYear;
       const isSameDayMonth = fileDate.getMonth() === todayMonth && fileDate.getDate() === todayDate;
@@ -217,7 +302,6 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
     const sections: Record<string, TeleVaultFile[]> = {};
 
     filtered.forEach((file) => {
-      // Group by Date string (e.g., July 1, 2026)
       const dateString = new Date(file.created_at).toLocaleDateString([], {
         year: 'numeric',
         month: 'long',
@@ -229,19 +313,174 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
       sections[dateString].push(file);
     });
 
-    return Object.keys(sections).map((title) => ({
-      title,
-      data: sections[title],
-    }));
+    return Object.keys(sections).map((title) => {
+      const items = sections[title];
+      const chunked: TeleVaultFile[][] = [];
+      for (let i = 0; i < items.length; i += 3) {
+        chunked.push(items.slice(i, i + 3));
+      }
+      return {
+        title,
+        data: chunked,
+      };
+    });
   };
 
   const handleItemPress = (item: TeleVaultFile) => {
+    if (isSelectionMode) {
+      toggleSelectFile(item.id);
+      return;
+    }
+
     const filteredList = getFilteredFiles();
     const index = filteredList.findIndex(f => f.id === item.id);
+    
+    // Track recently viewed file
+    searchService.trackFileViewed(item.id);
+
     navigation.navigate('MemoriesViewer', {
       files: filteredList,
       initialIndex: index >= 0 ? index : 0,
     });
+  };
+
+  const handleItemLongPress = (item: TeleVaultFile) => {
+    if (!isSelectionMode) {
+      setIsSelectionMode(true);
+      setSelectedIds([item.id]);
+    } else {
+      toggleSelectFile(item.id);
+    }
+  };
+
+  const toggleSelectFile = (id: string) => {
+    setSelectedIds(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      if (next.length === 0) {
+        setIsSelectionMode(false);
+      }
+      return next;
+    });
+  };
+
+  // Bulk Operations
+  const handleBulkArchive = async (archive: boolean) => {
+    try {
+      setLoading(true);
+      await fileService.bulkArchive(selectedIds, archive);
+      setSelectedIds([]);
+      setIsSelectionMode(false);
+      await loadMemories(false);
+      Alert.alert('Success', `${archive ? 'Archived' : 'Unarchived'} ${selectedIds.length} files.`);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Bulk archive failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkHide = async (hide: boolean) => {
+    try {
+      setLoading(true);
+      await fileService.bulkHide(selectedIds, hide);
+      setSelectedIds([]);
+      setIsSelectionMode(false);
+      await loadMemories(false);
+      Alert.alert('Success', `${hide ? 'Hidden' : 'Unhidden'} ${selectedIds.length} files.`);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Bulk hide failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkTrash = async () => {
+    try {
+      setLoading(true);
+      await fileService.bulkDelete(selectedIds, false);
+      setSelectedIds([]);
+      setIsSelectionMode(false);
+      await loadMemories(false);
+      Alert.alert('Success', `Moved ${selectedIds.length} items to Trash.`);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Bulk delete failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkRestore = async () => {
+    try {
+      setLoading(true);
+      await fileService.bulkRestore(selectedIds);
+      setSelectedIds([]);
+      setIsSelectionMode(false);
+      await loadMemories(false);
+      Alert.alert('Success', `Restored ${selectedIds.length} items.`);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Bulk restore failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkHardDelete = async () => {
+    Alert.alert(
+      'Permanently Delete',
+      `Are you sure you want to permanently delete these ${selectedIds.length} files? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await fileService.bulkDelete(selectedIds, true);
+              setSelectedIds([]);
+              setIsSelectionMode(false);
+              await loadMemories(false);
+              Alert.alert('Deleted', 'Files permanently deleted.');
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Bulk hard delete failed.');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleBulkMove = async (folderId: string | null) => {
+    try {
+      setFolderPickerVisible(false);
+      setLoading(true);
+      await fileService.bulkMove(selectedIds, folderId);
+      setSelectedIds([]);
+      setIsSelectionMode(false);
+      await loadMemories(false);
+      Alert.alert('Success', 'Files moved successfully.');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Bulk move failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkDuplicate = async () => {
+    try {
+      setLoading(true);
+      await Promise.all(selectedIds.map(id => fileService.duplicateFile(id)));
+      setSelectedIds([]);
+      setIsSelectionMode(false);
+      await loadMemories(false);
+      Alert.alert('Success', `Duplicated ${selectedIds.length} files.`);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Bulk duplicate failed.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleOnThisDayPress = (item: TeleVaultFile) => {
@@ -251,15 +490,6 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
       files: onThisDayList,
       initialIndex: index >= 0 ? index : 0,
     });
-  };
-
-  const renderGridItem = ({ item }: { item: TeleVaultFile }) => {
-    return (
-      <MemoryGridItem
-        item={item}
-        onPress={() => handleItemPress(item)}
-      />
-    );
   };
 
   const groupedData = getGroupedMemories();
@@ -283,36 +513,48 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerMainRow}>
-          <Text style={styles.headerTitle}>Memories</Text>
-          <Text style={styles.headerCountBadge}>
-            {files.length === 1 ? '1 Memory' : `${files.length} Memories`}
+          <Text style={styles.headerTitle}>
+            {isSelectionMode ? `${selectedIds.length} Selected` : 'Memories'}
           </Text>
+          {isSelectionMode ? (
+            <TouchableOpacity onPress={() => { setSelectedIds([]); setIsSelectionMode(false); }} style={styles.cancelSelectionHeaderBtn}>
+              <Text style={styles.cancelSelectionHeaderBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.headerCountBadge}>
+              {files.length === 1 ? '1 Memory' : `${files.length} Memories`}
+            </Text>
+          )}
         </View>
-        <Text style={styles.headerSubCountText}>
-          {files.filter(f => f.file_type === 'image').length} Photos • {files.filter(f => f.file_type === 'video').length} Videos • {files.filter(f => f.is_favorite === true).length} Favorites
-        </Text>
+        {!isSelectionMode && (
+          <Text style={styles.headerSubCountText}>
+            {files.filter(f => f.file_type === 'image' && !f.overlay_metadata?.deleted_at && !f.overlay_metadata?.is_archived).length} Photos • {files.filter(f => f.file_type === 'video' && !f.overlay_metadata?.deleted_at && !f.overlay_metadata?.is_archived).length} Videos • {files.filter(f => f.is_favorite === true).length} Favorites
+          </Text>
+        )}
       </View>
 
       {/* Search Input */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Search size={18} color="#8e92af" style={{ marginRight: 8 }} />
-          <TextInput
-            placeholder="Search memories or captions..."
-            placeholderTextColor="#8e92af"
-            style={styles.searchInput}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
+      {!isSelectionMode && (
+        <View style={styles.searchContainer}>
+          <View style={styles.searchBar}>
+            <Search size={18} color="#8e92af" style={{ marginRight: 8 }} />
+            <TextInput
+              placeholder="Search filename, year, tags..."
+              placeholderTextColor="#8e92af"
+              style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
         </View>
-      </View>
+      )}
 
       {/* Filter Tabs */}
       <View style={styles.filterTabsWrapper}>
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
-          data={['all', 'image', 'video', 'favorites', 'private'] as const}
+          data={['all', 'image', 'video', 'favorites', 'archive', 'trash', 'private'] as const}
           keyExtractor={(item) => item}
           contentContainerStyle={styles.filterTabs}
           renderItem={({ item }) => (
@@ -328,7 +570,7 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
               {item === 'favorites' && <Star size={13} color={filterType === item ? '#000000' : '#8e92af'} style={{ marginRight: 4 }} />}
               {item === 'private' && <Lock size={13} color={filterType === item ? '#000000' : '#8e92af'} style={{ marginRight: 4 }} />}
               <Text style={[styles.filterTabText, filterType === item && styles.activeFilterTabText]}>
-                {item === 'all' ? 'All' : item === 'image' ? 'Photos' : item === 'video' ? 'Videos' : item === 'favorites' ? 'Favorites' : 'Private'}
+                {item === 'all' ? 'All' : item === 'image' ? 'Photos' : item === 'video' ? 'Videos' : item === 'favorites' ? 'Favorites' : item === 'archive' ? 'Archive' : item === 'trash' ? 'Trash' : 'Private'}
               </Text>
             </TouchableOpacity>
           )}
@@ -336,7 +578,7 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       {/* On This Day Carousel */}
-      {filterType !== 'private' && onThisDayData.length > 0 && (
+      {!isSelectionMode && filterType !== 'private' && onThisDayData.length > 0 && (
         <View style={styles.onThisDaySection}>
           <Text style={styles.sectionHeaderTitle}>ON THIS DAY...</Text>
           <FlatList
@@ -355,6 +597,7 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
         </View>
       )}
 
+      {/* Grid List */}
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#FFFC00" />
@@ -366,41 +609,111 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFC00" />}
           ListEmptyComponent={
             <EmptyState
-              title={filterType === 'private' ? 'Private Vault Empty' : 'No Memories Found'}
-              description={filterType === 'private' ? 'Store your files privately to secure them here behind your lock.' : 'Capture snaps or select media from the camera preview to add memories.'}
+              title={filterType === 'private' ? 'Private Vault Empty' : filterType === 'trash' ? 'Trash is Empty' : filterType === 'archive' ? 'Archive is Empty' : 'No Memories Found'}
+              description={filterType === 'private' ? 'Store your files privately to secure them here behind your lock.' : filterType === 'trash' ? 'Soft-deleted files will appear here.' : filterType === 'archive' ? 'Archived files are stored privately here.' : 'Capture snaps or select media from the camera preview to add memories.'}
             />
           }
         />
       ) : (
-        <FlatList
-          data={groupedData}
-          keyExtractor={(item) => item.title}
-          contentContainerStyle={{ paddingBottom: 100 }}
+        <SectionList
+          sections={groupedData as any}
+          keyExtractor={(item, index) => index.toString()}
+          contentContainerStyle={{ paddingBottom: isSelectionMode ? 180 : 100 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFC00" />}
-          renderItem={({ item }) => (
-            <View style={styles.sectionContainer}>
-              <View style={styles.dateHeader}>
-                <Calendar size={14} color="#8e92af" style={{ marginRight: 6 }} />
-                <Text style={styles.dateTitle}>{item.title}</Text>
-              </View>
-              <FlatList
-                data={item.data}
-                keyExtractor={(file) => file.id}
-                numColumns={3}
-                renderItem={renderGridItem}
-                scrollEnabled={false}
-              />
+          renderSectionHeader={({ section: { title } }) => (
+            <View style={[styles.dateHeader, { paddingHorizontal: 16, backgroundColor: '#000000', paddingVertical: 8 }]}>
+              <Calendar size={14} color="#8e92af" style={{ marginRight: 6 }} />
+              <Text style={styles.dateTitle}>{title}</Text>
             </View>
           )}
+          renderItem={({ item }) => {
+            return (
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-start', paddingHorizontal: 12 }}>
+                {item.map((file: TeleVaultFile) => (
+                  <View key={file.id} style={{ margin: 2 }}>
+                    <MemoryGridItem
+                      item={file}
+                      onPress={() => handleItemPress(file)}
+                      onLongPress={() => handleItemLongPress(file)}
+                      isSelected={selectedIds.includes(file.id)}
+                      isSelectionMode={isSelectionMode}
+                    />
+                  </View>
+                ))}
+              </View>
+            );
+          }}
+          removeClippedSubviews={Platform.OS !== 'web'}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={50}
+          initialNumToRender={12}
+          windowSize={5}
         />
       )}
 
+      {/* Pin lock Modal */}
       <PinLockModal
         visible={pinVisible}
         onClose={handlePinClose}
         onSuccess={handlePinSuccess}
         mode="verify"
       />
+
+      {/* Folder Picker Modal */}
+      <FolderPickerModal
+        visible={folderPickerVisible}
+        onClose={() => setFolderPickerVisible(false)}
+        onSelect={handleBulkMove}
+      />
+
+      {/* Floating Bulk Actions Panel */}
+      {isSelectionMode && (
+        <View style={styles.bulkActionsContainer}>
+          <Text style={styles.bulkActionsTitle}>
+            {selectedIds.length} Selected
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bulkActionsButtons}>
+            <TouchableOpacity style={styles.bulkActionBtn} onPress={() => setFolderPickerVisible(true)}>
+              <Text style={styles.bulkActionBtnText}>📁 Move</Text>
+            </TouchableOpacity>
+
+            {filterType !== 'archive' ? (
+              <TouchableOpacity style={styles.bulkActionBtn} onPress={() => handleBulkArchive(true)}>
+                <Text style={styles.bulkActionBtnText}>📦 Archive</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.bulkActionBtn} onPress={() => handleBulkArchive(false)}>
+                <Text style={styles.bulkActionBtnText}>📥 Unarchive</Text>
+              </TouchableOpacity>
+            )}
+
+            {filterType !== 'trash' && (
+              <TouchableOpacity style={styles.bulkActionBtn} onPress={() => handleBulkHide(true)}>
+                <Text style={styles.bulkActionBtnText}>👁️ Hide</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity style={styles.bulkActionBtn} onPress={handleBulkDuplicate}>
+              <Text style={styles.bulkActionBtnText}>📄 Duplicate</Text>
+            </TouchableOpacity>
+
+            {filterType === 'trash' ? (
+              <>
+                <TouchableOpacity style={[styles.bulkActionBtn, { backgroundColor: '#30D158' }]} onPress={handleBulkRestore}>
+                  <Text style={[styles.bulkActionBtnText, { color: '#000000' }]}>🔄 Restore</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.bulkActionBtn, { backgroundColor: '#FF453A' }]} onPress={handleBulkHardDelete}>
+                  <Text style={styles.bulkActionBtnText}>🗑️ Delete Permanent</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity style={[styles.bulkActionBtn, { backgroundColor: '#FF453A' }]} onPress={handleBulkTrash}>
+                <Text style={styles.bulkActionBtnText}>🗑️ Trash</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
+        </View>
+      )}
     </Screen>
   );
 };
@@ -442,12 +755,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 2,
     letterSpacing: 0.2,
-  },
-  skeletonBg: {
-    backgroundColor: '#0f1123',
-  },
-  errorBg: {
-    backgroundColor: '#1b1b1b',
   },
   searchContainer: {
     paddingHorizontal: 16,
@@ -513,25 +820,6 @@ const styles = StyleSheet.create({
   onThisDayList: {
     paddingRight: 16,
   },
-  onThisDayCard: {
-    width: 100,
-    height: 120,
-    borderRadius: 16,
-    marginRight: 10,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#1f2444',
-    backgroundColor: '#0f1123',
-  },
-  onThisDayImg: {
-    width: '100%',
-    height: '100%',
-  },
-  onThisDayPlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   onThisDayOverlay: {
     position: 'absolute',
     bottom: 0,
@@ -554,10 +842,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sectionContainer: {
-    paddingHorizontal: 12,
-    marginBottom: 16,
-  },
   dateHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -570,42 +854,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-  gridItem: {
-    width: GRID_SIZE,
-    height: GRID_SIZE,
-    margin: 4,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#0f1123',
-    borderWidth: 1,
-    borderColor: '#1f2444',
-  },
-  gridImage: {
-    width: '100%',
-    height: '100%',
-  },
-  placeholderGrid: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0f1123',
-  },
-  videoBadge: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  videoBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    marginLeft: 1,
-  },
   starBadge: {
     position: 'absolute',
     top: 6,
@@ -613,6 +861,155 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     padding: 4,
     borderRadius: 10,
+  },
+  // Selection Styles
+  selectionOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  selectionOverlaySelected: {
+    borderWidth: 3,
+    borderColor: '#FFFC00',
+    backgroundColor: 'rgba(255, 252, 0, 0.15)',
+  },
+  checkbox: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxSelected: {
+    borderColor: '#FFFC00',
+    backgroundColor: '#FFFC00',
+  },
+  checkboxCheck: {
+    color: '#000000',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  cancelSelectionHeaderBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: '#1C1C1E',
+    borderRadius: 16,
+  },
+  cancelSelectionHeaderBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  // Bulk actions bottom bar
+  bulkActionsContainer: {
+    position: 'absolute',
+    bottom: Platform.OS === 'web' ? 70 : 80,
+    left: 16,
+    right: 16,
+    backgroundColor: '#1E1E1E',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+    alignItems: 'center',
+  },
+  bulkActionsTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  bulkActionsButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingRight: 10,
+  },
+  bulkActionBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: '#2C2C2E',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 80,
+  },
+  bulkActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  // Folder picker modal styles
+  modalBg: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#1E1E1E',
+    borderRadius: 24,
+    width: '100%',
+    maxWidth: 320,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+  },
+  modalTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  folderRow: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: '#2C2C2E',
+  },
+  folderRowText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  modalEmptyText: {
+    color: '#8e92af',
+    fontSize: 13,
+    textAlign: 'center',
+    marginVertical: 20,
+  },
+  modalActions: {
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  modalCancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: '#2C2C2E',
+    borderRadius: 20,
+    width: '100%',
+    alignItems: 'center',
+  },
+  modalCancelBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
 

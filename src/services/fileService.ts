@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { TeleVaultFile, TeleVaultFolder } from '../types/file';
+import { storageService } from './storageService';
 
 export const fileService = {
   async saveFileMetadata(metadata: {
@@ -53,19 +54,34 @@ export const fileService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not logged in.');
 
-    const { data, error } = await supabase
-      .from('files')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('is_private', false)
-      .eq('is_drive_file', false)
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('files')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_private', false)
+        .eq('is_drive_file', false)
+        .order('created_at', { ascending: false });
 
-    if (error) {
-      throw new Error(error.message || 'Failed to fetch memories.');
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      const files = (data || []) as TeleVaultFile[];
+      try {
+        await storageService.setItem('televault_cached_memories', JSON.stringify(files));
+      } catch (_) {}
+      return files;
+    } catch (err) {
+      console.warn('Failed to fetch memories online, using local cache:', err);
+      try {
+        const cached = await storageService.getItem('televault_cached_memories');
+        if (cached) {
+          return JSON.parse(cached) as TeleVaultFile[];
+        }
+      } catch (_) {}
+      throw err;
     }
-
-    return (data || []) as TeleVaultFile[];
   },
 
   async fetchDriveFiles(folderId: string | null): Promise<TeleVaultFile[]> {
@@ -366,7 +382,214 @@ export const fileService = {
 
     return { totalSize, filesCount };
   },
-};
 
+  async updateFileMetadata(id: string, updates: Partial<TeleVaultFile>): Promise<TeleVaultFile> {
+    const { data, error } = await supabase
+      .from('files')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(error.message || 'Failed to update file metadata.');
+    }
+    return data as TeleVaultFile;
+  },
+
+  async updateOverlayMetadata(id: string, keyValues: Record<string, any>): Promise<TeleVaultFile> {
+    const { data: currentFile, error: fetchError } = await supabase
+      .from('files')
+      .select('overlay_metadata')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !currentFile) {
+      throw new Error('File not found to update overlay metadata.');
+    }
+
+    const currentMeta = (currentFile.overlay_metadata && typeof currentFile.overlay_metadata === 'object' && !Array.isArray(currentFile.overlay_metadata))
+      ? currentFile.overlay_metadata
+      : {};
+
+    const updatedMeta = {
+      ...currentMeta,
+      ...keyValues,
+    };
+
+    return await this.updateFileMetadata(id, { overlay_metadata: updatedMeta });
+  },
+
+  async archiveFile(id: string, archive: boolean): Promise<TeleVaultFile> {
+    return await this.updateOverlayMetadata(id, { is_archived: archive });
+  },
+
+  async hideFile(id: string, hide: boolean): Promise<TeleVaultFile> {
+    return await this.updateOverlayMetadata(id, { is_hidden: hide });
+  },
+
+  async softDeleteFile(id: string): Promise<TeleVaultFile> {
+    return await this.updateOverlayMetadata(id, { deleted_at: new Date().toISOString() });
+  },
+
+  async restoreFile(id: string): Promise<TeleVaultFile> {
+    return await this.updateOverlayMetadata(id, { deleted_at: null });
+  },
+
+  async addFileToAlbum(id: string, albumName: string): Promise<TeleVaultFile> {
+    const { data: file, error: fetchError } = await supabase
+      .from('files')
+      .select('overlay_metadata')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !file) {
+      throw new Error('File not found.');
+    }
+
+    const meta = file.overlay_metadata || {};
+    let albums: string[] = Array.isArray(meta.albums) ? [...meta.albums] : [];
+    if (!albums.includes(albumName)) {
+      albums.push(albumName);
+    }
+
+    return await this.updateOverlayMetadata(id, { albums });
+  },
+
+  async removeFileFromAlbum(id: string, albumName: string): Promise<TeleVaultFile> {
+    const { data: file, error: fetchError } = await supabase
+      .from('files')
+      .select('overlay_metadata')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !file) {
+      throw new Error('File not found.');
+    }
+
+    const meta = file.overlay_metadata || {};
+    let albums: string[] = Array.isArray(meta.albums) ? meta.albums.filter((a: string) => a !== albumName) : [];
+
+    return await this.updateOverlayMetadata(id, { albums });
+  },
+
+  async addTagsToFile(id: string, tagsList: string[]): Promise<TeleVaultFile> {
+    const { data: file, error: fetchError } = await supabase
+      .from('files')
+      .select('overlay_metadata')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !file) {
+      throw new Error('File not found.');
+    }
+
+    const meta = file.overlay_metadata || {};
+    let tags: string[] = Array.isArray(meta.tags) ? [...meta.tags] : [];
+    tagsList.forEach(t => {
+      const clean = t.trim();
+      if (clean && !tags.includes(clean)) {
+        tags.push(clean);
+      }
+    });
+
+    return await this.updateOverlayMetadata(id, { tags });
+  },
+
+  async removeTagFromFile(id: string, tag: string): Promise<TeleVaultFile> {
+    const { data: file, error: fetchError } = await supabase
+      .from('files')
+      .select('overlay_metadata')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !file) {
+      throw new Error('File not found.');
+    }
+
+    const meta = file.overlay_metadata || {};
+    let tags: string[] = Array.isArray(meta.tags) ? meta.tags.filter((t: string) => t !== tag) : [];
+
+    return await this.updateOverlayMetadata(id, { tags });
+  },
+
+  async duplicateFile(fileId: string): Promise<TeleVaultFile> {
+    const { data: file, error: fetchError } = await supabase
+      .from('files')
+      .select('*')
+      .eq('id', fileId)
+      .single();
+
+    if (fetchError || !file) {
+      throw new Error('File not found to duplicate.');
+    }
+
+    const { data, error } = await supabase
+      .from('files')
+      .insert({
+        user_id: file.user_id,
+        folder_id: file.folder_id,
+        file_name: `Copy of ${file.file_name}`,
+        file_type: file.file_type,
+        mime_type: file.mime_type,
+        file_size: file.file_size,
+        is_private: file.is_private,
+        is_drive_file: file.is_drive_file,
+        telegram_message_id: file.telegram_message_id,
+        telegram_file_id: file.telegram_file_id,
+        telegram_file_unique_id: file.telegram_file_unique_id,
+        local_thumbnail_uri: file.local_thumbnail_uri,
+        caption: file.caption,
+        overlay_metadata: file.overlay_metadata,
+        is_favorite: file.is_favorite,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(error.message || 'Failed to duplicate file.');
+    }
+
+    return data as TeleVaultFile;
+  },
+
+  async bulkArchive(ids: string[], archive: boolean): Promise<void> {
+    await Promise.all(ids.map(id => this.archiveFile(id, archive)));
+  },
+
+  async bulkHide(ids: string[], hide: boolean): Promise<void> {
+    await Promise.all(ids.map(id => this.hideFile(id, hide)));
+  },
+
+  async bulkDelete(ids: string[], hardDelete: boolean = false): Promise<void> {
+    if (hardDelete) {
+      const { error } = await supabase
+        .from('files')
+        .delete()
+        .in('id', ids);
+      if (error) {
+        throw new Error(error.message || 'Failed to hard delete files.');
+      }
+    } else {
+      const now = new Date().toISOString();
+      await Promise.all(ids.map(id => this.updateOverlayMetadata(id, { deleted_at: now })));
+    }
+  },
+
+  async bulkRestore(ids: string[]): Promise<void> {
+    await Promise.all(ids.map(id => this.updateOverlayMetadata(id, { deleted_at: null })));
+  },
+
+  async bulkMove(ids: string[], targetFolderId: string | null): Promise<void> {
+    const { error } = await supabase
+      .from('files')
+      .update({ folder_id: targetFolderId })
+      .in('id', ids);
+
+    if (error) {
+      throw new Error(error.message || 'Failed to move files in bulk.');
+    }
+  },
+};
 
 export default fileService;

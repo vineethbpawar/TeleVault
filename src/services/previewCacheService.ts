@@ -50,6 +50,34 @@ export const previewCacheService = {
     }
   },
 
+  async getCacheStats(): Promise<{ totalSize: number; count: number }> {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const previewKeys = keys.filter(key => key.startsWith(CACHE_PREFIX) || key.startsWith('televault_vid_thumb_'));
+      let totalSize = 0;
+      for (const key of previewKeys) {
+        const val = await AsyncStorage.getItem(key);
+        if (val) {
+          totalSize += val.length;
+        }
+      }
+      return { totalSize, count: previewKeys.length };
+    } catch (_) {
+      return { totalSize: 0, count: 0 };
+    }
+  },
+
+  async clearCache(): Promise<void> {
+    await this.clearPreviewCache();
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const thumbKeys = keys.filter(key => key.startsWith('televault_vid_thumb_'));
+      if (thumbKeys.length > 0) {
+        await AsyncStorage.multiRemove(thumbKeys);
+      }
+    } catch (_) {}
+  },
+
   async resolvePreviewForFile(
     file: {
       id: string;
@@ -401,6 +429,67 @@ export const previewCacheService = {
       fallbackIcon,
       error: 'Failed to resolve preview url.',
     };
+  },
+
+  async pregenerateThumbnailsInBackground(files: any[]): Promise<void> {
+    const config = await telegramService.getTelegramConfig();
+    if (!config.botToken) return;
+
+    const eligible = files.filter(f => f.telegram_file_id && (f.file_type === 'image' || f.file_type === 'video'));
+
+    (async () => {
+      for (const file of eligible) {
+        try {
+          const cacheKey = file.file_type === 'video' ? `televault_vid_thumb_${file.id}` : CACHE_PREFIX + file.telegram_file_id;
+          const exists = await AsyncStorage.getItem(cacheKey);
+          if (exists) continue;
+
+          await this.resolveFilePreview(file, false);
+          await new Promise(r => setTimeout(r, 1200));
+        } catch (_) {}
+      }
+    })();
+  },
+
+  async evictCacheIfLimitExceeded(maxSizeBytes = 50 * 1024 * 1024): Promise<void> {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const previewKeys = keys.filter(key => key.startsWith(CACHE_PREFIX) || key.startsWith('televault_vid_thumb_'));
+      
+      let entries: { key: string; size: number; timestamp: number }[] = [];
+      let totalSize = 0;
+
+      for (const key of previewKeys) {
+        const val = await AsyncStorage.getItem(key);
+        if (val) {
+          let timestamp = Date.now();
+          try {
+            const parsed = JSON.parse(val);
+            if (parsed.timestamp) timestamp = parsed.timestamp;
+          } catch (_) {}
+          
+          totalSize += val.length;
+          entries.push({ key, size: val.length, timestamp });
+        }
+      }
+
+      if (totalSize <= maxSizeBytes) return;
+
+      entries.sort((a, b) => a.timestamp - b.timestamp);
+
+      let bytesToEvict = totalSize - maxSizeBytes;
+      const keysToRemove: string[] = [];
+
+      for (const entry of entries) {
+        if (bytesToEvict <= 0) break;
+        keysToRemove.push(entry.key);
+        bytesToEvict -= entry.size;
+      }
+
+      if (keysToRemove.length > 0) {
+        await AsyncStorage.multiRemove(keysToRemove);
+      }
+    } catch (_) {}
   }
 };
 

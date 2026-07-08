@@ -10,6 +10,7 @@ import FileDetailsScreen from '../screens/FileDetailsScreen';
 import MemoriesViewerScreen from '../screens/MemoriesViewerScreen';
 import SplashScreen from '../screens/SplashScreen';
 import UsernameSetupScreen from '../screens/UsernameSetupScreen';
+import { StorageAnalyticsScreen } from '../screens/StorageAnalyticsScreen';
 import UserSearchScreen from '../screens/UserSearchScreen';
 import ChatListScreen from '../screens/ChatListScreen';
 import ChatRoomScreen from '../screens/ChatRoomScreen';
@@ -33,7 +34,9 @@ import SendToScreen from '../screens/SendToScreen';
 import { Session } from '@supabase/supabase-js';
 import { authEvents } from '../utils/authEvent';
 import { telegramService } from '../services/telegramService';
-import { Alert } from 'react-native';
+import { Alert, AppState, AppStateStatus, Platform, View, Text } from 'react-native';
+import { securityService } from '../services/securityService';
+import { PinLockModal } from '../components/PinLockModal';
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
@@ -42,6 +45,64 @@ export const AppNavigator: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [hasUsername, setHasUsername] = useState<boolean | null>(null);
   const [restoringConfig, setRestoringConfig] = useState(false);
+  const [appLocked, setAppLocked] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleOnline = () => setIsOnline(true);
+      const handleOffline = () => setIsOnline(false);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+      setIsOnline(navigator.onLine);
+      return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      };
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOnline) {
+      try {
+        const { uploadQueueService } = require('../services/uploadQueueService');
+        uploadQueueService.processUploadQueue().catch((err: any) => console.warn('Offline sync failed:', err));
+      } catch (_) {}
+    }
+  }, [isOnline]);
+
+  useEffect(() => {
+    const checkInitialLock = async () => {
+      const pinExists = await securityService.hasPin();
+      if (pinExists) {
+        setAppLocked(true);
+      }
+    };
+    checkInitialLock();
+  }, [session]);
+
+  useEffect(() => {
+    let backgroundTime = 0;
+
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'background') {
+        backgroundTime = Date.now();
+      } else if (nextAppState === 'active') {
+        const pinExists = await securityService.hasPin();
+        if (pinExists && backgroundTime > 0) {
+          const elapsed = (Date.now() - backgroundTime) / 1000;
+          if (elapsed > 15) {
+            setAppLocked(true);
+          }
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   const checkUsername = async (userId: string, email?: string) => {
     try {
@@ -92,6 +153,12 @@ export const AppNavigator: React.FC = () => {
           if (!config.botToken || !config.channelId) {
             console.warn('Telegram storage not configured.');
           }
+          if (Platform.OS !== 'web') {
+            try {
+              const { backgroundUploadService } = require('../services/backgroundUploadTask');
+              await backgroundUploadService.registerBackgroundUploadTask();
+            } catch (_) {}
+          }
         }).catch(err => {
           console.error('Failed restoring Telegram config:', err);
         });
@@ -137,43 +204,71 @@ export const AppNavigator: React.FC = () => {
   }
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {session ? (
-        hasUsername === false ? (
-          <Stack.Screen name="UsernameSetup" component={UsernameSetupScreen} />
-        ) : (
-          <>
-            <Stack.Screen name="Main" component={MainTabs} />
-            <Stack.Screen name="TelegramConnect" component={TelegramConnectScreen} />
-            <Stack.Screen name="Preview" component={PreviewScreen} />
-            <Stack.Screen name="FileDetails" component={FileDetailsScreen} />
-            <Stack.Screen name="UserSearch" component={UserSearchScreen} />
-            <Stack.Screen name="ChatList" component={ChatListScreen} />
-            <Stack.Screen name="ChatRoom" component={ChatRoomScreen} />
-            <Stack.Screen name="SnapInbox" component={SnapInboxScreen} />
-            <Stack.Screen name="Stories" component={StoriesScreen} />
-            <Stack.Screen name="SnapViewer" component={SnapViewerScreen} />
-            <Stack.Screen name="Friends" component={FriendsScreen} />
-            <Stack.Screen name="FriendRequests" component={FriendRequestsScreen} />
-            <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
-            <Stack.Screen name="ReportUser" component={ReportUserScreen} />
-            <Stack.Screen name="Notifications" component={NotificationsScreen} />
-            <Stack.Screen name="Groups" component={GroupsScreen} />
-            <Stack.Screen name="GroupChat" component={GroupChatScreen} />
-            <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
-            <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
-            <Stack.Screen name="ChunkManager" component={ChunkManagerScreen} />
-            <Stack.Screen name="PrivateDrive" component={PrivateDriveScreen} />
-            <Stack.Screen name="UserProfile" component={UserProfileScreen} />
-            <Stack.Screen name="MyProfile" component={MyProfileScreen} />
-            <Stack.Screen name="SendTo" component={SendToScreen} />
-            <Stack.Screen name="MemoriesViewer" component={MemoriesViewerScreen} />
-          </>
-        )
-      ) : (
-        <Stack.Screen name="Auth" component={AuthNavigator} />
+    <>
+      {!isOnline && (
+        <View style={{
+          backgroundColor: '#FF453A',
+          paddingVertical: 8,
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexDirection: 'row',
+          zIndex: 9999,
+          position: 'relative',
+        }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>
+            ⚠️ Offline Mode — Some features may be unavailable.
+          </Text>
+        </View>
       )}
-    </Stack.Navigator>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {session ? (
+          hasUsername === false ? (
+            <Stack.Screen name="UsernameSetup" component={UsernameSetupScreen} />
+          ) : (
+            <>
+              <Stack.Screen name="Main" component={MainTabs} />
+              <Stack.Screen name="TelegramConnect" component={TelegramConnectScreen} />
+              <Stack.Screen name="Preview" component={PreviewScreen} />
+              <Stack.Screen name="FileDetails" component={FileDetailsScreen} />
+              <Stack.Screen name="UserSearch" component={UserSearchScreen} />
+              <Stack.Screen name="ChatList" component={ChatListScreen} />
+              <Stack.Screen name="ChatRoom" component={ChatRoomScreen} />
+              <Stack.Screen name="SnapInbox" component={SnapInboxScreen} />
+              <Stack.Screen name="Stories" component={StoriesScreen} />
+              <Stack.Screen name="SnapViewer" component={SnapViewerScreen} />
+              <Stack.Screen name="Friends" component={FriendsScreen} />
+              <Stack.Screen name="FriendRequests" component={FriendRequestsScreen} />
+              <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
+              <Stack.Screen name="ReportUser" component={ReportUserScreen} />
+              <Stack.Screen name="Notifications" component={NotificationsScreen} />
+              <Stack.Screen name="Groups" component={GroupsScreen} />
+              <Stack.Screen name="GroupChat" component={GroupChatScreen} />
+              <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
+              <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+              <Stack.Screen name="ChunkManager" component={ChunkManagerScreen} />
+              <Stack.Screen name="PrivateDrive" component={PrivateDriveScreen} />
+              <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+              <Stack.Screen name="MyProfile" component={MyProfileScreen} />
+              <Stack.Screen name="SendTo" component={SendToScreen} />
+              <Stack.Screen name="MemoriesViewer" component={MemoriesViewerScreen} />
+              <Stack.Screen name="StorageAnalytics" component={StorageAnalyticsScreen} />
+            </>
+          )
+        ) : (
+          <Stack.Screen name="Auth" component={AuthNavigator} />
+        )}
+      </Stack.Navigator>
+
+      {appLocked && (
+        <PinLockModal
+          visible={appLocked}
+          onClose={() => {}}
+          onSuccess={() => setAppLocked(false)}
+          mode="verify"
+          undismissable={true}
+        />
+      )}
+    </>
   );
 };
 
