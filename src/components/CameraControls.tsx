@@ -157,7 +157,7 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
 
   const bottomNavHeight = 64 + insets.bottom;
   return (
-    <View style={[styles.container, { bottom: bottomNavHeight }]} pointerEvents="box-none">
+    <View style={[styles.container, { bottom: (Platform.OS === 'web' ? 'calc(64px + env(safe-area-inset-bottom))' : bottomNavHeight) as any }]} pointerEvents="box-none">
 
       {/* Capture Button Row */}
       <View style={styles.bottomBar} pointerEvents="box-none">
