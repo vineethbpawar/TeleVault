@@ -58,11 +58,8 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const [zoom, setZoom] = useState(0);
   const [defaultDestination, setDefaultDestination] = useState<UploadDestination>('memories');
   const getZoomDisplay = () => {
-    const val = zoom * 3 + 1;
+    const val = zoom * 7 + 1;
     if (val === 1) return '1x';
-    if (val === 2) return '2x';
-    if (val === 3) return '3x';
-    if (val === 4) return '4x';
     return `${val.toFixed(1)}x`;
   };
   
@@ -86,6 +83,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const recordingIntervalRef = useRef<any>(null);
   const recordingTimeoutRef = useRef<any>(null);
   const countdownIntervalRef = useRef<any>(null);
+  const webCanvasIntervalRef = useRef<any>(null);
 
   // Two-Finger Pinch Zoom Refs
   const initialPinchDistRef = useRef<number | null>(null);
@@ -405,7 +403,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           if (ctx) {
             if (!hasNativeZoom && zoom > 0) {
               // Simulate zoom by center-cropping the video frame
-              const scale = 1 + zoom * 3; // maps [0, 1] to [1, 4]
+              const scale = 1 + zoom * 7; // maps [0, 1] to [1, 8]
               const sWidth = video.videoWidth / scale;
               const sHeight = video.videoHeight / scale;
               const sx = (video.videoWidth - sWidth) / 2;
@@ -556,9 +554,44 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           }
         }
 
+        let recordStream = webStreamRef.current;
+        if (!hasNativeZoom && zoom > 0 && webVideoRef.current) {
+          console.log('[RECORD_TRACE] Simulating zoom for recording via canvas stream.');
+          const video = webVideoRef.current;
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth || 1280;
+          canvas.height = video.videoHeight || 720;
+          const ctx = canvas.getContext('2d');
+          
+          const drawFrame = () => {
+            if (ctx && video && !video.paused && !video.ended) {
+              const scale = 1 + zoom * 7;
+              const sWidth = canvas.width / scale;
+              const sHeight = canvas.height / scale;
+              const sx = (canvas.width - sWidth) / 2;
+              const sy = (canvas.height - sHeight) / 2;
+              
+              ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+            }
+          };
+
+          drawFrame();
+          const interval = setInterval(drawFrame, 1000 / 30);
+          webCanvasIntervalRef.current = interval;
+
+          if (typeof (canvas as any).captureStream === 'function') {
+            const canvasStream = (canvas as any).captureStream(30);
+            // Append audio tracks
+            webStreamRef.current.getAudioTracks().forEach((track: any) => {
+              canvasStream.addTrack(track.clone());
+            });
+            recordStream = canvasStream;
+          }
+        }
+
         const options = mimeType ? { mimeType } : undefined;
         console.log('[RECORD_TRACE] 2. Creating MediaRecorder with MIME type:', mimeType || 'Default');
-        recorder = new MediaRecorder(webStreamRef.current, options);
+        recorder = new MediaRecorder(recordStream, options);
         webMediaRecorderRef.current = recorder;
 
         recorder.ondataavailable = (event: BlobEvent) => {
@@ -691,6 +724,10 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
 
     if (Platform.OS === 'web') {
       console.log('[RECORD_TRACE] 5. stopRecording called. Stopping Web MediaRecorder.');
+      if (webCanvasIntervalRef.current) {
+        clearInterval(webCanvasIntervalRef.current);
+        webCanvasIntervalRef.current = null;
+      }
       if (webMediaRecorderRef.current && webMediaRecorderRef.current.state !== 'inactive') {
         webMediaRecorderRef.current.stop();
       }
@@ -719,6 +756,10 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     if (recordingIntervalRef.current) {
       clearInterval(recordingIntervalRef.current);
       recordingIntervalRef.current = null;
+    }
+    if (webCanvasIntervalRef.current) {
+      clearInterval(webCanvasIntervalRef.current);
+      webCanvasIntervalRef.current = null;
     }
     setIsRecording(false);
     setRecordingDuration(0);
@@ -1022,8 +1063,8 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
                   width: '100%',
                   height: '100%',
                   objectFit: 'cover',
-                  transform: hasNativeZoom ? 'scale(1)' : `scale(${1 + zoom * 3})`,
-                  transition: 'transform 0.05s ease-out',
+                  transform: hasNativeZoom ? 'scale(1)' : `scale(${1 + zoom * 7})`,
+                  transition: 'transform 0.08s ease-out',
                   userSelect: 'none',
                   WebkitUserSelect: 'none',
                   WebkitTouchCallout: 'none',
