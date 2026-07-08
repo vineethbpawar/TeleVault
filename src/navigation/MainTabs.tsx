@@ -1,4 +1,5 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MainTabParamList } from '../types/navigation';
 import { Camera, Grid, HardDrive, MessageSquare, Settings } from 'lucide-react-native';
@@ -27,8 +28,8 @@ export const MainTabs: React.FC = () => {
         tabBarStyle: {
           backgroundColor: '#0A0A0A',
           borderTopWidth: 0,
-          height: 64 + insets.bottom,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
+          height: (Platform.OS === 'web' ? 'calc(64px + env(safe-area-inset-bottom))' : 64 + insets.bottom) as any,
+          paddingBottom: (Platform.OS === 'web' ? 'calc(8px + env(safe-area-inset-bottom))' : (insets.bottom > 0 ? insets.bottom : 8)) as any,
           paddingTop: 8,
           position: 'absolute',
           bottom: 0,

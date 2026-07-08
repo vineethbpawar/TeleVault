@@ -72,6 +72,8 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const [profile, setProfile] = useState<{ username?: string; avatar_url?: string; full_name?: string } | null>(null);
   const [locationText, setLocationText] = useState('📍 Fetching Location...');
   const [hasNativeZoom, setHasNativeZoom] = useState(false);
+  const [webPermissionGranted, setWebPermissionGranted] = useState<boolean | null>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
 
   const cameraRef = useRef<any>(null);
   const webMediaRecorderRef = useRef<any>(null);
@@ -99,10 +101,9 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
         // Resume existing active stream when possible to minimize prompts
         const isStreamActive = webStreamRef.current && webStreamRef.current.getVideoTracks().some((t: any) => t.readyState === 'live');
         if (isStreamActive) {
-          if (webVideoRef.current && webVideoRef.current.srcObject !== webStreamRef.current) {
-            webVideoRef.current.srcObject = webStreamRef.current;
-          }
+          setCameraStream(webStreamRef.current);
           setCameraReady(true);
+          setWebPermissionGranted(true);
           return;
         }
 
@@ -119,9 +120,8 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           if (active) {
             streamInstance = stream;
             webStreamRef.current = stream;
-            if (webVideoRef.current) {
-              webVideoRef.current.srcObject = stream;
-            }
+            setCameraStream(stream);
+            
             const videoTrack = stream.getVideoTracks()[0];
             if (videoTrack && typeof videoTrack.getCapabilities === 'function') {
               const caps = videoTrack.getCapabilities() as any;
@@ -130,16 +130,19 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
               setHasNativeZoom(false);
             }
             setCameraReady(true);
+            setWebPermissionGranted(true);
           } else {
             stream.getTracks().forEach(t => t.stop());
           }
         }).catch(err => {
           console.error('Failed to get getUserMedia stream on Web:', err);
+          setWebPermissionGranted(false);
         });
       };
 
       const stopCamera = () => {
         setCameraReady(false);
+        setCameraStream(null);
         if (webStreamRef.current) {
           webStreamRef.current.getTracks().forEach((t: any) => t.stop());
           webStreamRef.current = null;
@@ -170,6 +173,19 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
       };
     }
   }, [isFocused, facing]);
+
+  // Web Video Stream Binding Effect
+  useEffect(() => {
+    if (Platform.OS === 'web' && webVideoRef.current) {
+      if (webVideoRef.current.srcObject !== cameraStream) {
+        webVideoRef.current.srcObject = cameraStream;
+        if (cameraStream) {
+          webVideoRef.current.load();
+          webVideoRef.current.play().catch((e: any) => console.warn('[VIDEO_PLAY_WARN] Auto-play was prevented:', e));
+        }
+      }
+    }
+  }, [cameraStream, webVideoRef.current]);
 
   // Web native hardware zoom constraint application
   useEffect(() => {
@@ -257,11 +273,19 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   }, [isFocused]);
 
-  if (!permission || !micPermission) {
+  const isPermissionPending = Platform.OS === 'web'
+    ? webPermissionGranted === null
+    : (!permission || !micPermission);
+
+  const isPermissionGranted = Platform.OS === 'web'
+    ? webPermissionGranted === true
+    : (permission?.granted && micPermission?.granted);
+
+  if (isPermissionPending) {
     return <LoadingScreen message="Requesting camera and mic access..." />;
   }
 
-  if (!permission.granted || !micPermission.granted) {
+  if (!isPermissionGranted) {
     return (
       <SafeAreaView style={styles.permissionContainer}>
         <View style={styles.permissionContent}>
@@ -272,8 +296,24 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           <AppButton
             title="Grant Permissions"
             onPress={async () => {
-              await requestPermission();
-              await requestMicPermission();
+              if (Platform.OS === 'web') {
+                setWebPermissionGranted(null);
+                navigator.mediaDevices.getUserMedia({
+                  video: { facingMode: facing === 'back' ? 'environment' : 'user' },
+                  audio: true
+                }).then(stream => {
+                  webStreamRef.current = stream;
+                  setCameraStream(stream);
+                  setWebPermissionGranted(true);
+                  setCameraReady(true);
+                }).catch(err => {
+                  console.error('Permission request failed:', err);
+                  setWebPermissionGranted(false);
+                });
+              } else {
+                await requestPermission();
+                await requestMicPermission();
+              }
             }}
           />
         </View>
@@ -451,7 +491,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
 
-    if (Platform.OS !== 'web' && !micPermission.granted) {
+    if (Platform.OS !== 'web' && (!micPermission || !micPermission.granted)) {
       try {
         const status = await requestMicPermission();
         if (!status.granted) {
@@ -479,31 +519,41 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           throw new Error('No active Web MediaStream available.');
         }
 
-        // Dynamically request microphone permission only when recording starts to avoid repeated startup prompts
-        try {
-          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          const audioTrack = audioStream.getAudioTracks()[0];
-          if (audioTrack && webStreamRef.current) {
-            webAudioStreamRef.current = audioStream;
-            webStreamRef.current.addTrack(audioTrack);
+        // Dynamically request microphone permission only if not already available in the stream
+        const hasAudioTrack = webStreamRef.current.getAudioTracks().length > 0;
+        if (!hasAudioTrack) {
+          try {
+            const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const audioTrack = audioStream.getAudioTracks()[0];
+            if (audioTrack && webStreamRef.current) {
+              webAudioStreamRef.current = audioStream;
+              webStreamRef.current.addTrack(audioTrack);
+            }
+          } catch (audioErr) {
+            console.warn('Audio capture failed or denied, recording video-only:', audioErr);
           }
-        } catch (audioErr) {
-          console.warn('Audio capture failed or denied, recording video-only:', audioErr);
         }
 
         console.log('[RECORD_TRACE] 1. Hold gesture start detected.');
         webChunksRef.current = [];
         let recorder: MediaRecorder;
         
-        let mimeType = 'video/webm;codecs=vp9';
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = 'video/webm;codecs=vp8';
-        }
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = 'video/webm';
-        }
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = '';
+        let mimeType = '';
+        if (typeof MediaRecorder.isTypeSupported === 'function') {
+          const types = [
+            'video/webm;codecs=vp9',
+            'video/webm;codecs=vp8',
+            'video/webm',
+            'video/mp4;codecs=h264',
+            'video/mp4',
+            'video/quicktime'
+          ];
+          for (const type of types) {
+            if (MediaRecorder.isTypeSupported(type)) {
+              mimeType = type;
+              break;
+            }
+          }
         }
 
         const options = mimeType ? { mimeType } : undefined;
@@ -987,7 +1037,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
               {renderLiveOverlay()}
 
               {/* Upper Safe Overlay (Avatar, Pill, Settings) */}
-              <View style={[styles.newTopBar, { top: insets.top > 0 ? insets.top + 10 : 20 }]}>
+              <View style={[styles.newTopBar, { top: (Platform.OS === 'web' ? 'calc(10px + env(safe-area-inset-top))' : (insets.top > 0 ? insets.top + 10 : 20)) as any }]}>
                 <TouchableOpacity
                   style={styles.profileShortcut}
                   onPress={() => navigation.navigate('MyProfile')}
@@ -1027,7 +1077,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
 
               {/* Recording Indicator */}
               {isRecording && (
-                <View style={[styles.recordingIndicator, { top: insets.top > 0 ? insets.top + 60 : 80 }]}>
+                <View style={[styles.recordingIndicator, { top: (Platform.OS === 'web' ? 'calc(60px + env(safe-area-inset-top))' : (insets.top > 0 ? insets.top + 60 : 80)) as any }]}>
                   <View style={styles.recordingRedDot} />
                   <Text style={styles.recordingTimerText}>{formatDuration(recordingDuration)}</Text>
                 </View>
@@ -1035,7 +1085,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
 
               {/* Selected Lens/Filter indicator label */}
               {selectedLens !== 'original' && !isRecording && (
-                <View style={[styles.activeFilterPill, { bottom: 64 + insets.bottom + 185 }]}>
+                <View style={[styles.activeFilterPill, { bottom: (Platform.OS === 'web' ? 'calc(64px + env(safe-area-inset-bottom) + 185px)' : bottomNavHeight + 185) as any }]}>
                   <Text style={styles.activeFilterPillText}>{selectedLens.toUpperCase()}</Text>
                 </View>
               )}
@@ -1044,7 +1094,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
               {renderFilterTray()}
 
               {/* Zoom Indicator Pill */}
-              <View style={[styles.zoomPill, { bottom: bottomNavHeight + 105 }]}>
+              <View style={[styles.zoomPill, { bottom: (Platform.OS === 'web' ? 'calc(64px + env(safe-area-inset-bottom) + 105px)' : bottomNavHeight + 105) as any }]}>
                 <Text style={styles.zoomPillText}>{getZoomDisplay()}</Text>
               </View>
 

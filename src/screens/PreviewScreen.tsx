@@ -651,7 +651,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
       </View>
 
       {/* Top Controls Overlay */}
-      <View style={[styles.topOverlay, { paddingTop: Math.max(insets.top, 16) }]}>
+      <View style={[styles.topOverlay, { paddingTop: (Platform.OS === 'web' ? 'calc(16px + env(safe-area-inset-top))' : Math.max(insets.top, 16)) as any }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <X size={24} color="#FFFFFF" />
         </TouchableOpacity>
@@ -675,7 +675,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
       </View>
 
       {/* Right Vertical Editor Toolbar */}
-      <View style={[styles.rightToolbar, { top: Math.max(insets.top, 16) + 60 }]}>
+      <View style={[styles.rightToolbar, { top: (Platform.OS === 'web' ? 'calc(76px + env(safe-area-inset-top))' : Math.max(insets.top, 16) + 60) as any }]}>
         <TouchableOpacity style={styles.toolbarBtn} onPress={() => setTextModalVisible(true)}>
           <Type size={18} color="#FFFFFF" />
           <Text style={styles.toolbarBtnLabel}>Text</Text>
@@ -733,7 +733,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
       </View>
 
       {/* Bottom Controls Overlay */}
-      <View style={[styles.bottomOverlay, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      <View style={[styles.bottomOverlay, { paddingBottom: (Platform.OS === 'web' ? 'calc(16px + env(safe-area-inset-bottom))' : Math.max(insets.bottom, 16)) as any }]}>
         {/* Drawing Colors */}
         {drawingMode && (
           <View style={styles.colorsRow}>
