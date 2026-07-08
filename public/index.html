@@ -30,18 +30,52 @@
       }
     </script>
 
-    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <!-- The `react-native-web` recommended style reset and premium visual enhancements -->
     <style id="expo-reset">
-      /* These styles make the body full-height */
+      @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
       html,
       body {
         height: 100%;
+        margin: 0;
+        padding: 0;
+        background-color: #0b0e1b;
+        overscroll-behavior-y: contain; /* Disable pull-to-refresh */
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
       }
-      /* These styles disable body scrolling if you are using <ScrollView> */
+
+      /* Force premium Outfit font across all React Native Web DOM nodes */
+      div, span, p, input, textarea, button, a {
+        font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+      }
+
+      /* Disable default browser tap-highlights & outline rings */
+      * {
+        outline: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      /* Premium Translucent Scrollbars */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: rgba(11, 14, 27, 0.4);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(121, 134, 203, 0.35);
+        border-radius: 8px;
+        transition: background 0.3s ease;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(121, 134, 203, 0.6);
+      }
+
       body {
         overflow: hidden;
       }
-      /* These styles make the root element full-height */
       #root {
         display: flex;
         height: 100%;

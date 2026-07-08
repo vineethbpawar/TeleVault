@@ -201,6 +201,7 @@ export const uploadQueueService = {
   async processQueueItem(pendingItem: UploadQueueItem): Promise<void> {
     const itemId = pendingItem.id;
     console.log(`Starting processing for queue item: ${pendingItem.file_name}`);
+    let tempEncryptedUri: string | null = null;
 
     try {
       // 1. Preparing stage
@@ -243,6 +244,18 @@ export const uploadQueueService = {
         const fileInfo = await FileSystem.getInfoAsync(finalUri);
         if (fileInfo.exists) {
           finalSize = fileInfo.size;
+        }
+      }
+
+      // Client-side Zero-Knowledge E2EE Encryption
+      if (pendingItem.is_private) {
+        await this.updateUploadQueueItem(itemId, { stage: 'Encrypting...', progress: 30 });
+        const { encryptionService } = require('./encryptionService');
+        const encrypted = await encryptionService.encryptFile(finalUri, pendingItem.file_name);
+        finalUri = encrypted.uri;
+        finalSize = encrypted.size;
+        if (Platform.OS !== 'web') {
+          tempEncryptedUri = encrypted.uri;
         }
       }
 
@@ -331,12 +344,44 @@ export const uploadQueueService = {
       console.log(`Successfully uploaded and saved metadata for ${pendingItem.file_name}`);
     } catch (itemError: any) {
       console.error(`Failed to upload queue item ${itemId}:`, itemError);
-      await this.updateUploadQueueItem(itemId, {
-        status: 'failed',
-        stage: 'Failed',
-        progress: 0,
-        error_message: itemError.message || 'An unknown error occurred during upload.',
-      });
+      const maxRetries = 5;
+      const currentRetry = pendingItem.retry_count || 0;
+
+      if (currentRetry < maxRetries) {
+        const nextRetry = currentRetry + 1;
+        const delaySec = Math.pow(2, nextRetry) * 10; // 20s, 40s, 80s, 160s, 320s
+        console.log(`[Queue] Scheduling retry ${nextRetry}/${maxRetries} in ${delaySec}s for item: ${pendingItem.file_name}`);
+        
+        await this.updateUploadQueueItem(itemId, {
+          status: 'pending',
+          retry_count: nextRetry,
+          last_retry_at: new Date().toISOString(),
+          stage: `Retrying in ${delaySec}s...`,
+          error_message: `Attempt ${currentRetry + 1} failed: ${itemError.message || 'Unknown error'}`
+        });
+
+        // Set foreground timer to trigger queue processing
+        setTimeout(() => {
+          this.processUploadQueue().catch(err => {
+            console.error('Asynchronous retry trigger failed:', err);
+          });
+        }, delaySec * 1000);
+      } else {
+        await this.updateUploadQueueItem(itemId, {
+          status: 'failed',
+          stage: 'Failed',
+          progress: 0,
+          error_message: `Failed after ${maxRetries} attempts: ${itemError.message || 'Unknown error'}`,
+        });
+      }
+    } finally {
+      if (tempEncryptedUri && Platform.OS !== 'web') {
+        try {
+          await FileSystem.deleteAsync(tempEncryptedUri, { idempotent: true });
+        } catch (cleanupErr) {
+          console.warn('[E2EE] Temporary encrypted file cleanup failed:', cleanupErr);
+        }
+      }
     }
   },
 };

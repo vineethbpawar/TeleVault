@@ -66,6 +66,7 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
         mime_type: file.mime_type,
         local_thumbnail_uri: file.local_thumbnail_uri,
         telegram_file_id: file.telegram_file_id,
+        is_private: file.is_private,
       }).then(result => {
         if (active) {
           if (result.previewUri && !result.error) {

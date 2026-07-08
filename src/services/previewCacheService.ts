@@ -99,6 +99,7 @@ export const previewCacheService = {
       local_thumbnail_uri?: string | null;
       media_url?: string | null;
       telegram_file_id?: string | null;
+      is_private?: boolean | null;
     },
     forceRefresh = false
   ): Promise<{
@@ -166,10 +167,23 @@ export const previewCacheService = {
           }
           const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id);
           const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
-          await this.setCachedPreview(file.telegram_file_id, url);
+          
+          let previewUri = url;
+          if (file.is_private) {
+            const { encryptionService } = require('./encryptionService');
+            if (Platform.OS === 'web') {
+              previewUri = await encryptionService.decryptFile(url, file.file_name, file.mime_type);
+            } else {
+              const tempEncPath = `${FileSystem.cacheDirectory}temp_enc_${file.id}_${file.file_name}`;
+              await FileSystem.downloadAsync(url, tempEncPath);
+              previewUri = await encryptionService.decryptFile(tempEncPath, file.file_name, file.mime_type);
+              await FileSystem.deleteAsync(tempEncPath, { idempotent: true });
+            }
+          }
+          await this.setCachedPreview(file.telegram_file_id, previewUri);
           return {
             type: 'image',
-            previewUri: url,
+            previewUri: previewUri,
             fallbackIcon,
           };
         } catch (err: any) {
@@ -214,8 +228,23 @@ export const previewCacheService = {
             } else {
               const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id);
               const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
-              await this.setCachedPreview(file.telegram_file_id, url);
-              playableUri = url;
+              
+              if (file.is_private) {
+                const { encryptionService } = require('./encryptionService');
+                if (Platform.OS === 'web') {
+                  playableUri = await encryptionService.decryptFile(url, file.file_name, file.mime_type);
+                } else {
+                  const tempEncPath = `${FileSystem.cacheDirectory}temp_enc_${file.id}_${file.file_name}`;
+                  await FileSystem.downloadAsync(url, tempEncPath);
+                  playableUri = await encryptionService.decryptFile(tempEncPath, file.file_name, file.mime_type);
+                  await FileSystem.deleteAsync(tempEncPath, { idempotent: true });
+                }
+              } else {
+                playableUri = url;
+              }
+              if (playableUri) {
+                await this.setCachedPreview(file.telegram_file_id, playableUri);
+              }
             }
           }
         } catch (e) {
@@ -344,10 +373,23 @@ export const previewCacheService = {
           }
           const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id);
           const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
-          await this.setCachedPreview(file.telegram_file_id, url);
+          
+          let previewUri = url;
+          if (file.is_private) {
+            const { encryptionService } = require('./encryptionService');
+            if (Platform.OS === 'web') {
+              previewUri = await encryptionService.decryptFile(url, file.file_name, file.mime_type);
+            } else {
+              const tempEncPath = `${FileSystem.cacheDirectory}temp_enc_${file.id}_${file.file_name}`;
+              await FileSystem.downloadAsync(url, tempEncPath);
+              previewUri = await encryptionService.decryptFile(tempEncPath, file.file_name, file.mime_type);
+              await FileSystem.deleteAsync(tempEncPath, { idempotent: true });
+            }
+          }
+          await this.setCachedPreview(file.telegram_file_id, previewUri);
           return {
             type: fileType,
-            previewUri: url,
+            previewUri: previewUri,
             fallbackIcon,
           };
         }

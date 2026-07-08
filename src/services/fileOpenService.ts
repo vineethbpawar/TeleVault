@@ -5,9 +5,9 @@ import { Alert } from 'react-native';
 export const fileOpenService = {
   /**
    * Universal document opener/sharer.
-   * Downloads the file from Telegram if necessary, then opens the native Share dialog (or system viewer).
+   * Downloads the file from Telegram if necessary, decrypts if private, then opens the native Share dialog (or system viewer).
    */
-  async openDocument(file: { telegram_file_id: string | null; file_name: string }): Promise<void> {
+  async openDocument(file: { telegram_file_id: string | null; file_name: string; is_private?: boolean | null; mime_type?: string | null }): Promise<void> {
     if (!file.telegram_file_id) {
       throw new Error('This file cannot be downloaded (No Telegram file ID).');
     }
@@ -19,7 +19,13 @@ export const fileOpenService = {
       }
 
       // Download file to cache
-      const cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
+      let cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
+      
+      // Decrypt if E2EE private
+      if (file.is_private) {
+        const { encryptionService } = require('./encryptionService');
+        cachedUri = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type);
+      }
       
       // Open in system viewer/sharing sheet
       await Sharing.shareAsync(cachedUri, {
@@ -35,11 +41,18 @@ export const fileOpenService = {
   /**
    * Helper to download the file directly to device cache without opening sharing sheet.
    */
-  async downloadToCache(file: { telegram_file_id: string | null; file_name: string }): Promise<string> {
+  async downloadToCache(file: { telegram_file_id: string | null; file_name: string; is_private?: boolean | null; mime_type?: string | null }): Promise<string> {
     if (!file.telegram_file_id) {
       throw new Error('Telegram file ID is missing.');
     }
-    return await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
+    let cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
+    
+    if (file.is_private) {
+      const { encryptionService } = require('./encryptionService');
+      cachedUri = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type);
+    }
+    
+    return cachedUri;
   }
 };
 
