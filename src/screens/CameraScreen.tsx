@@ -479,6 +479,18 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           throw new Error('No active Web MediaStream available.');
         }
 
+        // Dynamically request microphone permission only when recording starts to avoid repeated startup prompts
+        try {
+          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const audioTrack = audioStream.getAudioTracks()[0];
+          if (audioTrack && webStreamRef.current) {
+            webAudioStreamRef.current = audioStream;
+            webStreamRef.current.addTrack(audioTrack);
+          }
+        } catch (audioErr) {
+          console.warn('Audio capture failed or denied, recording video-only:', audioErr);
+        }
+
         console.log('[RECORD_TRACE] 1. Hold gesture start detected.');
         webChunksRef.current = [];
         let recorder: MediaRecorder;
@@ -633,7 +645,12 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
         webMediaRecorderRef.current.stop();
       }
       if (webAudioStreamRef.current) {
-        webAudioStreamRef.current.getTracks().forEach((track: any) => track.stop());
+        webAudioStreamRef.current.getTracks().forEach((track: any) => {
+          track.stop();
+          if (webStreamRef.current) {
+            webStreamRef.current.removeTrack(track);
+          }
+        });
         webAudioStreamRef.current = null;
       }
     } else {
