@@ -33,6 +33,7 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
   const longPressTimeoutRef = useRef<any>(null);
   const globalMouseMoveRef = useRef<any>(null);
   const globalMouseUpRef = useRef<any>(null);
+  const lastZoomTimeRef = useRef<number>(0);
 
   React.useEffect(() => {
     return () => {
@@ -64,9 +65,14 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
     const currentY = e.nativeEvent.pageY;
     if ((isRecording || isRecordingStartedRef.current) && onZoomChange) {
       const dy = initialTouchY.current - currentY; // positive when dragging up
-      const sensitivity = 250; // drag 250px up to reach 100% zoom
+      const sensitivity = 500; // Increased to 500px for smoother, natural Snapchat-like control
       const newZoom = Math.max(0, Math.min(1, startZoomRef.current + (dy / sensitivity)));
-      onZoomChange(newZoom);
+      
+      const now = Date.now();
+      if (now - lastZoomTimeRef.current > 33 || newZoom === 0 || newZoom === 1) {
+        onZoomChange(newZoom);
+        lastZoomTimeRef.current = now;
+      }
     }
   };
 
@@ -131,9 +137,14 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
     const currentY = clientY;
     if ((isRecording || isRecordingStartedRef.current) && onZoomChange) {
       const dy = initialTouchY.current - currentY;
-      const sensitivity = 250;
+      const sensitivity = 500; // Increased to 500px
       const newZoom = Math.max(0, Math.min(1, startZoomRef.current + (dy / sensitivity)));
-      onZoomChange(newZoom);
+      
+      const now = Date.now();
+      if (now - lastZoomTimeRef.current > 33 || newZoom === 0 || newZoom === 1) {
+        onZoomChange(newZoom);
+        lastZoomTimeRef.current = now;
+      }
     }
   };
 

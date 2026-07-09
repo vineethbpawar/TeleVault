@@ -89,6 +89,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   // Two-Finger Pinch Zoom Refs
   const initialPinchDistRef = useRef<number | null>(null);
   const initialPinchZoomRef = useRef<number>(0);
+  const lastPinchZoomTimeRef = useRef<number>(0);
 
   // Web getUserMedia setup effect with AppState listener
   useEffect(() => {
@@ -350,9 +351,14 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
       }
       const currentDist = calcDistance(touches);
       const ratio = currentDist / initialPinchDistRef.current;
-      const zoomFactor = 0.5; // gentle mapping speed
+      const zoomFactor = 0.8; // slightly higher factor for more natural responsiveness
       const newZoom = Math.max(0, Math.min(1, initialPinchZoomRef.current + (ratio - 1) * zoomFactor));
-      setZoom(newZoom);
+      
+      const now = Date.now();
+      if (now - lastPinchZoomTimeRef.current > 33 || newZoom === 0 || newZoom === 1) {
+        setZoom(newZoom);
+        lastPinchZoomTimeRef.current = now;
+      }
     }
   };
 
@@ -700,7 +706,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
         }, 1000);
 
         const video = await cameraRef.current.recordAsync({
-          quality: '720p',
+          quality: '1080p',
           maxDuration: maxDuration,
         });
 
