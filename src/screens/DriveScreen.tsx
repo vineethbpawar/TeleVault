@@ -13,6 +13,7 @@ import {
   Modal,
   ScrollView,
   Image,
+  Platform,
 } from 'react-native';
 import { previewCacheService } from '../services/previewCacheService';
 import {
@@ -586,6 +587,10 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
               );
             }
           }}
+          removeClippedSubviews={Platform.OS !== 'web'}
+          maxToRenderPerBatch={10}
+          initialNumToRender={10}
+          windowSize={5}
         />
       )}
 

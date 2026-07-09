@@ -94,6 +94,22 @@ const ViewerItem: React.FC<{
             source={{ uri: resolved.previewUri }}
             style={StyleSheet.absoluteFill}
             resizeMode="contain"
+            onError={async () => {
+              if (file.telegram_file_id) {
+                const repaired = await previewCacheService.forceRepairPreview(file.telegram_file_id, {
+                  id: file.id,
+                  file_name: file.file_name,
+                  file_type: 'video',
+                  mime_type: file.mime_type,
+                  local_thumbnail_uri: file.local_thumbnail_uri,
+                  telegram_file_id: file.telegram_file_id,
+                  is_private: file.is_private,
+                });
+                if (repaired) {
+                  setResolved(prev => ({ ...prev, ...repaired }));
+                }
+              }
+            }}
           />
         ) : (
           <View style={[StyleSheet.absoluteFill, styles.fallbackContainer]}>
@@ -111,6 +127,22 @@ const ViewerItem: React.FC<{
           source={{ uri: resolved.previewUri }}
           style={StyleSheet.absoluteFill}
           resizeMode="contain"
+          onError={async () => {
+            if (file.telegram_file_id) {
+              const repaired = await previewCacheService.forceRepairPreview(file.telegram_file_id, {
+                id: file.id,
+                file_name: file.file_name,
+                file_type: 'image',
+                mime_type: file.mime_type,
+                local_thumbnail_uri: file.local_thumbnail_uri,
+                telegram_file_id: file.telegram_file_id,
+                is_private: file.is_private,
+              });
+              if (repaired) {
+                setResolved(prev => ({ ...prev, ...repaired }));
+              }
+            }
+          }}
         />
       </Pressable>
     );

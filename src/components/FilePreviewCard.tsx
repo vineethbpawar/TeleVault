@@ -146,7 +146,24 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
               source={{ uri: resolvedUri }}
               style={StyleSheet.absoluteFill}
               resizeMode="cover"
-              onError={() => setError(true)}
+              onError={async () => {
+                setError(true);
+                if (file.telegram_file_id) {
+                  const repaired = await previewCacheService.forceRepairPreview(file.telegram_file_id, {
+                    id: file.id,
+                    file_name: file.file_name,
+                    file_type: 'video',
+                    mime_type: file.mime_type,
+                    local_thumbnail_uri: file.local_thumbnail_uri,
+                    telegram_file_id: file.telegram_file_id,
+                    is_private: file.is_private,
+                  });
+                  if (repaired && repaired.previewUri) {
+                    setResolvedUri(repaired.previewUri);
+                    setError(false);
+                  }
+                }
+              }}
             />
             <View style={styles.thumbnailVideoOverlay}>
               <Play size={variant === 'grid' ? 12 : 16} color="#000000" fill="#000000" />
@@ -196,8 +213,23 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
             source={{ uri: resolvedUri }}
             style={StyleSheet.absoluteFill}
             resizeMode="cover"
-            onError={() => {
+            onError={async () => {
               setError(true);
+              if (file.telegram_file_id) {
+                const repaired = await previewCacheService.forceRepairPreview(file.telegram_file_id, {
+                  id: file.id,
+                  file_name: file.file_name,
+                  file_type: 'image',
+                  mime_type: file.mime_type,
+                  local_thumbnail_uri: file.local_thumbnail_uri,
+                  telegram_file_id: file.telegram_file_id,
+                  is_private: file.is_private,
+                });
+                if (repaired && repaired.previewUri) {
+                  setResolvedUri(repaired.previewUri);
+                  setError(false);
+                }
+              }
             }}
           />
         );

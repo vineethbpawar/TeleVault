@@ -3,6 +3,10 @@ import { StyleSheet, View, Text, TouchableOpacity, Alert, SafeAreaView, ScrollVi
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedProps, runOnJS, useAnimatedReaction } from 'react-native-reanimated';
+
+const AnimatedCameraView = Animated.createAnimatedComponent(CameraView);
 import { CompositeScreenProps, useIsFocused } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -85,11 +89,6 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const recordingTimeoutRef = useRef<any>(null);
   const countdownIntervalRef = useRef<any>(null);
   const webCanvasIntervalRef = useRef<any>(null);
-
-  // Two-Finger Pinch Zoom Refs
-  const initialPinchDistRef = useRef<number | null>(null);
-  const initialPinchZoomRef = useRef<number>(0);
-  const lastPinchZoomTimeRef = useRef<number>(0);
 
   // Web getUserMedia setup effect with AppState listener
   useEffect(() => {
@@ -321,52 +320,74 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     );
   }
 
-  // Two-Finger Pinch Zoom Helpers
-  const calcDistance = (touches: any[]) => {
-    if (touches.length < 2) return 0;
-    const dx = touches[0].pageX - touches[1].pageX;
-    const dy = touches[0].pageY - touches[1].pageY;
-    return Math.sqrt(dx * dx + dy * dy);
-  };
+  // Native GestureDetector Pinch-to-Zoom Gesture handler
+  const zoomShared = useSharedValue(0);
+  const startZoomShared = useSharedValue(0);
 
-  const handleCameraTouchStart = (e: any) => {
-    const touches = e.nativeEvent.touches;
-    if (touches && touches.length === 2) {
-      if (Platform.OS === 'web') {
-        if (typeof e.preventDefault === 'function') e.preventDefault();
-        if (e.nativeEvent && typeof e.nativeEvent.preventDefault === 'function') e.nativeEvent.preventDefault();
-      }
-      const dist = calcDistance(touches);
-      initialPinchDistRef.current = dist;
-      initialPinchZoomRef.current = zoom;
-    }
-  };
+  const pinchGesture = Gesture.Pinch()
+    .onStart(() => {
+      startZoomShared.value = zoomShared.value;
+    })
+    .onUpdate((event) => {
+      // Map scale to zoom smoothly [0, 1] range.
+      const newZoom = startZoomShared.value + (event.scale - 1) * 0.5;
+      zoomShared.value = Math.max(0, Math.min(1, newZoom));
+    });
 
-  const handleCameraTouchMove = (e: any) => {
-    const touches = e.nativeEvent.touches;
-    if (touches && touches.length === 2 && initialPinchDistRef.current) {
-      if (Platform.OS === 'web') {
-        if (typeof e.preventDefault === 'function') e.preventDefault();
-        if (e.nativeEvent && typeof e.nativeEvent.preventDefault === 'function') e.nativeEvent.preventDefault();
-      }
-      const currentDist = calcDistance(touches);
-      const ratio = currentDist / initialPinchDistRef.current;
-      const zoomFactor = 0.8; // slightly higher factor for more natural responsiveness
-      const newZoom = Math.max(0, Math.min(1, initialPinchZoomRef.current + (ratio - 1) * zoomFactor));
-      
-      const now = Date.now();
-      if (now - lastPinchZoomTimeRef.current > 33 || newZoom === 0 || newZoom === 1) {
-        setZoom(newZoom);
-        lastPinchZoomTimeRef.current = now;
+  // Track shared value changes back to the zoom state at discrete 0.1x steps to prevent React render floods
+  useAnimatedReaction(
+    () => zoomShared.value,
+    (nextZoom, prevZoom) => {
+      if (nextZoom !== prevZoom) {
+        const nextVal = Math.round((nextZoom * 7 + 1) * 10) / 10;
+        const prevVal = prevZoom ? Math.round((prevZoom * 7 + 1) * 10) / 10 : 0;
+        if (nextVal !== prevVal) {
+          runOnJS(setZoom)(nextZoom);
+        }
       }
     }
-  };
+  );
 
-  const handleCameraTouchEnd = (e: any) => {
-    const touches = e.nativeEvent.touches;
-    if (!touches || touches.length < 2) {
-      initialPinchDistRef.current = null;
+  // Sync React state updates from external triggers (like CameraControls resetting) back to the shared value
+  useEffect(() => {
+    if (zoomShared.value !== zoom) {
+      zoomShared.value = zoom;
     }
+  }, [zoom]);
+
+  const cameraAnimatedProps = useAnimatedProps(() => {
+    return {
+      zoom: zoomShared.value,
+    };
+  });
+
+  const waitForFileFinalization = async (uri: string): Promise<boolean> => {
+    if (Platform.OS === 'web') return true;
+    const { getInfoAsync } = require('expo-file-system');
+    let lastSize = -1;
+    let stableCount = 0;
+    
+    // Check up to 10 times (max 1 second total wait)
+    for (let i = 0; i < 10; i++) {
+      try {
+        const info = await getInfoAsync(uri);
+        if (info.exists && info.size > 0) {
+          if (info.size === lastSize) {
+            stableCount++;
+            if (stableCount >= 2) {
+              return true;
+            }
+          } else {
+            stableCount = 0;
+            lastSize = info.size;
+          }
+        }
+      } catch (err) {
+        console.warn('[CameraScreen] Error checking file size:', err);
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return false;
   };
 
   const startCountdown = (seconds: number, callback: () => void) => {
@@ -711,8 +732,8 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
         });
 
         if (video && video.uri) {
-          // Wait 300ms to ensure the file is completely written and unlocked by the encoder
-          await new Promise((resolve) => setTimeout(resolve, 300));
+          // Robust wait for file write completion and lock release
+          await waitForFileFinalization(video.uri);
           navigation.navigate('Preview', {
             uri: video.uri,
             type: 'video',
@@ -1060,27 +1081,25 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const bottomNavHeight = 64 + insets.bottom;
 
-  return (
-    <View style={[styles.container, Platform.OS === 'web' ? {
-      userSelect: 'none',
-      WebkitUserSelect: 'none',
-      WebkitTouchCallout: 'none',
-      WebkitTapHighlightColor: 'transparent',
-      touchAction: 'none',
-    } as any : {}]}>
-      {isFocused ? (
-        <View 
-          style={[StyleSheet.absoluteFill, Platform.OS === 'web' ? {
-            userSelect: 'none',
-            WebkitUserSelect: 'none',
-            WebkitTouchCallout: 'none',
-            WebkitTapHighlightColor: 'transparent',
-            touchAction: 'none',
-          } as any : {}]}
-          onTouchStart={handleCameraTouchStart}
-          onTouchMove={handleCameraTouchMove}
-          onTouchEnd={handleCameraTouchEnd}
-        >
+    return (
+      <View style={[styles.container, Platform.OS === 'web' ? {
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        WebkitTouchCallout: 'none',
+        WebkitTapHighlightColor: 'transparent',
+        touchAction: 'none',
+      } as any : {}]}>
+        {isFocused ? (
+          <GestureDetector gesture={pinchGesture}>
+            <View 
+              style={[StyleSheet.absoluteFill, Platform.OS === 'web' ? {
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                WebkitTouchCallout: 'none',
+                WebkitTapHighlightColor: 'transparent',
+                touchAction: 'none',
+              } as any : {}]}
+            >
           {Platform.OS === 'web' ? (
             <View style={[StyleSheet.absoluteFill, { 
               overflow: 'hidden',
@@ -1191,18 +1210,19 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
             </View>
           ) : (
             <View style={StyleSheet.absoluteFill}>
-              <CameraView
+              <AnimatedCameraView
                 style={StyleSheet.absoluteFill}
                 facing={facing}
                 flash={flash}
                 mode={cameraMode}
-                zoom={zoom}
+                animatedProps={cameraAnimatedProps}
                 pictureSize={pictureSize}
+                autofocus="on"
+                videoQuality="1080p"
+                videoStabilizationMode="auto"
+                videoBitrate={12000000}
                 ref={cameraRef}
                 onCameraReady={handleCameraReady}
-                onTouchStart={handleCameraTouchStart}
-                onTouchMove={handleCameraTouchMove}
-                onTouchEnd={handleCameraTouchEnd}
               />
 
               {renderLiveOverlay()}
@@ -1283,6 +1303,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
             </View>
           )}
         </View>
+      </GestureDetector>
       ) : (
         <View style={styles.inactiveBackground} />
       )}

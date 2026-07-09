@@ -3,6 +3,50 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../lib/supabase';
 import { Platform } from 'react-native';
 
+export async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries = 3): Promise<Response> {
+  let attempt = 0;
+  while (attempt < maxRetries) {
+    try {
+      const response = await fetch(url, options);
+      if (response.status === 429) {
+        attempt++;
+        let waitSec = 3;
+        try {
+          const data = await response.clone().json();
+          if (data.parameters && data.parameters.retry_after) {
+            waitSec = data.parameters.retry_after;
+          }
+        } catch (_) {}
+        console.warn(`[Telegram API] 429 Rate Limit. Waiting ${waitSec}s before retry (attempt ${attempt}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, waitSec * 1000));
+        continue;
+      }
+      
+      if (response.status >= 500 && response.status <= 504) {
+        attempt++;
+        if (attempt >= maxRetries) {
+          return response;
+        }
+        const backoffMs = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+        console.warn(`[Telegram API] Status ${response.status}. Retrying in ${Math.round(backoffMs)}ms...`);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+        continue;
+      }
+      
+      return response;
+    } catch (err: any) {
+      attempt++;
+      if (attempt >= maxRetries) {
+        throw err;
+      }
+      const backoffMs = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+      console.warn(`[Telegram API] Network Error: ${err.message}. Retrying in ${Math.round(backoffMs)}ms...`);
+      await new Promise(resolve => setTimeout(resolve, backoffMs));
+    }
+  }
+  throw new Error('Maximum retries exceeded');
+}
+
 async function uploadFileHelper(
   url: string,
   localUri: string,
@@ -287,7 +331,7 @@ export const telegramService = {
 
     const checkedList = await Promise.all(list.map(async (chan) => {
       try {
-        const res = await fetch(`https://api.telegram.org/bot${botToken}/getChat?chat_id=${chan.id}`);
+        const res = await fetchWithRetry(`https://api.telegram.org/bot${botToken}/getChat?chat_id=${chan.id}`);
         const data = await res.json();
         return {
           ...chan,
@@ -350,7 +394,7 @@ export const telegramService = {
       const trimmedChannel = channelId.trim();
 
       const url = `https://api.telegram.org/bot${trimmedToken}/sendMessage`;
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -542,7 +586,7 @@ export const telegramService = {
 
     try {
       const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -764,7 +808,7 @@ export const telegramService = {
       throw new Error('Telegram bot token is not configured.');
     }
 
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${encodeURIComponent(fileId)}`);
+    const res = await fetchWithRetry(`https://api.telegram.org/bot${botToken}/getFile?file_id=${encodeURIComponent(fileId)}`);
     const data = await res.json();
     if (res.ok && data.ok) {
       return data.result;

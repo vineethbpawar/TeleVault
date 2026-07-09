@@ -5,6 +5,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastBanner } from './src/components/ToastBanner';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 export default function App() {
   useEffect(() => {
@@ -43,13 +44,15 @@ export default function App() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <NavigationContainer>
-        <AppNavigator />
-        <StatusBar style="light" />
-        <ToastBanner />
-      </NavigationContainer>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <NavigationContainer>
+          <AppNavigator />
+          <StatusBar style="light" />
+          <ToastBanner />
+        </NavigationContainer>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 

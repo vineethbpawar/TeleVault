@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { Snap, StoryView } from '../types/snap';
 import { chatService } from './chatService';
-import { telegramService } from './telegramService';
+import { telegramService, fetchWithRetry } from './telegramService';
 import { friendService } from './friendService';
 
 export const snapService = {
@@ -383,7 +383,7 @@ export const snapService = {
       throw new Error('Telegram bot token is not configured.');
     }
 
-    const res = await fetch(`https://api.telegram.org/bot${config.botToken}/getFile?file_id=${telegramFileId}`);
+    const res = await fetchWithRetry(`https://api.telegram.org/bot${config.botToken}/getFile?file_id=${telegramFileId}`);
     const data = await res.json();
 
     if (res.ok && data.ok) {

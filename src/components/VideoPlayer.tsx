@@ -39,6 +39,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style }) => {
       } else {
         video.pause();
       }
+
+      return () => {
+        try {
+          video.pause();
+          video.src = "";
+          video.load();
+        } catch (_) {}
+      };
     }, [source, isFocused]);
 
     return (
@@ -92,6 +100,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style }) => {
 
     return () => {
       subscription.remove();
+      try {
+        player.pause();
+      } catch (_) {}
     };
   }, [player, source, isFocused]);
 

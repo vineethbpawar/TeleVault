@@ -22,7 +22,12 @@ export const Screen: React.FC<ScreenProps> = ({
   const includeLeft = edges.includes('left');
   const includeRight = edges.includes('right');
 
-  const paddingStyle = {
+  const paddingStyle = Platform.OS === 'web' ? {
+    paddingTop: includeTop ? 'env(safe-area-inset-top, 0px)' : '0px',
+    paddingBottom: includeBottom ? 'env(safe-area-inset-bottom, 0px)' : '0px',
+    paddingLeft: includeLeft ? 'env(safe-area-inset-left, 0px)' : '0px',
+    paddingRight: includeRight ? 'env(safe-area-inset-right, 0px)' : '0px',
+  } as any : {
     paddingTop: includeTop ? insets.top : 0,
     paddingBottom: includeBottom ? insets.bottom : 0,
     paddingLeft: includeLeft ? insets.left : 0,

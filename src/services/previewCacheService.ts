@@ -431,6 +431,24 @@ export const previewCacheService = {
     };
   },
 
+  async forceRepairPreview(fileId: string, file: any): Promise<{ previewUri?: string; playableUri?: string } | null> {
+    try {
+      console.log(`[PreviewCache] Repairing corrupted/expired preview for file: ${fileId}`);
+      await AsyncStorage.removeItem(CACHE_PREFIX + fileId);
+      if (file.id) {
+        await AsyncStorage.removeItem(`televault_vid_thumb_${file.id}`);
+      }
+      const repaired = await this.resolveFilePreview(file, true);
+      return {
+        previewUri: repaired.previewUri,
+        playableUri: repaired.playableUri,
+      };
+    } catch (err) {
+      console.error(`[PreviewCache] Failed to repair preview for file ${fileId}:`, err);
+      return null;
+    }
+  },
+
   async pregenerateThumbnailsInBackground(files: any[]): Promise<void> {
     const config = await telegramService.getTelegramConfig();
     if (!config.botToken) return;
