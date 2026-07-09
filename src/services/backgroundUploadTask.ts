@@ -2,23 +2,28 @@ import * as TaskManager from 'expo-task-manager';
 import * as BackgroundTask from 'expo-background-task';
 import { uploadQueueService } from './uploadQueueService';
 
+import { Platform } from 'react-native';
+
 export const BACKGROUND_UPLOAD_TASK_NAME = 'TELEVAULT_BACKGROUND_UPLOAD_TASK';
 
-// Define the background task globally at the root level of the script
-TaskManager.defineTask(BACKGROUND_UPLOAD_TASK_NAME, async () => {
-  try {
-    console.log('[Background Upload] Periodic background task execution started.');
-    await uploadQueueService.processUploadQueue();
-    console.log('[Background Upload] Background upload processing completed.');
-    return BackgroundTask.BackgroundTaskResult?.Success ?? 2;
-  } catch (error) {
-    console.error('[Background Upload] Background upload task failed:', error);
-    return BackgroundTask.BackgroundTaskResult?.Failed ?? 1;
-  }
-});
+// Define the background task globally at the root level of the script (native-only)
+if (Platform.OS !== 'web') {
+  TaskManager.defineTask(BACKGROUND_UPLOAD_TASK_NAME, async () => {
+    try {
+      console.log('[Background Upload] Periodic background task execution started.');
+      await uploadQueueService.processUploadQueue();
+      console.log('[Background Upload] Background upload processing completed.');
+      return BackgroundTask.BackgroundTaskResult?.Success ?? 2;
+    } catch (error) {
+      console.error('[Background Upload] Background upload task failed:', error);
+      return BackgroundTask.BackgroundTaskResult?.Failed ?? 1;
+    }
+  });
+}
 
 export const backgroundUploadService = {
   async registerBackgroundUploadTask() {
+    if (Platform.OS === 'web') return;
     try {
       const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_UPLOAD_TASK_NAME);
       if (!isRegistered) {

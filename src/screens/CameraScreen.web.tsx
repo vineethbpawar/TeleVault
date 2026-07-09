@@ -1,10 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Alert, SafeAreaView, ScrollView, Platform, AppState, AppStateStatus } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import { GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, runOnJS, useAnimatedReaction } from 'react-native-reanimated';
 import { CompositeScreenProps, useIsFocused } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -46,8 +43,6 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const [flash, setFlash] = useState<'off' | 'on'>('off');
   const [cameraMode, setCameraMode] = useState<'picture' | 'video'>('picture');
   
-  const [permission, requestPermission] = useCameraPermissions();
-  const [micPermission, requestMicPermission] = useMicrophonePermissions();
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -87,41 +82,6 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const recordingTimeoutRef = useRef<any>(null);
   const countdownIntervalRef = useRef<any>(null);
   const webCanvasIntervalRef = useRef<any>(null);
-
-  // Native GestureDetector Pinch-to-Zoom Gesture handler
-  const zoomShared = useSharedValue(0);
-  const startZoomShared = useSharedValue(0);
-
-  const pinchGesture = Gesture.Pinch()
-    .onStart(() => {
-      startZoomShared.value = zoomShared.value;
-    })
-    .onUpdate((event) => {
-      // Map scale to zoom smoothly [0, 1] range.
-      const newZoom = startZoomShared.value + (event.scale - 1) * 0.5;
-      zoomShared.value = Math.max(0, Math.min(1, newZoom));
-    });
-
-  // Track shared value changes back to the zoom state at discrete 0.1x steps to prevent React render floods
-  useAnimatedReaction(
-    () => zoomShared.value,
-    (nextZoom, prevZoom) => {
-      if (nextZoom !== prevZoom) {
-        const nextVal = Math.round((nextZoom * 7 + 1) * 10) / 10;
-        const prevVal = prevZoom ? Math.round((prevZoom * 7 + 1) * 10) / 10 : 0;
-        if (nextVal !== prevVal) {
-          runOnJS(setZoom)(nextZoom);
-        }
-      }
-    }
-  );
-
-  // Sync React state updates from external triggers (like CameraControls resetting) back to the shared value
-  useEffect(() => {
-    if (zoomShared.value !== zoom) {
-      zoomShared.value = zoom;
-    }
-  }, [zoom]);
 
   // Web getUserMedia setup effect with AppState listener
   useEffect(() => {
@@ -305,13 +265,9 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   }, [isFocused]);
 
-  const isPermissionPending = Platform.OS === 'web'
-    ? webPermissionGranted === null
-    : (!permission || !micPermission);
+  const isPermissionPending = webPermissionGranted === null;
 
-  const isPermissionGranted = Platform.OS === 'web'
-    ? webPermissionGranted === true
-    : (permission?.granted && micPermission?.granted);
+  const isPermissionGranted = webPermissionGranted === true;
 
   if (isPermissionPending) {
     return <LoadingScreen message="Requesting camera and mic access..." />;
@@ -328,31 +284,25 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           <AppButton
             title="Grant Permissions"
             onPress={async () => {
-              if (Platform.OS === 'web') {
-                setWebPermissionGranted(null);
-                navigator.mediaDevices.getUserMedia({
-                  video: { facingMode: facing === 'back' ? 'environment' : 'user' },
-                  audio: true
-                }).then(stream => {
-                  webStreamRef.current = stream;
-                  setCameraStream(stream);
-                  setWebPermissionGranted(true);
-                  setCameraReady(true);
-                }).catch(err => {
-                  console.error('Permission request failed:', err);
-                  setWebPermissionGranted(false);
-                });
-              } else {
-                await requestPermission();
-                await requestMicPermission();
-              }
+              setWebPermissionGranted(null);
+              navigator.mediaDevices.getUserMedia({
+                video: { facingMode: facing === 'back' ? 'environment' : 'user' },
+                audio: true
+              }).then(stream => {
+                webStreamRef.current = stream;
+                setCameraStream(stream);
+                setWebPermissionGranted(true);
+                setCameraReady(true);
+              }).catch(err => {
+                console.error('Permission request failed:', err);
+                setWebPermissionGranted(false);
+              });
             }}
           />
         </View>
       </SafeAreaView>
     );
   }
-
 
 
   const waitForFileFinalization = async (uri: string): Promise<boolean> => {
@@ -540,26 +490,8 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
 
-    if (Platform.OS !== 'web' && (!micPermission || !micPermission.granted)) {
-      try {
-        const status = await requestMicPermission();
-        if (!status.granted) {
-          Alert.alert('Permission Required', 'Microphone permission is required to record video.');
-          return;
-        }
-      } catch (err) {
-        console.warn('Muted recording fallback:', err);
-      }
-    }
-
     setIsStartingRecording(true);
     setRecordingDuration(0);
-
-    // Swap mode to video if needed
-    if (Platform.OS !== 'web' && cameraMode !== 'video') {
-      setCameraMode('video');
-      await new Promise((resolve) => setTimeout(resolve, 600));
-    }
 
     if (Platform.OS === 'web') {
       try {
@@ -1073,232 +1005,110 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     );
   };
 
-  const renderViewContent = () => {
-    const bottomNavHeight = 64 + insets.bottom;
-    return (
-      <View 
-        style={[StyleSheet.absoluteFill, Platform.OS === 'web' ? {
+   return (
+    <View style={[styles.container, {
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
+      WebkitTouchCallout: 'none',
+      WebkitTapHighlightColor: 'transparent',
+      touchAction: 'none',
+    } as any]}>
+      {isFocused ? (
+        <View style={[StyleSheet.absoluteFill, { 
+          overflow: 'hidden',
           userSelect: 'none',
           WebkitUserSelect: 'none',
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent',
           touchAction: 'none',
-        } as any : {}]}
-      >
-        {Platform.OS === 'web' ? (
-          <View style={[StyleSheet.absoluteFill, { 
-            overflow: 'hidden',
-            userSelect: 'none',
-            WebkitUserSelect: 'none',
-            WebkitTouchCallout: 'none',
-            WebkitTapHighlightColor: 'transparent',
-            touchAction: 'none',
-          } as any]}>
-            <video
-              ref={webVideoRef}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-              }}
-              autoPlay
-              playsInline
-              muted
-            />
-            {renderLiveOverlay()}
+        } as any]}>
+          <video
+            ref={webVideoRef}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+            }}
+            autoPlay
+            playsInline
+            muted
+          />
+          {renderLiveOverlay()}
 
-            {/* Upper Safe Overlay (Avatar, Pill, Settings) */}
-            <View style={[styles.newTopBar, { top: insets.top > 0 ? insets.top + 10 : 20 }]}>
-              <TouchableOpacity
-                style={styles.profileShortcut}
-                onPress={() => navigation.navigate('MyProfile')}
-                activeOpacity={0.8}
-              >
-                <UserAvatar
-                  name={profile?.full_name || profile?.username || 'User'}
-                  avatarUrl={profile?.avatar_url}
-                  size={36}
-                />
-              </TouchableOpacity>
+          {/* Upper Safe Overlay (Avatar, Pill, Settings) */}
+          <View style={[styles.newTopBar, { top: 20 }]}>
+            <TouchableOpacity
+              style={styles.profileShortcut}
+              onPress={() => navigation.navigate('MyProfile')}
+              activeOpacity={0.8}
+            >
+              <UserAvatar
+                name={profile?.full_name || profile?.username || 'User'}
+                avatarUrl={profile?.avatar_url}
+                size={36}
+              />
+            </TouchableOpacity>
 
-              <View style={styles.modePill}>
-                <Text style={styles.modePillText}>
-                  {defaultDestination === 'memories' ? 'Memories' : defaultDestination === 'drive' ? 'Drive' : 'Vault'}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={[styles.toolsTriggerButton, showToolsPanel && styles.toolsTriggerButtonActive]}
-                onPress={() => setShowToolsPanel((prev) => !prev)}
-                activeOpacity={0.8}
-              >
-                <Settings size={20} color={showToolsPanel ? '#000000' : '#FFFFFF'} />
-              </TouchableOpacity>
+            <View style={styles.modePill}>
+              <Text style={styles.modePillText}>
+                {defaultDestination === 'memories' ? 'Memories' : defaultDestination === 'drive' ? 'Drive' : 'Vault'}
+              </Text>
             </View>
 
-            {/* Tools Quick Panel Dropdown */}
-            {renderToolsPanel()}
-
-            {/* Timer Countdown Visual */}
-            {countdown !== null && (
-              <View style={styles.countdownContainer}>
-                <Text style={styles.countdownText}>{countdown}</Text>
-              </View>
-            )}
-
-            {/* Recording Indicator */}
-            {isRecording && (
-              <View style={[styles.recordingIndicator, { top: insets.top > 0 ? insets.top + 60 : 80 }]}>
-                <View style={styles.recordingRedDot} />
-                <Text style={styles.recordingTimerText}>{formatDuration(recordingDuration)}</Text>
-              </View>
-            )}
-
-            {/* Selected Lens/Filter indicator label */}
-            {selectedLens !== 'original' && !isRecording && (
-              <View style={[styles.activeFilterPill, { bottom: 64 + insets.bottom + 185 }]}>
-                <Text style={styles.activeFilterPillText}>{selectedLens.toUpperCase()}</Text>
-              </View>
-            )}
-
-            {/* Live Filter Tray */}
-            {renderFilterTray()}
-
-            {/* Zoom Indicator Pill */}
-            <View style={[styles.zoomPill, { bottom: (Platform.OS === 'web' ? 'calc(64px + env(safe-area-inset-bottom) + 105px)' : bottomNavHeight + 105) as any }]}>
-              <Text style={styles.zoomPillText}>{getZoomDisplay()}</Text>
-            </View>
-
-            {/* Bottom Controls */}
-            <CameraControls
-              onCapture={handleCapture}
-              onStartRecording={handleStartRecording}
-              onStopRecording={handleStopRecording}
-              isRecording={isRecording}
-              onGalleryPress={handleGalleryPress}
-              onMemoriesPress={() => navigation.navigate('MemoriesTab')}
-              zoom={zoom}
-              onZoomChange={setZoom}
-            />
+            <TouchableOpacity
+              style={[styles.toolsTriggerButton, showToolsPanel && styles.toolsTriggerButtonActive]}
+              onPress={() => setShowToolsPanel((prev) => !prev)}
+              activeOpacity={0.8}
+            >
+              <Settings size={20} color={showToolsPanel ? '#000000' : '#FFFFFF'} />
+            </TouchableOpacity>
           </View>
-        ) : (
-          <View style={StyleSheet.absoluteFill}>
-            <CameraView
-              style={StyleSheet.absoluteFill}
-              facing={facing}
-              flash={flash}
-              mode={cameraMode}
-              zoom={zoom}
-              pictureSize={pictureSize}
-              autofocus="on"
-              videoQuality="1080p"
-              videoStabilizationMode="auto"
-              videoBitrate={12000000}
-              ref={cameraRef}
-              onCameraReady={handleCameraReady}
-            />
 
-            {renderLiveOverlay()}
+          {/* Tools Quick Panel Dropdown */}
+          {renderToolsPanel()}
 
-            {/* Upper Safe Overlay (Avatar, Pill, Settings) */}
-            <View style={[styles.newTopBar, { top: insets.top > 0 ? insets.top + 10 : 20 }]}>
-              <TouchableOpacity
-                style={styles.profileShortcut}
-                onPress={() => navigation.navigate('MyProfile')}
-                activeOpacity={0.8}
-              >
-                <UserAvatar
-                  name={profile?.full_name || profile?.username || 'User'}
-                  avatarUrl={profile?.avatar_url}
-                  size={36}
-                />
-              </TouchableOpacity>
-
-              <View style={styles.modePill}>
-                <Text style={styles.modePillText}>
-                  {defaultDestination === 'memories' ? 'Memories' : defaultDestination === 'drive' ? 'Drive' : 'Vault'}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={[styles.toolsTriggerButton, showToolsPanel && styles.toolsTriggerButtonActive]}
-                onPress={() => setShowToolsPanel((prev) => !prev)}
-                activeOpacity={0.8}
-              >
-                <Settings size={20} color={showToolsPanel ? '#000000' : '#FFFFFF'} />
-              </TouchableOpacity>
+          {/* Timer Countdown Visual */}
+          {countdown !== null && (
+            <View style={styles.countdownContainer}>
+              <Text style={styles.countdownText}>{countdown}</Text>
             </View>
+          )}
 
-            {/* Tools Quick Panel Dropdown */}
-            {renderToolsPanel()}
-
-            {/* Timer Countdown Visual */}
-            {countdown !== null && (
-              <View style={styles.countdownContainer}>
-                <Text style={styles.countdownText}>{countdown}</Text>
-              </View>
-            )}
-
-            {/* Recording Indicator */}
-            {isRecording && (
-              <View style={[styles.recordingIndicator, { top: insets.top > 0 ? insets.top + 60 : 80 }]}>
-                <View style={styles.recordingRedDot} />
-                <Text style={styles.recordingTimerText}>{formatDuration(recordingDuration)}</Text>
-              </View>
-            )}
-
-            {/* Selected Lens/Filter indicator label */}
-            {selectedLens !== 'original' && !isRecording && (
-              <View style={[styles.activeFilterPill, { bottom: 64 + insets.bottom + 185 }]}>
-                <Text style={styles.activeFilterPillText}>{selectedLens.toUpperCase()}</Text>
-              </View>
-            )}
-
-            {/* Live Filter Tray */}
-            {renderFilterTray()}
-
-            {/* Zoom Indicator Pill */}
-            <View style={[styles.zoomPill, { bottom: bottomNavHeight + 105 }]}>
-              <Text style={styles.zoomPillText}>{getZoomDisplay()}</Text>
+          {/* Recording Indicator */}
+          {isRecording && (
+            <View style={[styles.recordingIndicator, { top: 80 }]}>
+              <View style={styles.recordingRedDot} />
+              <Text style={styles.recordingTimerText}>{formatDuration(recordingDuration)}</Text>
             </View>
+          )}
 
-            {/* Bottom Controls */}
-            <CameraControls
-              onCapture={handleCapture}
-              onStartRecording={handleStartRecording}
-              onStopRecording={handleStopRecording}
-              isRecording={isRecording}
-              onGalleryPress={handleGalleryPress}
-              onMemoriesPress={() => navigation.navigate('MemoriesTab')}
-              zoom={zoom}
-              onZoomChange={setZoom}
-            />
+          {/* Selected Lens/Filter indicator label */}
+          {selectedLens !== 'original' && !isRecording && (
+            <View style={[styles.activeFilterPill, { bottom: 'calc(64px + env(safe-area-inset-bottom) + 185px)' as any }]}>
+              <Text style={styles.activeFilterPillText}>{selectedLens.toUpperCase()}</Text>
+            </View>
+          )}
+
+          {/* Live Filter Tray */}
+          {renderFilterTray()}
+
+          {/* Zoom Indicator Pill */}
+          <View style={[styles.zoomPill, { bottom: 'calc(64px + env(safe-area-inset-bottom) + 105px)' as any }]}>
+            <Text style={styles.zoomPillText}>{getZoomDisplay()}</Text>
           </View>
-        )}
-      </View>
-    );
-  };
 
-  if (Platform.OS === 'web') {
-    return (
-      <View style={[styles.container, {
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-        WebkitTouchCallout: 'none',
-        WebkitTapHighlightColor: 'transparent',
-        touchAction: 'none',
-      } as any]}>
-        {isFocused ? renderViewContent() : <View style={styles.inactiveBackground} />}
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.container}>
-      {isFocused ? (
-        <GestureDetector gesture={pinchGesture}>
-          {renderViewContent()}
-        </GestureDetector>
+          {/* Bottom Controls */}
+          <CameraControls
+            onCapture={handleCapture}
+            onStartRecording={handleStartRecording}
+            onStopRecording={handleStopRecording}
+            isRecording={isRecording}
+            onGalleryPress={handleGalleryPress}
+            onMemoriesPress={() => navigation.navigate('MemoriesTab')}
+            zoom={zoom}
+            onZoomChange={setZoom}
+          />
+        </View>
       ) : (
         <View style={styles.inactiveBackground} />
       )}
