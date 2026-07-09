@@ -68,7 +68,8 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showToolsPanel, setShowToolsPanel] = useState(false);
   const [profile, setProfile] = useState<{ username?: string; avatar_url?: string; full_name?: string } | null>(null);
   const [locationText, setLocationText] = useState('📍 Fetching Location...');
-  const [hasNativeZoom, setHasNativeZoom] = useState(false);
+  const [hasNativeZoom, setHasNativeZoom] = useState(Platform.OS !== 'web');
+  const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
   const [webPermissionGranted, setWebPermissionGranted] = useState<boolean | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
 
@@ -382,7 +383,36 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
       clearInterval(countdownIntervalRef.current);
       countdownIntervalRef.current = null;
     }
-    setCountdown(null);
+  };
+
+  const handleCameraReady = async () => {
+    setCameraReady(true);
+    if (cameraRef.current && Platform.OS !== 'web') {
+      try {
+        const sizes = await cameraRef.current.getAvailablePictureSizesAsync();
+        if (sizes && sizes.length > 0) {
+          let maxPixels = 0;
+          let bestSize = sizes[0];
+          for (const size of sizes) {
+            const [w, h] = size.split('x').map(Number);
+            if (!isNaN(w) && !isNaN(h)) {
+              const pixels = w * h;
+              // Cap at 16 Megapixels to prevent out-of-memory errors on high-end device sensors (4000x3000 is ~12MP)
+              if (pixels > maxPixels && pixels <= 16000000) {
+                maxPixels = pixels;
+                bestSize = size;
+              }
+            }
+          }
+          if (__DEV__) {
+            console.log('[CameraScreen] Selected native picture size:', bestSize);
+          }
+          setPictureSize(bestSize);
+        }
+      } catch (err) {
+        console.warn('Failed to query camera picture sizes:', err);
+      }
+    }
   };
 
   const executePhotoCapture = async () => {
@@ -675,6 +705,8 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
         });
 
         if (video && video.uri) {
+          // Wait 300ms to ensure the file is completely written and unlocked by the encoder
+          await new Promise((resolve) => setTimeout(resolve, 300));
           navigation.navigate('Preview', {
             uri: video.uri,
             type: 'video',
@@ -1152,15 +1184,21 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
               />
             </View>
           ) : (
-            <CameraView
-              style={StyleSheet.absoluteFill}
-              facing={facing}
-              flash={flash}
-              mode={cameraMode}
-              zoom={zoom}
-              ref={cameraRef}
-              onCameraReady={() => setCameraReady(true)}
-            >
+            <View style={StyleSheet.absoluteFill}>
+              <CameraView
+                style={StyleSheet.absoluteFill}
+                facing={facing}
+                flash={flash}
+                mode={cameraMode}
+                zoom={zoom}
+                pictureSize={pictureSize}
+                ref={cameraRef}
+                onCameraReady={handleCameraReady}
+                onTouchStart={handleCameraTouchStart}
+                onTouchMove={handleCameraTouchMove}
+                onTouchEnd={handleCameraTouchEnd}
+              />
+
               {renderLiveOverlay()}
 
               {/* Upper Safe Overlay (Avatar, Pill, Settings) */}
@@ -1236,7 +1274,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
                 zoom={zoom}
                 onZoomChange={setZoom}
               />
-            </CameraView>
+            </View>
           )}
         </View>
       ) : (

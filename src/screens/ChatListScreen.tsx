@@ -48,13 +48,15 @@ export const ChatListScreen: React.FC<Props> = ({ navigation }) => {
   }, [isFocused]);
 
   useEffect(() => {
-    let channel: any = null;
+    let convChannel: any = null;
+    let msgChannel: any = null;
 
-    const setupSubscription = async () => {
+    const setupSubscriptions = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      channel = supabase
+      // 1. Listen for conversation updates (e.g. last message timestamp / preview)
+      convChannel = supabase
         .channel('conversations_realtime')
         .on(
           'postgres_changes',
@@ -67,48 +69,45 @@ export const ChatListScreen: React.FC<Props> = ({ navigation }) => {
             if (__DEV__) {
               console.log('[Realtime] Conversations event:', payload);
             }
-            if (payload.eventType === 'INSERT') {
-              const newConv = payload.new as Conversation;
-              if (newConv.participant_a === user.id || newConv.participant_b === user.id) {
-                fetchConversations();
-              }
-            } else if (payload.eventType === 'UPDATE') {
-              const updatedConv = payload.new as Conversation;
-              if (updatedConv.participant_a === user.id || updatedConv.participant_b === user.id) {
-                setConversations((prev) => {
-                  const idx = prev.findIndex((c) => c.id === updatedConv.id);
-                  if (idx !== -1) {
-                    const updatedList = [...prev];
-                    updatedList[idx] = {
-                      ...updatedList[idx],
-                      ...updatedConv,
-                    };
-                    return updatedList.sort((a, b) => {
-                      const timeA = new Date(a.last_message_at || 0).getTime();
-                      const timeB = new Date(b.last_message_at || 0).getTime();
-                      return timeB - timeA;
-                    });
-                  } else {
-                    fetchConversations();
-                    return prev;
-                  }
-                });
-              }
+            const newConv = (payload.new || payload.old) as Conversation;
+            if (newConv && (newConv.participant_a === user.id || newConv.participant_b === user.id)) {
+              fetchConversations();
             }
           }
         )
-        .subscribe((status) => {
-          if (__DEV__) {
-            console.log(`[Realtime] ChatListScreen subscription status: ${status}`);
+        .subscribe();
+
+      // 2. Listen for message updates (to update unread badges in real-time)
+      msgChannel = supabase
+        .channel('messages_realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'chat_messages',
+          },
+          (payload) => {
+            if (__DEV__) {
+              console.log('[Realtime] Chat messages event:', payload);
+            }
+            const msg = (payload.new || payload.old) as any;
+            if (msg && (msg.sender_id === user.id || msg.receiver_id === user.id)) {
+              fetchConversations();
+            }
           }
-        });
+        )
+        .subscribe();
     };
 
-    setupSubscription();
+    setupSubscriptions();
 
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
+      if (convChannel) {
+        supabase.removeChannel(convChannel);
+      }
+      if (msgChannel) {
+        supabase.removeChannel(msgChannel);
       }
     };
   }, []);
@@ -164,10 +163,12 @@ export const ChatListScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.preview} numberOfLines={1}>
               {item.last_message_preview || 'No messages yet'}
             </Text>
-            {/* Simple unread indicator if the last message is from other user and preview is not snap opened status */}
-            {item.last_message_preview && item.last_message_preview.includes('Sent a snap') && (
-              <View style={styles.unreadDot} />
-            )}
+            {/* Real-time unread badge indicator */}
+            {item.unread_count !== undefined && item.unread_count > 0 ? (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadCountText}>{item.unread_count}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
       </TouchableOpacity>
@@ -302,11 +303,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     maxWidth: '85%',
   },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  unreadBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: '#FFFC00',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  unreadCountText: {
+    color: '#000000',
+    fontSize: 11,
+    fontWeight: '700',
   },
   emptyState: {
     marginTop: 80,

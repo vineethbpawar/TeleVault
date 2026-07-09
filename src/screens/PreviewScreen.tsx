@@ -572,7 +572,10 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
 
       {/* Main Preview Container Full Screen */}
       <View
-        style={[styles.previewContainer, { transform: [{ rotate: `${rotation}deg` }] }]}
+        style={[
+          styles.previewContainer,
+          type === 'video' ? {} : { transform: [{ rotate: `${rotation}deg` }] }
+        ]}
         onLayout={handleLayout}
       >
         {type === 'video' ? (

@@ -23,6 +23,7 @@ export interface Conversation {
   created_at: string;
   updated_at: string;
   other_user?: UserProfile;
+  unread_count?: number;
 }
 
 export type ChatMessageStatus = 'sending' | 'failed' | 'sent' | 'delivered' | 'read';

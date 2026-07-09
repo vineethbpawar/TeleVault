@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, Platform } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { useIsFocused } from '@react-navigation/native';
 
 interface VideoPlayerProps {
   source: string;
@@ -8,32 +9,37 @@ interface VideoPlayerProps {
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style }) => {
+  const isFocused = useIsFocused();
+
   if (Platform.OS === 'web') {
     const videoRef = useRef<HTMLVideoElement>(null);
 
     useEffect(() => {
-      if (videoRef.current) {
-        videoRef.current.src = source;
-        videoRef.current.load();
+      const video = videoRef.current;
+      if (!video) return;
+
+      if (isFocused) {
+        video.src = source;
+        video.load();
         
         // Attempt to autoplay with audio first
-        videoRef.current.muted = false;
-        const playPromise = videoRef.current.play();
+        video.muted = false;
+        const playPromise = video.play();
         
         if (playPromise !== undefined) {
           playPromise.catch((err) => {
             console.log("Autoplay with audio was blocked, trying muted autoplay:", err);
             // Fallback to muted autoplay if browser blocks audio
-            if (videoRef.current) {
-              videoRef.current.muted = true;
-              videoRef.current.play().catch((err2) => {
-                console.error("Muted autoplay also blocked:", err2);
-              });
-            }
+            video.muted = true;
+            video.play().catch((err2) => {
+              console.error("Muted autoplay also blocked:", err2);
+            });
           });
         }
+      } else {
+        video.pause();
       }
-    }, [source]);
+    }, [source, isFocused]);
 
     return (
       <View style={[styles.container, style]}>
@@ -56,8 +62,38 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style }) => {
   // Native iOS/Android implementation using expo-video
   const player = useVideoPlayer(source, (playerInstance) => {
     playerInstance.loop = true;
-    playerInstance.play();
+    playerInstance.bufferOptions = {
+      preferredForwardBufferDuration: 2,
+      minBufferForPlayback: 0.5,
+    };
   });
+
+  useEffect(() => {
+    if (!player) return;
+
+    player.loop = true;
+    player.bufferOptions = {
+      preferredForwardBufferDuration: 2,
+      minBufferForPlayback: 0.5,
+    };
+
+    if (isFocused) {
+      player.play();
+    } else {
+      player.pause();
+    }
+
+    const subscription = player.addListener('statusChange', (statusPayload: any) => {
+      const status = typeof statusPayload === 'string' ? statusPayload : statusPayload?.status;
+      if (status === 'readyToPlay' && isFocused) {
+        player.play();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [player, source, isFocused]);
 
   return (
     <View style={[styles.container, style]}>
@@ -65,6 +101,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style }) => {
         style={styles.video}
         player={player}
         nativeControls={false}
+        contentFit="cover"
       />
     </View>
   );

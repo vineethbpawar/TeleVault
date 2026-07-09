@@ -130,15 +130,24 @@ export const chatService = {
     for (const conv of (data || [])) {
       const otherUserId = conv.participant_a === user.id ? conv.participant_b : conv.participant_a;
       
-      const { data: otherProfile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', otherUserId)
-        .single();
+      const [profileRes, countRes] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', otherUserId)
+          .single(),
+        supabase
+          .from('chat_messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('conversation_id', conv.id)
+          .eq('receiver_id', user.id)
+          .neq('status', 'read')
+      ]);
 
       conversations.push({
         ...conv,
-        other_user: otherProfile || undefined,
+        other_user: profileRes.data || undefined,
+        unread_count: countRes.count || 0,
       });
     }
 

@@ -8,10 +8,10 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Send, Camera, MoreVertical, Plus, LogOut, Users } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
@@ -276,86 +276,89 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerName} numberOfLines={1}>
-            {groupName}
-          </Text>
-          <Text style={styles.headerSubtitle}>{members.length} members</Text>
-        </View>
-
-        <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.headerCameraBtn} onPress={handleSnapPress}>
-            <Camera size={22} color="#FFFC00" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerOptionsBtn} onPress={handleGroupOptions}>
-            <MoreVertical size={22} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Messages */}
-      {loading && messages.length === 0 ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFFC00" />
-        </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessageItem}
-          contentContainerStyle={styles.messageList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Users size={36} color="#1f2444" style={{ marginBottom: 12 }} />
-              <Text style={styles.emptyText}>No messages in this group yet.</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: '#000000' }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
+    >
+      <View style={styles.container}>
+        <SafeAreaView edges={['top']} style={{ backgroundColor: '#000000' }}>
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+              <ArrowLeft size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            
+            <View style={styles.headerTitleContainer}>
+              <Text style={styles.headerName} numberOfLines={1}>
+                {groupName}
+              </Text>
+              <Text style={styles.headerSubtitle}>{members.length} members</Text>
             </View>
-          }
-        />
-      )}
 
-      {/* Input */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
-      >
-        <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.inputCameraBtn} onPress={handleSnapPress}>
-            <Camera size={24} color="#FFFFFF" />
-          </TouchableOpacity>
+            <View style={styles.headerRight}>
+              <TouchableOpacity style={styles.headerCameraBtn} onPress={handleSnapPress}>
+                <Camera size={22} color="#FFFC00" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.headerOptionsBtn} onPress={handleGroupOptions}>
+                <MoreVertical size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </SafeAreaView>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Send a chat..."
-            placeholderTextColor="#8E8E93"
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
+        {/* Messages */}
+        {loading && messages.length === 0 ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#FFFC00" />
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={(item) => item.id}
+            renderItem={renderMessageItem}
+            contentContainerStyle={styles.messageList}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Users size={36} color="#1f2444" style={{ marginBottom: 12 }} />
+                <Text style={styles.emptyText}>No messages in this group yet.</Text>
+              </View>
+            }
           />
+        )}
 
-          <TouchableOpacity
-            style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]}
-            onPress={handleSend}
-            disabled={!inputText.trim() || sending}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color="#000000" />
-            ) : (
-              <Send size={18} color="#000000" />
-            )}
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        <SafeAreaView edges={['bottom']} style={{ backgroundColor: '#0F0F12' }}>
+          <View style={styles.inputContainer}>
+            <TouchableOpacity style={styles.inputCameraBtn} onPress={handleSnapPress}>
+              <Camera size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Send a chat..."
+              placeholderTextColor="#8E8E93"
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+            />
+
+            <TouchableOpacity
+              style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]}
+              onPress={handleSend}
+              disabled={!inputText.trim() || sending}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color="#000000" />
+              ) : (
+                <Send size={18} color="#000000" />
+              )}
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </View>
+    </KeyboardAvoidingView>
   );
 };
 

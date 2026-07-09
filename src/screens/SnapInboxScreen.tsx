@@ -16,6 +16,7 @@ import { AppStackParamList } from '../types/navigation';
 import { ArrowLeft, Camera, Image, Video, Eye, EyeOff } from 'lucide-react-native';
 import { snapService } from '../services/snapService';
 import { Snap } from '../types/snap';
+import { supabase } from '../lib/supabase';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'SnapInbox'>;
 
@@ -42,6 +43,41 @@ export const SnapInboxScreen: React.FC<Props> = ({ navigation }) => {
       fetchSnaps();
     }
   }, [isFocused]);
+
+  useEffect(() => {
+    let channel: any = null;
+
+    const setupSubscription = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      channel = supabase
+        .channel('snap_inbox_realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'snaps',
+          },
+          (payload) => {
+            const snap = (payload.new || payload.old) as Snap;
+            if (snap && (snap.receiver_id === user.id || snap.sender_id === user.id)) {
+              fetchSnaps();
+            }
+          }
+        )
+        .subscribe();
+    };
+
+    setupSubscription();
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, []);
 
   const handleRefresh = () => {
     setRefreshing(true);

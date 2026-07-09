@@ -17,6 +17,7 @@ import { AppStackParamList } from '../types/navigation';
 import { ArrowLeft, Sparkles, Eye, Plus, Circle } from 'lucide-react-native';
 import { snapService } from '../services/snapService';
 import { Snap } from '../types/snap';
+import { supabase } from '../lib/supabase';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'Stories'>;
 
@@ -64,6 +65,55 @@ export const StoriesScreen: React.FC<Props> = ({ navigation }) => {
       fetchStories();
     }
   }, [isFocused]);
+
+  useEffect(() => {
+    let storiesChannel: any = null;
+    let viewsChannel: any = null;
+
+    const setupSubscriptions = async () => {
+      storiesChannel = supabase
+        .channel('stories_realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'snaps',
+            filter: 'snap_type=eq.story',
+          },
+          () => {
+            fetchStories();
+          }
+        )
+        .subscribe();
+
+      viewsChannel = supabase
+        .channel('story_views_realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'story_views',
+          },
+          () => {
+            fetchStories();
+          }
+        )
+        .subscribe();
+    };
+
+    setupSubscriptions();
+
+    return () => {
+      if (storiesChannel) {
+        supabase.removeChannel(storiesChannel);
+      }
+      if (viewsChannel) {
+        supabase.removeChannel(viewsChannel);
+      }
+    };
+  }, []);
 
   const handleRefresh = () => {
     setRefreshing(true);

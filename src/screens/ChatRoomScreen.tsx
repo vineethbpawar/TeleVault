@@ -12,14 +12,17 @@ import {
   TouchableOpacity,
   Clipboard,
   Keyboard,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
 import { chatService } from '../services/chatService';
 import { snapService } from '../services/snapService';
 import { ChatMessage } from '../types/chat';
 import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Reusable Components
 import ChatBubble from '../components/ChatBubble';
@@ -48,6 +51,9 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const [reactionsMap, setReactionsMap] = useState<Record<string, string[]>>({});
   const activeChannelRef = useRef<any>(null);
+  const reconnectTimeoutRef = useRef<any>(null);
+  const appStateRef = useRef(AppState.currentState);
+  const otherTypingTimeoutRef = useRef<any>(null);
 
   // UI state
   const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null);
@@ -93,12 +99,45 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     });
   }, []);
 
+  const OFFLINE_QUEUE_KEY = (convId: string) => `@televault:offline_queue:${convId}`;
+
+  const loadOfflineQueue = async (convId: string) => {
+    try {
+      const dataStr = await AsyncStorage.getItem(OFFLINE_QUEUE_KEY(convId));
+      if (dataStr) {
+        const queue: ChatMessage[] = JSON.parse(dataStr);
+        offlineQueue.current = queue;
+        
+        // Append these offline messages to the local state if they are not already there
+        setMessages((prev) => {
+          const merged = [...prev];
+          queue.forEach((msg) => {
+            const exists = merged.some((m) => m.id === msg.id);
+            if (!exists) {
+              merged.push(msg);
+            }
+          });
+          return merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to load offline queue:', err);
+    }
+  };
+
+  const saveOfflineQueue = async (convId: string, queue: ChatMessage[]) => {
+    try {
+      await AsyncStorage.setItem(OFFLINE_QUEUE_KEY(convId), JSON.stringify(queue));
+    } catch (err) {
+      console.warn('Failed to save offline queue:', err);
+    }
+  };
+
   // Offline queue resend poller (runs every 8 seconds)
   useEffect(() => {
     const timer = setInterval(async () => {
       if (offlineQueue.current.length === 0 || !conversationId) return;
       const toRetry = [...offlineQueue.current];
-      offlineQueue.current = [];
 
       for (const msg of toRetry) {
         try {
@@ -107,11 +146,16 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
             msg.receiver_id,
             msg.message_text || ''
           );
+          
+          // Remove from local and persistent queue
+          offlineQueue.current = offlineQueue.current.filter((m) => m.id !== msg.id);
+          await saveOfflineQueue(conversationId, offlineQueue.current);
+
           setMessages((prev) =>
             prev.map((m) => (m.id === msg.id ? { ...realMsg, status: 'sent' } : m))
           );
         } catch (err) {
-          offlineQueue.current.push(msg); // Add back to queue
+          console.warn('Retry sending failed:', err);
         }
       }
     }, 8000);
@@ -133,7 +177,10 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
               merged[idx] = msg;
             } else {
               const tempIdx = merged.findIndex(
-                (m) => m.id.startsWith('temp-') && m.message_text === msg.message_text
+                (m) =>
+                  m.id.startsWith('temp-') &&
+                  m.message_text === msg.message_text &&
+                  Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 30000
               );
               if (tempIdx !== -1) {
                 merged[tempIdx] = msg;
@@ -157,10 +204,222 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const syncMissedMessages = async (convId: string) => {
+    try {
+      let lastTimestamp = new Date(0).toISOString();
+      setMessages((prev) => {
+        const realMsgs = prev.filter((m) => !m.id.startsWith('temp-'));
+        if (realMsgs.length > 0) {
+          lastTimestamp = realMsgs[realMsgs.length - 1].created_at;
+        }
+        return prev;
+      });
+
+      console.log(`[Realtime] Syncing missed messages since ${lastTimestamp}`);
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*, snaps:snap_id(*)')
+        .eq('conversation_id', convId)
+        .gt('created_at', lastTimestamp)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Failed to sync missed messages:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        console.log(`[Realtime] Found ${data.length} missed messages. Merging...`);
+        setMessages((prev) => {
+          const merged = [...prev];
+          data.forEach((msg: ChatMessage) => {
+            const idx = merged.findIndex((m) => m.id === msg.id);
+            if (idx !== -1) {
+              merged[idx] = msg;
+            } else {
+              const tempIdx = merged.findIndex(
+                (m) =>
+                  m.id.startsWith('temp-') &&
+                  m.message_text === msg.message_text &&
+                  Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 30000
+              );
+              if (tempIdx !== -1) {
+                merged[tempIdx] = msg;
+              } else {
+                merged.push(msg);
+              }
+            }
+          });
+          return merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        });
+      }
+    } catch (err) {
+      console.error('[Realtime] Error during catchup sync:', err);
+    }
+  };
+
+  const subscribeToChat = (convId: string) => {
+    if (!convId) return;
+
+    if (activeChannelRef.current) {
+      supabase.removeChannel(activeChannelRef.current);
+      activeChannelRef.current = null;
+    }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    console.log(`[Realtime] Subscribing to chat:${convId}`);
+
+    const channel = supabase.channel(`chat:${convId}`, {
+      config: {
+        broadcast: { self: false },
+        presence: { key: currentUserId || 'unknown' },
+      },
+    });
+
+    activeChannelRef.current = channel;
+
+    // 1. Listen for new inserts in Supabase database
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `conversation_id=eq.${convId}`,
+      },
+      async (payload: any) => {
+        const newMsg = payload.new as ChatMessage;
+        if (newMsg.snap_id) {
+          const { data: snap } = await supabase
+            .from('snaps')
+            .select('*')
+            .eq('id', newMsg.snap_id)
+            .single();
+          newMsg.snap = snap;
+        }
+
+        setMessages((prev) => {
+          const exists = prev.some((m) => m.id === newMsg.id);
+          if (exists) return prev;
+
+          // Merge optimistic local message if they have the same text
+          if (newMsg.sender_id === currentUserId) {
+            const tempIndex = prev.findIndex(
+              (m) =>
+                m.id.startsWith('temp-') &&
+                m.message_text === newMsg.message_text &&
+                Math.abs(new Date(m.created_at).getTime() - new Date(newMsg.created_at).getTime()) < 30000
+            );
+            if (tempIndex !== -1) {
+              const updated = [...prev];
+              updated[tempIndex] = newMsg;
+              return updated;
+            }
+          }
+          const updated = [...prev, newMsg];
+          return updated.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        });
+
+        if (currentUserId && newMsg.receiver_id === currentUserId) {
+          chatService.markMessagesRead(convId);
+        }
+      }
+    );
+
+    // 2. Listen to status updates (read receipts)
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `conversation_id=eq.${convId}`,
+      },
+      (payload: any) => {
+        const updatedMsg = payload.new as ChatMessage;
+        setMessages((prev) =>
+          prev.map((m) => (m.id === updatedMsg.id ? { ...m, status: updatedMsg.status } : m))
+        );
+      }
+    );
+
+    // 3. Listen to typing broadcast
+    channel.on('broadcast', { event: 'typing' }, ({ payload }: any) => {
+      if (payload.userId === otherUserId) {
+        setIsOtherTyping(payload.isTyping);
+        
+        // Reset typing indicator timeout
+        if (otherTypingTimeoutRef.current) {
+          clearTimeout(otherTypingTimeoutRef.current);
+        }
+
+        if (payload.isTyping) {
+          otherTypingTimeoutRef.current = setTimeout(() => {
+            setIsOtherTyping(false);
+          }, 4000);
+        }
+      }
+    });
+
+    // 4. Listen to reactions broadcast
+    channel.on('broadcast', { event: 'reaction' }, ({ payload }: any) => {
+      setReactionsMap((prev) => {
+        const { messageId, emoji } = payload;
+        const current = prev[messageId] || [];
+        if (!current.includes(emoji)) {
+          return { ...prev, [messageId]: [...current, emoji] };
+        }
+        return prev;
+      });
+    });
+
+    // 5. Track online state via Presence
+    channel.on('presence', { event: 'sync' }, () => {
+      const state = channel.presenceState();
+      const isOnline = Object.keys(state).some((key) => key === otherUserId);
+      setIsOtherOnline(isOnline);
+    });
+
+    channel.subscribe((status: string, err?: any) => {
+      console.log(`[Realtime] Subscription status for chat:${convId} is: ${status}`, err || '');
+      if (status === 'SUBSCRIBED') {
+        stopPolling();
+        channel.track({ online: true });
+        
+        // Sync any messages we missed while offline or reconnecting
+        syncMissedMessages(convId);
+      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        startPolling(convId);
+        
+        // Schedule a reconnect attempt
+        if (!reconnectTimeoutRef.current) {
+          reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectTimeoutRef.current = null;
+            subscribeToChat(convId);
+          }, 5000);
+        }
+      }
+    });
+  };
+
   // Main chat initialization & Realtime Subscription
   useEffect(() => {
     let activeId = conversationId;
-    let channel: any = null;
+
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
+        console.log('[AppState] App returned to foreground, reconnecting chat subscription...');
+        if (activeId) {
+          subscribeToChat(activeId);
+        }
+      }
+      appStateRef.current = nextAppState;
+    };
+
+    const appStateSub = AppState.addEventListener('change', handleAppStateChange);
 
     const initChat = async () => {
       if (!activeId) {
@@ -178,6 +437,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
       try {
         const data = await chatService.getMessages(activeId);
         setMessages(data);
+        await loadOfflineQueue(activeId);
         await chatService.markMessagesRead(activeId);
       } catch (error) {
         console.error('Fetch messages failed:', error);
@@ -185,118 +445,21 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         setLoading(false);
       }
 
-      // Setup Supabase Realtime channel for messages, typing indicator and reactions
-      channel = supabase.channel(`chat:${activeId}`, {
-        config: {
-          broadcast: { self: false },
-          presence: { key: currentUserId || 'unknown' },
-        },
-      });
-
-      activeChannelRef.current = channel;
-
-      // 1. Listen for new inserts in Supabase database
-      channel.on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `conversation_id=eq.${activeId}`,
-        },
-        async (payload: any) => {
-          const newMsg = payload.new as ChatMessage;
-          if (newMsg.snap_id) {
-            const { data: snap } = await supabase
-              .from('snaps')
-              .select('*')
-              .eq('id', newMsg.snap_id)
-              .single();
-            newMsg.snap = snap;
-          }
-
-          setMessages((prev) => {
-            const exists = prev.some((m) => m.id === newMsg.id);
-            if (exists) return prev;
-
-            // Merge optimistic local message if they have the same text
-            if (newMsg.sender_id === currentUserId) {
-              const tempIndex = prev.findIndex(
-                (m) => m.id.startsWith('temp-') && m.message_text === newMsg.message_text
-              );
-              if (tempIndex !== -1) {
-                const updated = [...prev];
-                updated[tempIndex] = newMsg;
-                return updated;
-              }
-            }
-            return [...prev, newMsg];
-          });
-
-          if (currentUserId && newMsg.receiver_id === currentUserId) {
-            chatService.markMessagesRead(activeId!);
-          }
-        }
-      );
-
-      // 2. Listen to status updates (read receipts)
-      channel.on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `conversation_id=eq.${activeId}`,
-        },
-        (payload: any) => {
-          const updatedMsg = payload.new as ChatMessage;
-          setMessages((prev) =>
-            prev.map((m) => (m.id === updatedMsg.id ? { ...m, status: updatedMsg.status } : m))
-          );
-        }
-      );
-
-      // 3. Listen to typing broadcast
-      channel.on('broadcast', { event: 'typing' }, ({ payload }: any) => {
-        if (payload.userId === otherUserId) {
-          setIsOtherTyping(payload.isTyping);
-        }
-      });
-
-      // 4. Listen to reactions broadcast
-      channel.on('broadcast', { event: 'reaction' }, ({ payload }: any) => {
-        setReactionsMap((prev) => {
-          const { messageId, emoji } = payload;
-          const current = prev[messageId] || [];
-          if (!current.includes(emoji)) {
-            return { ...prev, [messageId]: [...current, emoji] };
-          }
-          return prev;
-        });
-      });
-
-      // 5. Track online state via Presence
-      channel
-        .on('presence', { event: 'sync' }, () => {
-          const state = channel.presenceState();
-          const isOnline = Object.keys(state).some((key) => key === otherUserId);
-          setIsOtherOnline(isOnline);
-        })
-        .subscribe((status: string) => {
-          if (status === 'SUBSCRIBED') {
-            stopPolling();
-            channel.track({ online: true });
-          } else {
-            startPolling(activeId!);
-          }
-        });
+      subscribeToChat(activeId);
     };
 
     initChat();
 
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
+      appStateSub.remove();
+      if (activeChannelRef.current) {
+        supabase.removeChannel(activeChannelRef.current);
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (otherTypingTimeoutRef.current) {
+        clearTimeout(otherTypingTimeoutRef.current);
       }
       stopPolling();
     };
@@ -336,7 +499,9 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
       setMessages((prev) =>
         prev.map((m) => (m.id === tempId ? { ...m, status: 'failed' as any } : m))
       );
-      offlineQueue.current.push(optimisticMsg);
+      const failedMsg = { ...optimisticMsg, id: tempId, status: 'failed' as any };
+      offlineQueue.current.push(failedMsg);
+      await saveOfflineQueue(conversationId, offlineQueue.current);
     }
   };
 
@@ -519,23 +684,23 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <ConversationHeader
-        otherFullName={otherFullName || null}
-        otherUsername={otherUsername}
-        isOnline={isOtherOnline}
-        onBack={() => navigation.goBack()}
-        onProfilePress={() =>
-          navigation.navigate('UserProfile', { userId: otherUserId, username: otherUsername })
-        }
-        onSnapPress={handleSnapPress}
-      />
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: '#000000' }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
+    >
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <ConversationHeader
+          otherFullName={otherFullName || null}
+          otherUsername={otherUsername}
+          isOnline={isOtherOnline}
+          onBack={() => navigation.goBack()}
+          onProfilePress={() =>
+            navigation.navigate('UserProfile', { userId: otherUserId, username: otherUsername })
+          }
+          onSnapPress={handleSnapPress}
+        />
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-      >
         <View style={{ flex: 1 }}>
           {loading && messages.length === 0 ? (
             <View style={styles.loadingContainer}>
@@ -564,7 +729,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
           {isOtherTyping && <TypingIndicator />}
         </View>
 
-        <View style={{ backgroundColor: '#0A0A0A', paddingBottom: keyboardVisible ? 0 : insets.bottom }}>
+        <SafeAreaView edges={['bottom']} style={{ backgroundColor: '#0A0A0A' }}>
           <MessageComposer
             onSend={handleSend}
             onCameraPress={handleSnapPress}
@@ -573,8 +738,8 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
             replyToMessage={replyToMessage}
             onClearReply={() => setReplyToMessage(null)}
           />
-        </View>
-      </KeyboardAvoidingView>
+        </SafeAreaView>
+      </View>
 
       {/* Message Reaction & Options Overlay Modal */}
       <Modal
@@ -630,7 +795,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         mediaType={mediaType}
         onClose={() => setMediaViewerVisible(false)}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
