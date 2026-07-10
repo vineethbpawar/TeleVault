@@ -291,13 +291,14 @@ export const chatService = {
           event: '*',
           schema: 'public',
           table: 'chat_messages',
-          filter: `conversation_id=eq.${conversationId}`,
         },
         async (payload) => {
           if (__DEV__) {
             console.log('[Realtime] New message inserted:', payload);
           }
           const msg = payload.new as ChatMessage;
+          if (msg.conversation_id !== conversationId) return;
+
           if (msg.snap_id) {
             const { data: snap } = await supabase
               .from('snaps')

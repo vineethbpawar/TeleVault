@@ -36,6 +36,11 @@ const LENSES = [
   { type: 'night', label: 'Night', icon: '🌙' },
   { type: 'time', label: 'Time', icon: '🕒' },
   { type: 'date', label: 'Date', icon: '📅' },
+  { type: 'location', label: 'Geo Location', icon: '🗺️' },
+  { type: 'vintage', label: 'Retro VHS', icon: '📼' },
+  { type: 'glow', label: 'Cyber Neon', icon: '🌐' },
+  { type: 'beauty_light', label: 'Glam Glow', icon: '✨' },
+  { type: 'weather', label: 'Stamp Combo', icon: '📍' },
   { type: 'vault', label: 'Vault', icon: '🏛️' },
   { type: 'private', label: 'Private', icon: '🔒' },
 ] as const;
@@ -902,6 +907,51 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
         {selectedLens === 'soft' && <View style={styles.softOverlay} />}
         {selectedLens === 'night' && <View style={styles.nightOverlay} />}
         
+        {/* Custom Snapchat Lenses overlays */}
+        {selectedLens === 'vintage' && (
+          <>
+            <View style={styles.vintageOverlay} />
+            <View style={styles.vhsVignette} />
+            <View style={styles.vhsStampWrapper}>
+              <Text style={styles.vhsPlayText}>PLAY ▶</Text>
+              <Text style={styles.vhsTimeText}>00:04:12</Text>
+              <Text style={styles.vhsDateText}>{dateString.toUpperCase()}</Text>
+            </View>
+          </>
+        )}
+
+        {selectedLens === 'glow' && (
+          <>
+            <View style={styles.glowOverlay} />
+            <View style={styles.cyberFrame} />
+            <View style={styles.cyberStampWrapper}>
+              <Text style={styles.cyberText}>SYS_ON: ONLINE</Text>
+              <Text style={styles.cyberSubtext}>NEON_GRID_v1.0</Text>
+            </View>
+          </>
+        )}
+
+        {selectedLens === 'beauty_light' && (
+          <>
+            <View style={styles.beautyLightOverlay} />
+            <View style={styles.glamSparkleContainer}>
+              <Text style={[styles.glamSparkle, { top: '15%', left: '10%' }]}>✨</Text>
+              <Text style={[styles.glamSparkle, { top: '25%', right: '15%' }]}>✨</Text>
+              <Text style={[styles.glamSparkle, { top: '60%', left: '20%' }]}>✨</Text>
+              <Text style={[styles.glamSparkle, { top: '75%', right: '25%' }]}>✨</Text>
+            </View>
+          </>
+        )}
+
+        {selectedLens === 'weather' && (
+          <View style={styles.snapComboStampWrapper}>
+            <Text style={styles.snapComboLocationText}>{locationText || 'TELEVAULT'}</Text>
+            <View style={styles.snapComboDivider} />
+            <Text style={styles.snapComboInfoText}>{timeString}  •  {dateString}</Text>
+            <Text style={styles.snapComboWeatherText}>☀️ 78°F</Text>
+          </View>
+        )}
+
         {/* Stamp / Text Overlays */}
         {selectedLens === 'time' && (
           <View style={styles.textOverlayWrapper}>
@@ -1416,11 +1466,11 @@ const styles = StyleSheet.create({
   },
   glowOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(255, 252, 0, 0.15)',
+    backgroundColor: 'rgba(0, 240, 255, 0.08)',
   },
   vintageOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(138, 90, 25, 0.2)',
+    backgroundColor: 'rgba(138, 90, 25, 0.12)',
   },
   vignetteOverlay: {
     ...StyleSheet.absoluteFill,
@@ -1430,7 +1480,124 @@ const styles = StyleSheet.create({
   },
   beautyLightOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 192, 203, 0.1)',
+  },
+  vhsVignette: {
+    ...StyleSheet.absoluteFill,
+    borderWidth: 20,
+    borderColor: 'rgba(0,0,0,0.2)',
+  },
+  vhsStampWrapper: {
+    position: 'absolute',
+    bottom: 240,
+    left: 24,
+  },
+  vhsPlayText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    textShadowColor: '#000000',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  vhsTimeText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    textShadowColor: '#000000',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+    marginTop: 4,
+  },
+  vhsDateText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    textShadowColor: '#000000',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+    marginTop: 2,
+  },
+  cyberFrame: {
+    ...StyleSheet.absoluteFill,
+    borderWidth: 3,
+    borderColor: '#FF007F',
+    borderRadius: 8,
+    margin: 8,
+  },
+  cyberStampWrapper: {
+    position: 'absolute',
+    top: 120,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 240, 255, 0.15)',
+    borderWidth: 1.5,
+    borderColor: '#00F0FF',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 4,
+  },
+  cyberText: {
+    color: '#00F0FF',
+    fontSize: 16,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+  cyberSubtext: {
+    color: '#FF007F',
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 2,
+    letterSpacing: 1,
+  },
+  glamSparkleContainer: {
+    ...StyleSheet.absoluteFill,
+  },
+  glamSparkle: {
+    position: 'absolute',
+    fontSize: 26,
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(255,255,255,0.8)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
+  },
+  snapComboStampWrapper: {
+    position: 'absolute',
+    bottom: 220,
+    alignSelf: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: '#FFFC00',
+  },
+  snapComboLocationText: {
+    color: '#FFFC00',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  snapComboDivider: {
+    width: 60,
+    height: 2,
+    backgroundColor: 'rgba(255, 252, 0, 0.4)',
+    marginVertical: 6,
+  },
+  snapComboInfoText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  snapComboWeatherText: {
+    color: '#FFFC00',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 4,
   },
   warmOverlay: {
     ...StyleSheet.absoluteFill,

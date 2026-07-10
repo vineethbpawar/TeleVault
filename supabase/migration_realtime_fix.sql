@@ -43,6 +43,22 @@ BEGIN
         ) THEN
             ALTER PUBLICATION supabase_realtime ADD TABLE public.group_messages;
         END IF;
+
+        -- Add public.friend_requests
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_publication_tables 
+            WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'friend_requests'
+        ) THEN
+            ALTER PUBLICATION supabase_realtime ADD TABLE public.friend_requests;
+        END IF;
+
+        -- Add public.friendships
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_publication_tables 
+            WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'friendships'
+        ) THEN
+            ALTER PUBLICATION supabase_realtime ADD TABLE public.friendships;
+        END IF;
     END IF;
 END $$;
 

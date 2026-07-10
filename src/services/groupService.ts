@@ -279,10 +279,10 @@ export const groupService = {
           event: 'INSERT',
           schema: 'public',
           table: 'group_messages',
-          filter: `group_id=eq.${groupId}`
         },
         async (payload) => {
           const msg = payload.new as GroupMessage;
+          if (msg.group_id !== groupId) return;
           
           // Fetch sender profile
           const { data: profile } = await supabase

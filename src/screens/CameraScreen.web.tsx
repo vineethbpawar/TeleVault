@@ -32,6 +32,11 @@ const LENSES = [
   { type: 'night', label: 'Night', icon: '🌙' },
   { type: 'time', label: 'Time', icon: '🕒' },
   { type: 'date', label: 'Date', icon: '📅' },
+  { type: 'location', label: 'Geo Location', icon: '🗺️' },
+  { type: 'vintage', label: 'Retro VHS', icon: '📼' },
+  { type: 'glow', label: 'Cyber Neon', icon: '🌐' },
+  { type: 'beauty_light', label: 'Glam Glow', icon: '✨' },
+  { type: 'weather', label: 'Stamp Combo', icon: '📍' },
   { type: 'vault', label: 'Vault', icon: '🏛️' },
   { type: 'private', label: 'Private', icon: '🔒' },
 ] as const;
@@ -83,6 +88,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
   const [webPermissionGranted, setWebPermissionGranted] = useState<boolean | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [resolutionMode, setResolutionMode] = useState<'low' | 'medium' | 'high'>('high');
 
   const cameraRef = useRef<any>(null);
   const webMediaRecorderRef = useRef<any>(null);
@@ -104,23 +110,33 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
       let streamInstance: MediaStream | null = null;
 
       const startCamera = () => {
-        // Resume existing active stream when possible to minimize prompts
-        const isStreamActive = webStreamRef.current && webStreamRef.current.getVideoTracks().some((t: any) => t.readyState === 'live');
-        if (isStreamActive) {
-          setCameraStream(webStreamRef.current);
-          setCameraReady(true);
-          setWebPermissionGranted(true);
-          return;
+        setCameraReady(false);
+
+        let width = { ideal: 1920, max: 3840 };
+        let height = { ideal: 1080, max: 2160 };
+
+        if (resolutionMode === 'low') {
+          width = { ideal: 640, max: 800 };
+          height = { ideal: 480, max: 600 };
+        } else if (resolutionMode === 'medium') {
+          width = { ideal: 1280, max: 1400 };
+          height = { ideal: 720, max: 900 };
         }
 
-        setCameraReady(false);
-        navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facing === 'back' ? 'environment' : 'user' },
+        const constraints = {
+          video: {
+            facingMode: facing === 'back' ? 'environment' : 'user',
+            width,
+            height,
+            frameRate: { ideal: 30, max: 60 }
+          },
           audio: true
-        }).catch(() => {
+        };
+
+        navigator.mediaDevices.getUserMedia(constraints).catch(() => {
           // Fallback to video-only if audio is denied or not available
           return navigator.mediaDevices.getUserMedia({
-            video: { facingMode: facing === 'back' ? 'environment' : 'user' }
+            video: constraints.video
           });
         }).then(stream => {
           if (active) {
@@ -178,7 +194,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
         stopCamera();
       };
     }
-  }, [isFocused, facing]);
+  }, [isFocused, facing, resolutionMode]);
 
   // Web Video Stream Binding Effect
   useEffect(() => {
@@ -193,31 +209,19 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   }, [cameraStream, webVideoRef.current]);
 
-  // Web native hardware zoom constraint application on zoom change
+  // Web high-performance GPU-accelerated zoom preview transform (prevents camera track jerking)
   useAnimatedReaction(
     () => zoomShared.value,
     (nextZoom) => {
-      if (Platform.OS === 'web' && webStreamRef.current && hasNativeZoom) {
-        const videoTrack = webStreamRef.current.getVideoTracks()[0];
-        if (videoTrack && typeof videoTrack.getCapabilities === 'function') {
-          try {
-            const caps = videoTrack.getCapabilities() as any;
-            if (caps.zoom) {
-              const min = caps.zoom.min || 1;
-              const max = caps.zoom.max || 1;
-              const targetZoom = min + nextZoom * (max - min);
-              runOnJS((target) => {
-                videoTrack.applyConstraints({
-                  advanced: [{ zoom: target }]
-                } as any).catch((err: any) => {
-                  console.warn('[ZOOM_WARN] Failed to apply native zoom constraint:', err);
-                });
-              })(targetZoom);
-            }
-          } catch (err) {
-            console.warn('[ZOOM_WARN] Capabilities query failed:', err);
+      if (Platform.OS === 'web' && webVideoRef.current) {
+        const scale = 1 + nextZoom * 5; // scale range 1.0x to 6.0x
+        runOnJS((targetScale) => {
+          if (webVideoRef.current) {
+            webVideoRef.current.style.transform = `scale(${targetScale})`;
+            webVideoRef.current.style.transformOrigin = 'center center';
+            webVideoRef.current.style.transition = 'transform 0.05s ease-out';
           }
-        }
+        })(scale);
       }
     }
   );
@@ -591,8 +595,11 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           }
         }
 
-        const options = mimeType ? { mimeType } : undefined;
-        console.log('[RECORD_TRACE] 2. Creating MediaRecorder with MIME type:', mimeType || 'Default');
+        const options = {
+          mimeType: mimeType || undefined,
+          videoBitsPerSecond: resolutionMode === 'low' ? 1000000 : resolutionMode === 'medium' ? 4000000 : 8000000
+        };
+        console.log('[RECORD_TRACE] 2. Creating MediaRecorder with MIME type:', mimeType || 'Default', 'Bitrate:', options.videoBitsPerSecond);
         recorder = new MediaRecorder(recordStream, options);
         webMediaRecorderRef.current = recorder;
 
@@ -852,6 +859,51 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
         {selectedLens === 'soft' && <View style={styles.softOverlay} />}
         {selectedLens === 'night' && <View style={styles.nightOverlay} />}
         
+        {/* Custom Snapchat Lenses overlays */}
+        {selectedLens === 'vintage' && (
+          <>
+            <View style={styles.vintageOverlay} />
+            <View style={styles.vhsVignette} />
+            <View style={styles.vhsStampWrapper}>
+              <Text style={styles.vhsPlayText}>PLAY ▶</Text>
+              <Text style={styles.vhsTimeText}>00:04:12</Text>
+              <Text style={styles.vhsDateText}>{dateString.toUpperCase()}</Text>
+            </View>
+          </>
+        )}
+
+        {selectedLens === 'glow' && (
+          <>
+            <View style={styles.glowOverlay} />
+            <View style={styles.cyberFrame} />
+            <View style={styles.cyberStampWrapper}>
+              <Text style={styles.cyberText}>SYS_ON: ONLINE</Text>
+              <Text style={styles.cyberSubtext}>NEON_GRID_v1.0</Text>
+            </View>
+          </>
+        )}
+
+        {selectedLens === 'beauty_light' && (
+          <>
+            <View style={styles.beautyLightOverlay} />
+            <View style={styles.glamSparkleContainer}>
+              <Text style={[styles.glamSparkle, { top: '15%', left: '10%' }]}>✨</Text>
+              <Text style={[styles.glamSparkle, { top: '25%', right: '15%' }]}>✨</Text>
+              <Text style={[styles.glamSparkle, { top: '60%', left: '20%' }]}>✨</Text>
+              <Text style={[styles.glamSparkle, { top: '75%', right: '25%' }]}>✨</Text>
+            </View>
+          </>
+        )}
+
+        {selectedLens === 'weather' && (
+          <View style={styles.snapComboStampWrapper}>
+            <Text style={styles.snapComboLocationText}>{locationText || 'TELEVAULT'}</Text>
+            <View style={styles.snapComboDivider} />
+            <Text style={styles.snapComboInfoText}>{timeString}  •  {dateString}</Text>
+            <Text style={styles.snapComboWeatherText}>☀️ 78°F</Text>
+          </View>
+        )}
+
         {/* Stamp / Text Overlays */}
         {selectedLens === 'time' && (
           <View style={styles.textOverlayWrapper}>
@@ -929,6 +981,34 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
             {timerOption === 'off' ? 'Off' : timerOption}
           </Text>
         </TouchableOpacity>
+
+        <View style={styles.toolRowGroup}>
+          <Text style={styles.toolLabelGroup}>Camera Quality</Text>
+          <View style={styles.toolButtonGroup}>
+            {(['low', 'medium', 'high'] as const).map((mode) => (
+              <TouchableOpacity
+                key={mode}
+                style={[
+                  styles.toolBtn,
+                  resolutionMode === mode && styles.toolBtnActive,
+                ]}
+                onPress={() => {
+                  setResolutionMode(mode);
+                  showToast(`Camera quality set to: ${mode === 'low' ? 'SD (480p)' : mode === 'medium' ? 'HD (720p)' : 'FHD (1080p)'}`);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.toolBtnText,
+                    resolutionMode === mode && styles.toolBtnTextActive,
+                  ]}
+                >
+                  {mode === 'low' ? 'SD' : mode === 'medium' ? 'HD' : 'FHD'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
 
         <View style={styles.toolRowGroup}>
           <Text style={styles.toolLabelGroup}>Destination</Text>
@@ -1246,11 +1326,11 @@ const styles = StyleSheet.create({
   },
   glowOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(255, 252, 0, 0.15)',
+    backgroundColor: 'rgba(0, 240, 255, 0.08)',
   },
   vintageOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(138, 90, 25, 0.2)',
+    backgroundColor: 'rgba(138, 90, 25, 0.12)',
   },
   vignetteOverlay: {
     ...StyleSheet.absoluteFill,
@@ -1260,7 +1340,124 @@ const styles = StyleSheet.create({
   },
   beautyLightOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 192, 203, 0.1)',
+  },
+  vhsVignette: {
+    ...StyleSheet.absoluteFill,
+    borderWidth: 20,
+    borderColor: 'rgba(0,0,0,0.2)',
+  },
+  vhsStampWrapper: {
+    position: 'absolute',
+    bottom: 240,
+    left: 24,
+  },
+  vhsPlayText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    textShadowColor: '#000000',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  vhsTimeText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    textShadowColor: '#000000',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+    marginTop: 4,
+  },
+  vhsDateText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    textShadowColor: '#000000',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+    marginTop: 2,
+  },
+  cyberFrame: {
+    ...StyleSheet.absoluteFill,
+    borderWidth: 3,
+    borderColor: '#FF007F',
+    borderRadius: 8,
+    margin: 8,
+  },
+  cyberStampWrapper: {
+    position: 'absolute',
+    top: 120,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 240, 255, 0.15)',
+    borderWidth: 1.5,
+    borderColor: '#00F0FF',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 4,
+  },
+  cyberText: {
+    color: '#00F0FF',
+    fontSize: 16,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+  cyberSubtext: {
+    color: '#FF007F',
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 2,
+    letterSpacing: 1,
+  },
+  glamSparkleContainer: {
+    ...StyleSheet.absoluteFill,
+  },
+  glamSparkle: {
+    position: 'absolute',
+    fontSize: 26,
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(255,255,255,0.8)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
+  },
+  snapComboStampWrapper: {
+    position: 'absolute',
+    bottom: 220,
+    alignSelf: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: '#FFFC00',
+  },
+  snapComboLocationText: {
+    color: '#FFFC00',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  snapComboDivider: {
+    width: 60,
+    height: 2,
+    backgroundColor: 'rgba(255, 252, 0, 0.4)',
+    marginVertical: 6,
+  },
+  snapComboInfoText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  snapComboWeatherText: {
+    color: '#FFFC00',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 4,
   },
   warmOverlay: {
     ...StyleSheet.absoluteFill,

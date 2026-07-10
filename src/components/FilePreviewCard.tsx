@@ -166,7 +166,7 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
               }}
             />
             <View style={styles.thumbnailVideoOverlay}>
-              <Play size={variant === 'grid' ? 12 : 16} color="#000000" fill="#000000" />
+              <Play size={variant === 'grid' ? 8 : 12} color="#FFFFFF" fill="#FFFFFF" />
             </View>
             {durationStr && (
               <View style={styles.durationBadge}>
@@ -301,25 +301,21 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
 const styles = StyleSheet.create({
   gridContainer: {
     aspectRatio: 1,
-    backgroundColor: '#0A0B14',
-    borderRadius: 12,
+    backgroundColor: '#000000',
+    borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#1F2444',
   },
   recentContainer: {
     width: 100,
     height: 120,
-    backgroundColor: '#0A0B14',
+    backgroundColor: '#000000',
     borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#1F2444',
   },
   rowContainer: {
     width: 48,
     height: 48,
-    backgroundColor: '#0A0B14',
+    backgroundColor: '#000000',
     borderRadius: 12,
     overflow: 'hidden',
     alignItems: 'center',
@@ -338,9 +334,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1C1C1E',
   },
   videoBg: {
-    backgroundColor: '#0A0B14',
-    borderWidth: 1,
-    borderColor: '#1F2444',
+    backgroundColor: '#000000',
   },
   docBg: {
     backgroundColor: '#121212',
@@ -363,9 +357,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 6,
     right: 6,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: '#FFFC00',
     alignItems: 'center',
     justifyContent: 'center',
@@ -377,19 +371,19 @@ const styles = StyleSheet.create({
   },
   thumbnailVideoOverlay: {
     position: 'absolute',
-    top: '40%',
-    left: '40%',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 252, 0, 0.85)',
+    top: 8,
+    right: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 1.5,
   },
   durationBadge: {
     position: 'absolute',

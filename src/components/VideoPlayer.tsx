@@ -50,17 +50,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError
         }
       } else {
         video.pause();
+        video.muted = true;
       }
 
       return () => {
         video.removeEventListener('error', handleWebError);
-      };
-    }, [source, isFocused, paused]);
-
-    useEffect(() => {
-      return () => {
-        const video = videoRef.current;
-        if (!video) return;
         try {
           video.pause();
           video.muted = true;
@@ -68,7 +62,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError
           video.load();
         } catch (_) {}
       };
-    }, []);
+    }, [source, isFocused, paused]);
 
     return (
       <View style={[styles.container, style]}>

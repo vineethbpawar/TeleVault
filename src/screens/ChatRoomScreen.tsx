@@ -281,17 +281,18 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
 
     activeChannelRef.current = channel;
 
-    // 1. Listen for new inserts in Supabase database
+    // 1. Listen to new messages
     channel.on(
       'postgres_changes',
       {
         event: 'INSERT',
         schema: 'public',
         table: 'chat_messages',
-        filter: `conversation_id=eq.${convId}`,
       },
       async (payload: any) => {
         const newMsg = payload.new as ChatMessage;
+        if (newMsg.conversation_id !== convId) return;
+
         if (newMsg.snap_id) {
           const { data: snap } = await supabase
             .from('snaps')
@@ -336,12 +337,34 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         event: 'UPDATE',
         schema: 'public',
         table: 'chat_messages',
-        filter: `conversation_id=eq.${convId}`,
       },
       (payload: any) => {
         const updatedMsg = payload.new as ChatMessage;
+        if (updatedMsg.conversation_id !== convId) return;
+
         setMessages((prev) =>
           prev.map((m) => (m.id === updatedMsg.id ? { ...m, status: updatedMsg.status } : m))
+        );
+      }
+    );
+
+    // 2.5. Listen to snap viewed status updates
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'snaps',
+      },
+      (payload: any) => {
+        const updatedSnap = payload.new as any;
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.snap_id === updatedSnap.id) {
+              return { ...m, snap: updatedSnap };
+            }
+            return m;
+          })
         );
       }
     );
@@ -687,7 +710,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: '#000000' }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}
     >
       <View style={[styles.container, { paddingTop: insets.top }]}>

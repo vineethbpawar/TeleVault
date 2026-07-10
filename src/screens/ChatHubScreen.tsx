@@ -123,15 +123,102 @@ export const ChatHubScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   useEffect(() => {
+    let convsChannel: any = null;
+    let msgsChannel: any = null;
+    let requestsChannel: any = null;
+    let snapsChannel: any = null;
+
+    const setupSubscriptions = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // 1. Listen to conversation updates
+      convsChannel = supabase
+        .channel('chathub_conversations_realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'conversations',
+          },
+          () => {
+            loadData(false);
+          }
+        )
+        .subscribe();
+
+      // 2. Listen to message inserts (incoming chats/snaps)
+      msgsChannel = supabase
+        .channel('chathub_messages_realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'chat_messages',
+          },
+          (payload: any) => {
+            const msg = payload.new as any;
+            if (msg.receiver_id === user.id || msg.sender_id === user.id) {
+              loadData(false);
+            }
+          }
+        )
+        .subscribe();
+
+      // 3. Listen to friend request changes
+      requestsChannel = supabase
+        .channel('chathub_requests_realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'friend_requests',
+          },
+          (payload: any) => {
+            const req = (payload.new || payload.old) as any;
+            if (req && (req.receiver_id === user.id || req.sender_id === user.id)) {
+              loadData(false);
+            }
+          }
+        )
+        .subscribe();
+
+      // 4. Listen to snaps (stories / direct snaps status)
+      snapsChannel = supabase
+        .channel('chathub_snaps_realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'snaps',
+          },
+          () => {
+            loadData(false);
+          }
+        )
+        .subscribe();
+    };
+
     if (isFocused) {
       loadData(true);
+      setupSubscriptions();
       
-      // Fallback Polling every 10 seconds while screen is open
+      // Fallback Polling every 30 seconds while screen is open
       const interval = setInterval(() => {
         loadData(false);
-      }, 10000);
+      }, 30000);
 
-      return () => clearInterval(interval);
+      return () => {
+        clearInterval(interval);
+        if (convsChannel) supabase.removeChannel(convsChannel);
+        if (msgsChannel) supabase.removeChannel(msgsChannel);
+        if (requestsChannel) supabase.removeChannel(requestsChannel);
+        if (snapsChannel) supabase.removeChannel(snapsChannel);
+      };
     }
   }, [isFocused]);
 

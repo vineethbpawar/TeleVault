@@ -343,40 +343,40 @@ export const previewCacheService = {
         console.log(`[VIDEO_PREVIEW_DEV] Resolving: file_name=${file.file_name} file_id=${file.id} hasLocalThumb=${hasLocalThumb} hasCachedThumb=${hasCachedThumb} playableUriResolved=${!!playableUri}`);
       }
 
-      // Generate dynamic thumbnail from video source
+      // Generate dynamic thumbnail from video source in the background
       if (!previewUri && playableUri) {
-        try {
-          if (__DEV__) {
-            console.log(`[VIDEO_PREVIEW_DEV] Starting dynamic thumbnail generation for: ${file.file_name} from: ${playableUri}`);
-          }
-          if (Platform.OS === 'web') {
-            const thumbDataUrl = await getWebVideoThumbnail(playableUri);
-            previewUri = thumbDataUrl;
-            if (file.id) {
-              await AsyncStorage.setItem(`televault_vid_thumb_${file.id}`, thumbDataUrl);
+        (async () => {
+          try {
+            if (__DEV__) {
+              console.log(`[VIDEO_PREVIEW_DEV] Starting background thumbnail generation for: ${file.file_name} from: ${playableUri}`);
             }
-          } else {
-            const thumb = await VideoThumbnails.getThumbnailAsync(playableUri, { time: 500 });
-            if (thumb && thumb.uri) {
-              previewUri = thumb.uri;
+            if (Platform.OS === 'web') {
+              const thumbDataUrl = await getWebVideoThumbnail(playableUri!);
               if (file.id) {
-                await AsyncStorage.setItem(`televault_vid_thumb_${file.id}`, thumb.uri);
-              }
-              if (__DEV__) {
-                console.log(`[VIDEO_PREVIEW_DEV] Dynamic thumbnail generation SUCCESS: ${thumb.uri}`);
+                await AsyncStorage.setItem(`televault_vid_thumb_${file.id}`, thumbDataUrl);
               }
             } else {
-              if (__DEV__) {
-                console.log(`[VIDEO_PREVIEW_DEV] Dynamic thumbnail generation FAILED: Empty response`);
+              const thumb = await VideoThumbnails.getThumbnailAsync(playableUri!, { time: 500 });
+              if (thumb && thumb.uri) {
+                if (file.id) {
+                  await AsyncStorage.setItem(`televault_vid_thumb_${file.id}`, thumb.uri);
+                }
+                if (__DEV__) {
+                  console.log(`[VIDEO_PREVIEW_DEV] Background thumbnail generation SUCCESS: ${thumb.uri}`);
+                }
+              } else {
+                if (__DEV__) {
+                  console.log(`[VIDEO_PREVIEW_DEV] Background thumbnail generation FAILED: Empty response`);
+                }
               }
             }
+          } catch (e: any) {
+            if (__DEV__) {
+              console.log(`[VIDEO_PREVIEW_DEV] Background thumbnail generation ERROR: name=${e.name} msg=${e.message}`);
+            }
+            console.warn('Background video thumbnail generation failed:', e);
           }
-        } catch (e: any) {
-          if (__DEV__) {
-            console.log(`[VIDEO_PREVIEW_DEV] Dynamic thumbnail generation ERROR: name=${e.name} msg=${e.message}`);
-          }
-          console.warn('Dynamic video thumbnail generation failed:', e);
-        }
+        })();
       }
 
       return {
