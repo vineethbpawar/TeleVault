@@ -7,6 +7,17 @@ import { Platform } from 'react-native';
 const CACHE_PREFIX = 'televault_preview_';
 const CACHE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour expiry for Telegram getFile URLs
 
+async function resolveWebBlobUrl(webBlobUri: string): Promise<string> {
+  if (!webBlobUri.startsWith('webblob:')) return webBlobUri;
+  const { getWebBlob } = require('./uploadQueueService');
+  const key = webBlobUri.split(':')[1];
+  const blob = await getWebBlob(key);
+  if (blob) {
+    return URL.createObjectURL(blob);
+  }
+  return '';
+}
+
 export const previewCacheService = {
   async getCachedPreview(fileId: string): Promise<string | null> {
     try {
@@ -115,8 +126,11 @@ export const previewCacheService = {
     },
     forceRefresh = false
   ): Promise<string | null> {
-    const resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
+    let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
     if (resolvedLocalUri) {
+      if (Platform.OS === 'web' && resolvedLocalUri.startsWith('webblob:')) {
+        resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
+      }
       return resolvedLocalUri;
     }
 
@@ -259,9 +273,12 @@ export const previewCacheService = {
       let playableUri: string | undefined;
 
       // Locate video path
-      const resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
+      let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
+          if (resolvedLocalUri.startsWith('webblob:')) {
+            resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
+          }
           playableUri = resolvedLocalUri;
         } else {
           try {
@@ -398,9 +415,12 @@ export const previewCacheService = {
     }
 
     // 3. Document / other resolution
-    const resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
+    let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
     if (resolvedLocalUri) {
       if (Platform.OS === 'web') {
+        if (resolvedLocalUri.startsWith('webblob:')) {
+          resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
+        }
         return {
           type: fileType,
           previewUri: resolvedLocalUri,

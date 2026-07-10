@@ -55,6 +55,18 @@ const DESTINATIONS = [
   { id: 'download', name: 'Download', icon: DownloadCloud, desc: 'Save local copy to gallery' },
 ];
 
+function dataURItoBlob(dataURI: string): Blob {
+  const arr = dataURI.split(',');
+  const mime = arr[0].match(/:(.*?);/)![1];
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+}
+
 export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
   const { uri, type, fromGallery, defaultLens, sendToUserId, sendToUsername, conversationId, isVault, isPrivate } = route.params as any;
   const insets = useSafeAreaInsets();
@@ -400,8 +412,44 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     }
 
     try {
+      const itemId = Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+      let finalUri = uri;
+      let finalThumbUri = localThumbnailUri;
+
+      if (Platform.OS === 'web') {
+        const { setWebBlob } = require('../services/uploadQueueService');
+        let mainBlob: Blob | null = null;
+        if (uri.startsWith('data:')) {
+          mainBlob = dataURItoBlob(uri);
+        } else if (uri.startsWith('blob:')) {
+          try {
+            mainBlob = await fetch(uri).then(r => r.blob());
+          } catch (_) {}
+        }
+
+        if (mainBlob) {
+          await setWebBlob(itemId, mainBlob);
+          finalUri = `webblob:${itemId}`;
+        }
+
+        if (localThumbnailUri) {
+          let thumbBlob: Blob | null = null;
+          if (localThumbnailUri.startsWith('data:')) {
+            thumbBlob = dataURItoBlob(localThumbnailUri);
+          } else if (localThumbnailUri.startsWith('blob:')) {
+            try {
+              thumbBlob = await fetch(localThumbnailUri).then(r => r.blob());
+            } catch (_) {}
+          }
+          if (thumbBlob) {
+            await setWebBlob(`thumb_${itemId}`, thumbBlob);
+            finalThumbUri = `webblob:thumb_${itemId}`;
+          }
+        }
+      }
+
       // 1. Pre-insert the metadata record to Supabase so it shows up instantly in Memories!
-      const metaData = getPackagedMetadata(localThumbnailUri);
+      const metaData = getPackagedMetadata(finalThumbUri);
       const dbRecord = await fileService.saveFileMetadata({
         folder_id: null,
         file_name: fileName,
@@ -410,10 +458,10 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         file_size: fileSize || 0,
         is_private: destination === 'private_drive',
         is_drive_file: destination !== 'memories',
-        local_thumbnail_uri: localThumbnailUri || uri, // fallback to uri for fast preview
+        local_thumbnail_uri: finalThumbUri || finalUri, // fallback for fast preview
         overlay_metadata: {
           ...metaData,
-          local_uri: uri
+          local_uri: finalUri
         },
         telegram_message_id: null,
         telegram_file_id: null,
@@ -422,7 +470,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
 
       // 2. Add to background upload queue referencing the DB file ID
       await uploadQueueService.addToUploadQueue({
-        local_uri: uri,
+        local_uri: finalUri,
         file_name: fileName,
         file_type: type === 'video' ? 'video' : 'image',
         mime_type: mimeType,
@@ -432,7 +480,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         is_private: destination === 'private_drive',
         is_drive_file: destination !== 'memories',
         overlay_metadata: metaData,
-        local_thumbnail_uri: localThumbnailUri,
+        local_thumbnail_uri: finalThumbUri,
         db_file_id: dbRecord.id,
       });
 
