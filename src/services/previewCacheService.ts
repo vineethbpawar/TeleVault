@@ -190,9 +190,12 @@ export const previewCacheService = {
 
     // 1. Image resolution
     if (fileType === 'image') {
-      const resolvedLocalUri = file.local_uri || file.local_thumbnail_uri || file.overlay_metadata?.local_uri;
+      let resolvedLocalUri = file.local_uri || file.local_thumbnail_uri || file.overlay_metadata?.local_uri;
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
+          if (resolvedLocalUri.startsWith('webblob:')) {
+            resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
+          }
           return {
             type: 'image',
             previewUri: resolvedLocalUri,
@@ -339,7 +342,11 @@ export const previewCacheService = {
 
       if (file.local_thumbnail_uri) {
         if (Platform.OS === 'web') {
-          previewUri = file.local_thumbnail_uri;
+          let thumbUri = file.local_thumbnail_uri;
+          if (thumbUri.startsWith('webblob:')) {
+            thumbUri = await resolveWebBlobUrl(thumbUri);
+          }
+          previewUri = thumbUri;
           hasLocalThumb = true;
         } else {
           try {

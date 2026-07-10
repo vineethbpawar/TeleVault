@@ -208,12 +208,16 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
   }, []);
 
   const loadMemories = async (showSpinner = true) => {
+    console.log("MEMORIES STEP 1: loadMemories called, showSpinner =", showSpinner);
     if (showSpinner) setLoading(true);
     try {
+      console.log("MEMORIES STEP 2: Calling fileService.fetchMemories()");
       let data = await fileService.fetchMemories();
+      console.log("MEMORIES STEP 3: fetchMemories finished, data length =", data?.length);
       
       // If private mode is active and unlocked, load private memories
       if (filterType === 'private' && isUnlocked) {
+        console.log("MEMORIES STEP 4: Loading private memories");
         const { data: privData, error } = await supabase
           .from('files')
           .select('*')
@@ -225,29 +229,38 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
           data = privData as TeleVaultFile[];
         }
       }
+      console.log("MEMORIES STEP 5: Setting files state");
       setFiles(data);
       if (data && data.length > 0) {
+        console.log("MEMORIES STEP 6: Calling pregenerateThumbnailsInBackground");
         previewCacheService.pregenerateThumbnailsInBackground(data);
+        console.log("MEMORIES STEP 7: Calling evictCacheIfLimitExceeded");
         previewCacheService.evictCacheIfLimitExceeded(50 * 1024 * 1024);
       }
-    } catch (error) {
-      console.error('Failed to load memories:', error);
+      console.log("MEMORIES STEP 8: Success path completed");
+    } catch (error: any) {
+      console.error('MEMORIES STEP ERROR: Failed to load memories:', error);
     } finally {
+      console.log("MEMORIES STEP 9: Finally block resetting loading state");
       setLoading(false);
       setRefreshing(false);
     }
   };
 
   useEffect(() => {
+    console.log("MEMORIES EFFECT 1: Fired, isFocused =", isFocused, "filterType =", filterType, "isUnlocked =", isUnlocked);
     if (isFocused) {
       if (filterType === 'private' && !isUnlocked) {
+        console.log("MEMORIES EFFECT 1: Checking private access");
         checkPrivateAccess();
       } else {
+        console.log("MEMORIES EFFECT 1: Triggering loadMemories(true)");
         loadMemories(true);
       }
     }
 
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      console.log("MEMORIES APPSTATE CHANGE: nextAppState =", nextAppState, "isFocused =", isFocused);
       if (nextAppState === 'active' && isFocused) {
         loadMemories(false);
       }
@@ -259,19 +272,22 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
   }, [isFocused, filterType, isUnlocked]);
 
   useEffect(() => {
+    console.log("MEMORIES EFFECT 2 (Realtime): Fired, isFocused =", isFocused);
     if (!isFocused) return;
     const channel = supabase
       .channel('memories_realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'files' },
-        () => {
+        (payload) => {
+          console.log("MEMORIES REALTIME CHANGE DETECTED:", payload);
           loadMemories(false);
         }
       )
       .subscribe();
 
     return () => {
+      console.log("MEMORIES EFFECT 2: Cleaning up realtime subscription channel");
       supabase.removeChannel(channel);
     };
   }, [isFocused, filterType, isUnlocked]);
