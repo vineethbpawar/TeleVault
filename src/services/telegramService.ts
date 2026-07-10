@@ -200,7 +200,7 @@ export const telegramService = {
   getTelegramApiUrl(endpoint: string, botToken: string): string {
     const rawUrl = `https://api.telegram.org/bot${botToken}/${endpoint}`;
     if (Platform.OS === 'web') {
-      return `https://corsproxy.io/?${encodeURIComponent(rawUrl)}`;
+      return `https://corsproxy.io/?${rawUrl}`;
     }
     return rawUrl;
   },
@@ -836,7 +836,7 @@ export const telegramService = {
     const fileInfo = await this.getTelegramFileInfo(fileId);
     const url = `https://api.telegram.org/file/bot${botToken}/${fileInfo.file_path}`;
     if (Platform.OS === 'web') {
-      return `https://corsproxy.io/?${encodeURIComponent(url)}`;
+      return `https://corsproxy.io/?${url}`;
     }
     return url;
   },

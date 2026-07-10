@@ -40,6 +40,12 @@ export const previewCacheService = {
           }
         }
       }
+
+      // Self-healing: Evict old allorigins.win URLs from cache
+      if (url && url.indexOf('allorigins.win') !== -1) {
+        await AsyncStorage.removeItem(CACHE_PREFIX + fileId);
+        return null;
+      }
       return url;
     } catch (err) {
       console.error('Failed to get cached preview:', err);
@@ -217,7 +223,7 @@ export const previewCacheService = {
           const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id);
           const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
           
-          let previewUri = Platform.OS === 'web' ? `https://corsproxy.io/?${encodeURIComponent(url)}` : url;
+          let previewUri = Platform.OS === 'web' ? `https://corsproxy.io/?${url}` : url;
           if (file.is_private) {
             const { encryptionService } = require('./encryptionService');
             if (Platform.OS === 'web') {
@@ -289,7 +295,7 @@ export const previewCacheService = {
                   await FileSystem.deleteAsync(tempEncPath, { idempotent: true });
                 }
               } else {
-                playableUri = Platform.OS === 'web' ? `https://corsproxy.io/?${encodeURIComponent(url)}` : url;
+                playableUri = Platform.OS === 'web' ? `https://corsproxy.io/?${url}` : url;
               }
               if (playableUri) {
                 await this.setCachedPreview(file.telegram_file_id, playableUri);
@@ -423,7 +429,7 @@ export const previewCacheService = {
           const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id);
           const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
           
-          let previewUri = Platform.OS === 'web' ? `https://corsproxy.io/?${encodeURIComponent(url)}` : url;
+          let previewUri = Platform.OS === 'web' ? `https://corsproxy.io/?${url}` : url;
           if (file.is_private) {
             const { encryptionService } = require('./encryptionService');
             if (Platform.OS === 'web') {

@@ -914,7 +914,7 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    bottom: 24,
+    bottom: Platform.OS === 'web' ? 85 : 95,
     right: 24,
     width: 56,
     height: 56,
@@ -934,7 +934,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
     alignItems: 'flex-end',
-    paddingBottom: 90,
+    paddingBottom: Platform.OS === 'web' ? 155 : 165,
     paddingRight: 24,
   },
   fabMenuContainer: {
