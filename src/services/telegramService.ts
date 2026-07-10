@@ -58,6 +58,9 @@ export async function fetchWithRetry(url: string, options: RequestInit = {}, max
     rawUrl = decodeURIComponent(url.substring('https://api.allorigins.win/raw?url='.length));
   } else if (url.startsWith('https://api.codetabs.com/v1/proxy?quest=')) {
     rawUrl = decodeURIComponent(url.substring('https://api.codetabs.com/v1/proxy?quest='.length));
+  } else if (url.includes('/api/telegram-proxy?url=')) {
+    const idx = url.indexOf('/api/telegram-proxy?url=');
+    rawUrl = decodeURIComponent(url.substring(idx + '/api/telegram-proxy?url='.length));
   }
 
   if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
@@ -65,6 +68,15 @@ export async function fetchWithRetry(url: string, options: RequestInit = {}, max
   }
 
   const CORS_PROXIES = [
+    (u: string) => {
+      if (typeof window !== 'undefined' && window.location) {
+        const hostname = window.location.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.')) {
+          return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(u)}`;
+        }
+      }
+      return `/api/telegram-proxy?url=${encodeURIComponent(u)}`;
+    },
     (u: string) => `https://corsproxy.io/?${u}`,
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
     (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
