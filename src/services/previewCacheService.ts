@@ -19,6 +19,27 @@ export const previewCacheService = {
         await AsyncStorage.removeItem(CACHE_PREFIX + fileId);
         return null;
       }
+
+      if (Platform.OS === 'web') {
+        if (url && url.startsWith('blob:')) {
+          // Revoke/evict transient blob URLs that don't persist across page reloads
+          await AsyncStorage.removeItem(CACHE_PREFIX + fileId);
+          return null;
+        }
+      } else {
+        if (url && url.startsWith('file://')) {
+          try {
+            const info = await FileSystem.getInfoAsync(url);
+            if (!info.exists) {
+              await AsyncStorage.removeItem(CACHE_PREFIX + fileId);
+              return null;
+            }
+          } catch (_) {
+            await AsyncStorage.removeItem(CACHE_PREFIX + fileId);
+            return null;
+          }
+        }
+      }
       return url;
     } catch (err) {
       console.error('Failed to get cached preview:', err);

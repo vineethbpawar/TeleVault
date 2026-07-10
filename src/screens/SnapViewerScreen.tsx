@@ -1,15 +1,15 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   Image,
   TouchableOpacity,
-  SafeAreaView,
   Linking,
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Play, Video, MessageSquare } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
@@ -20,7 +20,12 @@ import VideoPlayer from '../components/VideoPlayer';
 type Props = NativeStackScreenProps<AppStackParamList, 'SnapViewer'>;
 
 export const SnapViewerScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { snapId, mediaUrl, mediaType, caption, senderUsername, isStory } = route.params;
+  const { snapId, mediaUrl, mediaType, caption, senderUsername, isStory, telegramFileId } = route.params;
+
+  const [currentMediaUrl, setCurrentMediaUrl] = useState<string | null>(mediaUrl);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [retryAttempt, setRetryAttempt] = useState(0);
 
   useEffect(() => {
     // 1. Mark snap/story viewed on load
@@ -40,8 +45,8 @@ export const SnapViewerScreen: React.FC<Props> = ({ navigation, route }) => {
   }, [snapId, isStory]);
 
   const handlePlayVideo = () => {
-    if (mediaUrl) {
-      Linking.openURL(mediaUrl);
+    if (currentMediaUrl) {
+      Linking.openURL(currentMediaUrl);
     } else {
       Alert.alert('Unavailable', 'Video link not resolved yet.');
     }
@@ -49,6 +54,53 @@ export const SnapViewerScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleClose = () => {
     navigation.goBack();
+  };
+
+  const handleLoadError = async () => {
+    if (!telegramFileId) {
+      setError(true);
+      return;
+    }
+
+    if (retryAttempt < 3) {
+      setLoading(true);
+      setError(false);
+      const nextAttempt = retryAttempt + 1;
+      setRetryAttempt(nextAttempt);
+      const backoffMs = Math.pow(2, nextAttempt) * 1000;
+      console.warn(`[SnapViewer] Media failed to load. Retrying resolve URL (attempt ${nextAttempt}/3) in ${backoffMs}ms...`);
+      
+      await new Promise(resolve => setTimeout(resolve, backoffMs));
+      
+      try {
+        const freshUrl = await snapService.resolveTelegramUrl(telegramFileId);
+        setCurrentMediaUrl(freshUrl);
+        setLoading(false);
+        setError(false);
+      } catch (err) {
+        console.error('[SnapViewer] Retry resolve failed:', err);
+        setLoading(false);
+        setError(true);
+      }
+    } else {
+      setError(true);
+    }
+  };
+
+  const handleManualRetry = async () => {
+    setRetryAttempt(0);
+    setLoading(true);
+    setError(false);
+    try {
+      const freshUrl = await snapService.resolveTelegramUrl(telegramFileId || '');
+      setCurrentMediaUrl(freshUrl);
+      setLoading(false);
+      setError(false);
+    } catch (err: any) {
+      setLoading(false);
+      setError(true);
+      Alert.alert('Retry Failed', err.message || 'Unable to load snap. Please check your connection.');
+    }
   };
 
   return (
@@ -66,10 +118,34 @@ export const SnapViewerScreen: React.FC<Props> = ({ navigation, route }) => {
 
       {/* Main Content Area */}
       <View style={styles.mediaContainer}>
-        {mediaType === 'image' && mediaUrl ? (
-          <Image source={{ uri: mediaUrl }} style={styles.media} resizeMode="contain" />
-        ) : mediaType === 'video' && mediaUrl ? (
-          <VideoPlayer source={mediaUrl} style={styles.media} />
+        {loading ? (
+          <View style={styles.videoContainer}>
+            <ActivityIndicator size="large" color="#FFFC00" />
+            <Text style={[styles.videoTitle, { marginTop: 12 }]}>Refreshing Snap...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.videoContainer}>
+            <Text style={styles.videoTitle}>Failed to Load Snap</Text>
+            <Text style={styles.videoSub}>The Telegram link expired or could not be reached.</Text>
+            {telegramFileId && (
+              <TouchableOpacity style={styles.playBtn} onPress={handleManualRetry}>
+                <Text style={styles.playBtnText}>Tap to Retry</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : mediaType === 'image' && currentMediaUrl ? (
+          <Image
+            source={{ uri: currentMediaUrl }}
+            style={styles.media}
+            resizeMode="contain"
+            onError={handleLoadError}
+          />
+        ) : mediaType === 'video' && currentMediaUrl ? (
+          <VideoPlayer
+            source={currentMediaUrl}
+            style={styles.media}
+            onError={handleLoadError}
+          />
         ) : (
           <View style={styles.videoContainer}>
             <ActivityIndicator size="large" color="#FFFC00" />

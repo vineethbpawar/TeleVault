@@ -16,7 +16,7 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   mediaType,
   onClose,
 }) => {
-  if (!mediaUrl) return null;
+  if (!visible || !mediaUrl) return null;
 
   return (
     <Modal

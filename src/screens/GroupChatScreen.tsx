@@ -121,6 +121,7 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
           caption: snap.caption || undefined,
           senderUsername: snap.sender_username || 'group',
           isStory: false,
+          telegramFileId: snap.telegram_file_id,
         });
       })
       .catch((err) => {

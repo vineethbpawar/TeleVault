@@ -42,6 +42,7 @@ export type AppStackParamList = {
     caption?: string;
     senderUsername: string;
     isStory?: boolean;
+    telegramFileId?: string;
   };
   Friends: undefined;
   FriendRequests: undefined;

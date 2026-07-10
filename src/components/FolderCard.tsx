@@ -80,4 +80,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default FolderCard;
+export default React.memo(FolderCard);

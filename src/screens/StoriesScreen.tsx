@@ -137,6 +137,7 @@ export const StoriesScreen: React.FC<Props> = ({ navigation }) => {
         caption: story.caption || undefined,
         senderUsername: story.sender_profile?.username || 'me',
         isStory: true,
+        telegramFileId: story.telegram_file_id,
       });
     } catch (err: any) {
       setLoading(false);

@@ -5,11 +5,11 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   ActivityIndicator,
   RefreshControl,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
@@ -106,6 +106,7 @@ export const SnapInboxScreen: React.FC<Props> = ({ navigation }) => {
         caption: snap.caption || undefined,
         senderUsername: snap.sender_profile?.username || 'unknown',
         isStory: false,
+        telegramFileId: snap.telegram_file_id,
       });
     } catch (err: any) {
       setLoading(false);

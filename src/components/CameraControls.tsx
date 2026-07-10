@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { StyleSheet, View, TouchableOpacity, Text, Platform } from 'react-native';
 import { Grid, Image as ImageIcon } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { SharedValue } from 'react-native-reanimated';
 import { UploadDestination } from '../types/camera';
 
 interface CameraControlsProps {
@@ -11,8 +12,7 @@ interface CameraControlsProps {
   isRecording: boolean;
   onGalleryPress: () => void;
   onMemoriesPress: () => void;
-  zoom: number;
-  onZoomChange?: (zoom: number) => void;
+  zoomShared: SharedValue<number>;
 }
 
 export const CameraControls: React.FC<CameraControlsProps> = ({
@@ -22,8 +22,7 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
   isRecording,
   onGalleryPress,
   onMemoriesPress,
-  zoom,
-  onZoomChange,
+  zoomShared,
 }) => {
   const insets = useSafeAreaInsets();
   const initialTouchY = useRef(0);
@@ -33,7 +32,6 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
   const longPressTimeoutRef = useRef<any>(null);
   const globalMouseMoveRef = useRef<any>(null);
   const globalMouseUpRef = useRef<any>(null);
-  const lastZoomTimeRef = useRef<number>(0);
 
   React.useEffect(() => {
     return () => {
@@ -50,7 +48,7 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
 
   const handleTouchStart = (e: any) => {
     initialTouchY.current = e.nativeEvent.pageY;
-    startZoomRef.current = zoom;
+    startZoomRef.current = zoomShared.value;
     touchStartTimeRef.current = Date.now();
     isRecordingStartedRef.current = false;
 
@@ -63,16 +61,11 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
 
   const handleTouchMove = (e: any) => {
     const currentY = e.nativeEvent.pageY;
-    if ((isRecording || isRecordingStartedRef.current) && onZoomChange) {
+    if (isRecording || isRecordingStartedRef.current) {
       const dy = initialTouchY.current - currentY; // positive when dragging up
-      const sensitivity = 500; // Increased to 500px for smoother, natural Snapchat-like control
+      const sensitivity = 500; // Snapchat sensitivity
       const newZoom = Math.max(0, Math.min(1, startZoomRef.current + (dy / sensitivity)));
-      
-      const now = Date.now();
-      if (now - lastZoomTimeRef.current > 33 || newZoom === 0 || newZoom === 1) {
-        onZoomChange(newZoom);
-        lastZoomTimeRef.current = now;
-      }
+      zoomShared.value = newZoom;
     }
   };
 
@@ -96,7 +89,7 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
   // Web recording gesture flow helpers
   const startRecordingFlowWeb = (clientY: number) => {
     initialTouchY.current = clientY;
-    startZoomRef.current = zoom;
+    startZoomRef.current = zoomShared.value;
     touchStartTimeRef.current = Date.now();
     isRecordingStartedRef.current = false;
 
@@ -135,16 +128,11 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
 
   const moveRecordingFlowWeb = (clientY: number) => {
     const currentY = clientY;
-    if ((isRecording || isRecordingStartedRef.current) && onZoomChange) {
+    if (isRecording || isRecordingStartedRef.current) {
       const dy = initialTouchY.current - currentY;
-      const sensitivity = 500; // Increased to 500px
+      const sensitivity = 500;
       const newZoom = Math.max(0, Math.min(1, startZoomRef.current + (dy / sensitivity)));
-      
-      const now = Date.now();
-      if (now - lastZoomTimeRef.current > 33 || newZoom === 0 || newZoom === 1) {
-        onZoomChange(newZoom);
-        lastZoomTimeRef.current = now;
-      }
+      zoomShared.value = newZoom;
     }
   };
 
@@ -350,4 +338,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default CameraControls;
+export default React.memo(CameraControls);

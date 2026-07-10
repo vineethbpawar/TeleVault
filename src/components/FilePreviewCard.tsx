@@ -476,4 +476,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default FilePreviewCard;
+export default React.memo(FilePreviewCard);

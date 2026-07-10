@@ -16,6 +16,7 @@ import { supabase } from '../lib/supabase';
 import UserAvatar from '../components/UserAvatar';
 import { showToast } from '../components/ToastBanner';
 import { locationService } from '../services/locationService';
+import Animated, { useSharedValue, useAnimatedReaction, runOnJS, SharedValue } from 'react-native-reanimated';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'CameraTab'>,
@@ -35,6 +36,25 @@ const LENSES = [
   { type: 'private', label: 'Private', icon: '🔒' },
 ] as const;
 
+// ZoomPill component that renders the zoom display without re-rendering the whole camera screen
+const ZoomPill = ({ zoomShared, bottom }: { zoomShared: SharedValue<number>; bottom: any }) => {
+  const [zoomText, setZoomText] = useState('1.0x');
+
+  useAnimatedReaction(
+    () => zoomShared.value,
+    (val) => {
+      const displayVal = `${(val * 7 + 1).toFixed(1)}x`;
+      runOnJS(setZoomText)(displayVal);
+    }
+  );
+
+  return (
+    <View style={[styles.zoomPill, { bottom }]} pointerEvents="none">
+      <Text style={styles.zoomPillText}>{zoomText}</Text>
+    </View>
+  );
+};
+
 export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
   const { sendToUserId, sendToUsername, conversationId } = (route.params || {}) as any;
@@ -43,7 +63,6 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const [flash, setFlash] = useState<'off' | 'on'>('off');
   const [cameraMode, setCameraMode] = useState<'picture' | 'video'>('picture');
   
-
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [maxDuration, setMaxDuration] = useState(30);
@@ -52,13 +71,8 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const [countdown, setCountdown] = useState<number | null>(null);
   
   const [selectedLens, setSelectedLens] = useState<CameraLensType>('original');
-  const [zoom, setZoom] = useState(0);
+  const zoomShared = useSharedValue(0);
   const [defaultDestination, setDefaultDestination] = useState<UploadDestination>('memories');
-  const getZoomDisplay = () => {
-    const val = zoom * 7 + 1;
-    if (val === 1) return '1x';
-    return `${val.toFixed(1)}x`;
-  };
   
   const [cameraReady, setCameraReady] = useState(false);
   const [isStartingRecording, setIsStartingRecording] = useState(false);
@@ -179,29 +193,34 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   }, [cameraStream, webVideoRef.current]);
 
-  // Web native hardware zoom constraint application
-  useEffect(() => {
-    if (Platform.OS === 'web' && webStreamRef.current && hasNativeZoom) {
-      const videoTrack = webStreamRef.current.getVideoTracks()[0];
-      if (videoTrack && typeof videoTrack.getCapabilities === 'function') {
-        try {
-          const caps = videoTrack.getCapabilities() as any;
-          if (caps.zoom) {
-            const min = caps.zoom.min || 1;
-            const max = caps.zoom.max || 1;
-            const targetZoom = min + zoom * (max - min);
-            videoTrack.applyConstraints({
-              advanced: [{ zoom: targetZoom }]
-            } as any).catch((err: any) => {
-              console.warn('[ZOOM_WARN] Failed to apply native zoom constraint:', err);
-            });
+  // Web native hardware zoom constraint application on zoom change
+  useAnimatedReaction(
+    () => zoomShared.value,
+    (nextZoom) => {
+      if (Platform.OS === 'web' && webStreamRef.current && hasNativeZoom) {
+        const videoTrack = webStreamRef.current.getVideoTracks()[0];
+        if (videoTrack && typeof videoTrack.getCapabilities === 'function') {
+          try {
+            const caps = videoTrack.getCapabilities() as any;
+            if (caps.zoom) {
+              const min = caps.zoom.min || 1;
+              const max = caps.zoom.max || 1;
+              const targetZoom = min + nextZoom * (max - min);
+              runOnJS((target) => {
+                videoTrack.applyConstraints({
+                  advanced: [{ zoom: target }]
+                } as any).catch((err: any) => {
+                  console.warn('[ZOOM_WARN] Failed to apply native zoom constraint:', err);
+                });
+              })(targetZoom);
+            }
+          } catch (err) {
+            console.warn('[ZOOM_WARN] Capabilities query failed:', err);
           }
-        } catch (err) {
-          console.warn('[ZOOM_WARN] Capabilities query failed:', err);
         }
       }
     }
-  }, [zoom, hasNativeZoom]);
+  );
 
   // Fetch Supabase User Profile
   useEffect(() => {
@@ -245,7 +264,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   // Load defaults from settings on focus and Reset Zoom
   useEffect(() => {
     if (isFocused) {
-      setZoom(0); // Reset zoom on return / focus!
+      zoomShared.value = 0; // Reset zoom on return / focus!
       settingsService.getSettings().then((settings) => {
         setTimerOption(settings.defaultTimer);
         setMaxDuration(settings.maxVideoDuration);
@@ -402,9 +421,9 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           canvas.height = video.videoHeight;
           const ctx = canvas.getContext('2d');
           if (ctx) {
-            if (!hasNativeZoom && zoom > 0) {
+            if (!hasNativeZoom && zoomShared.value > 0) {
               // Simulate zoom by center-cropping the video frame
-              const scale = 1 + zoom * 7; // maps [0, 1] to [1, 8]
+              const scale = 1 + zoomShared.value * 7; // maps [0, 1] to [1, 8]
               const sWidth = video.videoWidth / scale;
               const sHeight = video.videoHeight / scale;
               const sx = (video.videoWidth - sWidth) / 2;
@@ -428,7 +447,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
               sendToUsername,
               conversationId,
             } as any);
-            setZoom(0);
+            zoomShared.value = 0;
           } else {
             throw new Error('Failed to get canvas 2D context');
           }
@@ -460,7 +479,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
             sendToUsername,
             conversationId,
           } as any);
-          setZoom(0); // Reset zoom!
+          zoomShared.value = 0; // Reset zoom!
         } else {
           Alert.alert('Error', 'Failed to capture image');
         }
@@ -538,7 +557,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
         }
 
         let recordStream = webStreamRef.current;
-        if (!hasNativeZoom && zoom > 0 && webVideoRef.current) {
+        if (!hasNativeZoom && zoomShared.value > 0 && webVideoRef.current) {
           console.log('[RECORD_TRACE] Simulating zoom for recording via canvas stream.');
           const video = webVideoRef.current;
           const canvas = document.createElement('canvas');
@@ -548,7 +567,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           
           const drawFrame = () => {
             if (ctx && video && !video.paused && !video.ended) {
-              const scale = 1 + zoom * 7;
+              const scale = 1 + zoomShared.value * 7;
               const sWidth = canvas.width / scale;
               const sHeight = canvas.height / scale;
               const sx = (canvas.width - sWidth) / 2;
@@ -606,7 +625,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
             sendToUsername,
             conversationId,
           } as any);
-          setZoom(0); // Reset zoom
+          zoomShared.value = 0; // Reset zoom
         };
 
         console.log('[RECORD_TRACE] 3. Calling MediaRecorder.start().');
@@ -673,7 +692,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
             sendToUsername,
             conversationId,
           } as any);
-          setZoom(0); // Reset zoom!
+          zoomShared.value = 0; // Reset zoom!
         }
       } catch (error: any) {
         if (__DEV__) {
@@ -748,12 +767,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     }
     setIsRecording(false);
     setRecordingDuration(0);
-    setZoom(0); // Reset zoom!
-    settingsService.getSettings().then((settings) => {
-      if (Platform.OS !== 'web') {
-        setCameraMode(settings.defaultCameraMode === 'Video' ? 'video' : 'picture');
-      }
-    });
+    zoomShared.value = 0; // Reset Reanimated zoom
   };
 
   const handleStopRecording = () => {
@@ -764,7 +778,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleFlip = () => {
     setFacing((prev) => (prev === 'back' ? 'front' : 'back'));
-    setZoom(0); // Reset zoom!
+    zoomShared.value = 0; // Reset zoom
   };
 
   const handleFlashToggle = () => {
@@ -808,7 +822,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           sendToUsername,
           conversationId,
         } as any);
-        setZoom(0); // Reset zoom!
+        zoomShared.value = 0; // Reset zoom!
       }
     } catch (error: any) {
       console.error('Gallery pick error:', error);
@@ -1093,9 +1107,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           {renderFilterTray()}
 
           {/* Zoom Indicator Pill */}
-          <View style={[styles.zoomPill, { bottom: 'calc(64px + env(safe-area-inset-bottom) + 105px)' as any }]}>
-            <Text style={styles.zoomPillText}>{getZoomDisplay()}</Text>
-          </View>
+          <ZoomPill zoomShared={zoomShared} bottom="calc(64px + env(safe-area-inset-bottom) + 105px)" />
 
           {/* Bottom Controls */}
           <CameraControls
@@ -1105,8 +1117,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
             isRecording={isRecording}
             onGalleryPress={handleGalleryPress}
             onMemoriesPress={() => navigation.navigate('MemoriesTab')}
-            zoom={zoom}
-            onZoomChange={setZoom}
+            zoomShared={zoomShared}
           />
         </View>
       ) : (

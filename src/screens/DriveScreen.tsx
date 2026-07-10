@@ -56,7 +56,7 @@ import AppCard from '../components/AppCard';
 import Screen from '../components/Screen';
 import FilePreviewCard from '../components/FilePreviewCard';
 
-const RecentFileCard: React.FC<{ item: TeleVaultFile; onPress: () => void; formatSize: (size: number) => string }> = ({ item, onPress, formatSize }) => {
+const RecentFileCard = React.memo<{ item: TeleVaultFile; onPress: () => void; formatSize: (size: number) => string }>(({ item, onPress, formatSize }) => {
   return (
     <View style={{ marginRight: 10, position: 'relative' }}>
       <FilePreviewCard
@@ -70,7 +70,7 @@ const RecentFileCard: React.FC<{ item: TeleVaultFile; onPress: () => void; forma
       </View>
     </View>
   );
-};
+});
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'DriveTab'>,

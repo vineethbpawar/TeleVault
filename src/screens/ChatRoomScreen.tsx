@@ -537,6 +537,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         caption: snap.caption || undefined,
         senderUsername: otherUsername,
         isStory: false,
+        telegramFileId: snap.telegram_file_id,
       });
 
       // Locally mark snap opened

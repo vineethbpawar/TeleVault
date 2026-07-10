@@ -3,7 +3,6 @@ import {
   StyleSheet,
   View,
   Text,
-  SafeAreaView,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
@@ -11,6 +10,7 @@ import {
   Image,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Screen from '../components/Screen';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
@@ -244,6 +244,7 @@ export const UserProfileScreen: React.FC<Props> = ({ navigation, route }) => {
         caption: story.caption || undefined,
         senderUsername: targetUsername,
         isStory: true,
+        telegramFileId: story.telegram_file_id,
       });
     } catch (err: any) {
       setLoading(false);

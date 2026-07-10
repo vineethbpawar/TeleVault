@@ -340,6 +340,7 @@ export const ChatHubScreen: React.FC<Props> = ({ navigation }) => {
           caption: item.caption || undefined,
           senderUsername: sender?.username || 'unknown',
           isStory: true,
+          telegramFileId: item.telegram_file_id,
         });
       } catch (err: any) {
         setLoading(false);

@@ -82,7 +82,26 @@ const ViewerItem: React.FC<{
     if (isActive && resolved.playableUri) {
       return (
         <Pressable style={styles.itemContainer} onPress={onPress}>
-          <VideoPlayer source={resolved.playableUri} style={StyleSheet.absoluteFill} />
+          <VideoPlayer
+            source={resolved.playableUri}
+            style={StyleSheet.absoluteFill}
+            onError={async () => {
+              if (file.telegram_file_id) {
+                const repaired = await previewCacheService.forceRepairPreview(file.telegram_file_id, {
+                  id: file.id,
+                  file_name: file.file_name,
+                  file_type: 'video',
+                  mime_type: file.mime_type,
+                  local_thumbnail_uri: file.local_thumbnail_uri,
+                  telegram_file_id: file.telegram_file_id,
+                  is_private: file.is_private,
+                });
+                if (repaired) {
+                  setResolved(prev => ({ ...prev, ...repaired }));
+                }
+              }
+            }}
+          />
         </Pressable>
       );
     }

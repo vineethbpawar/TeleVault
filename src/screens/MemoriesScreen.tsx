@@ -50,13 +50,13 @@ interface GroupedMemories {
   data: TeleVaultFile[][];
 }
 
-const MemoryGridItem: React.FC<{
+const MemoryGridItem = React.memo<{
   item: TeleVaultFile;
   onPress: () => void;
   onLongPress: () => void;
   isSelected: boolean;
   isSelectionMode: boolean;
-}> = ({ item, onPress, onLongPress, isSelected, isSelectionMode }) => {
+}>(({ item, onPress, onLongPress, isSelected, isSelectionMode }) => {
   return (
     <View style={{ margin: 4, position: 'relative' }}>
       <FilePreviewCard
@@ -86,9 +86,9 @@ const MemoryGridItem: React.FC<{
       )}
     </View>
   );
-};
+});
 
-const OnThisDayGridItem: React.FC<{ item: TeleVaultFile; onPress: () => void }> = ({ item, onPress }) => {
+const OnThisDayGridItem = React.memo<{ item: TeleVaultFile; onPress: () => void }>(({ item, onPress }) => {
   return (
     <View style={{ marginRight: 10, position: 'relative' }}>
       <FilePreviewCard
@@ -102,7 +102,7 @@ const OnThisDayGridItem: React.FC<{ item: TeleVaultFile; onPress: () => void }> 
       </View>
     </View>
   );
-};
+});
 
 const FolderPickerModal: React.FC<{
   visible: boolean;

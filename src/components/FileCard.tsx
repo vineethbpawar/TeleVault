@@ -117,4 +117,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default FileCard;
+export default React.memo(FileCard);

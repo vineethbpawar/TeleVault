@@ -315,4 +315,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ChatBubble;
+export default React.memo(ChatBubble);
