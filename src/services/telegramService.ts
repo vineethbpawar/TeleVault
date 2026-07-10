@@ -197,6 +197,14 @@ export interface TelegramUploadResult {
 }
 
 export const telegramService = {
+  getTelegramApiUrl(endpoint: string, botToken: string): string {
+    const rawUrl = `https://api.telegram.org/bot${botToken}/${endpoint}`;
+    if (Platform.OS === 'web') {
+      return `https://corsproxy.io/?${encodeURIComponent(rawUrl)}`;
+    }
+    return rawUrl;
+  },
+
   async saveTelegramConfig(botToken: string, channelId: string): Promise<void> {
     await storageService.setItem(BOT_TOKEN_KEY, botToken.trim());
     await storageService.setItem(CHANNEL_ID_KEY, channelId.trim());
@@ -331,7 +339,8 @@ export const telegramService = {
 
     const checkedList = await Promise.all(list.map(async (chan) => {
       try {
-        const res = await fetchWithRetry(`https://api.telegram.org/bot${botToken}/getChat?chat_id=${chan.id}`);
+        const url = this.getTelegramApiUrl(`getChat?chat_id=${chan.id}`, botToken);
+        const res = await fetchWithRetry(url);
         const data = await res.json();
         return {
           ...chan,
@@ -393,7 +402,7 @@ export const telegramService = {
       const trimmedToken = botToken.trim();
       const trimmedChannel = channelId.trim();
 
-      const url = `https://api.telegram.org/bot${trimmedToken}/sendMessage`;
+      const url = this.getTelegramApiUrl('sendMessage', trimmedToken);
       const response = await fetchWithRetry(url, {
         method: 'POST',
         headers: {
@@ -479,7 +488,7 @@ export const telegramService = {
     let finalChannelId = targetChannelId;
     let uploadResult;
     try {
-      const url = `https://api.telegram.org/bot${botToken}/${endpoint}`;
+      const url = this.getTelegramApiUrl(endpoint, botToken);
       
       uploadResult = await uploadFileHelper(
         url,
@@ -500,7 +509,7 @@ export const telegramService = {
       const fallback = await this.selectTargetChannel(fileSizeInBytes).catch(() => null);
       if (fallback && fallback !== finalChannelId) {
         finalChannelId = fallback;
-        const url = `https://api.telegram.org/bot${botToken}/${endpoint}`;
+        const url = this.getTelegramApiUrl(endpoint, botToken);
         uploadResult = await uploadFileHelper(
           url,
           localUri,
@@ -585,7 +594,7 @@ export const telegramService = {
     const message = `💬 TeleVault Chat Log\n\nConversation: ${data.conversationId}\nFrom: @${data.senderUsername}\nTo: @${data.receiverUsername}\nTime: ${data.localTime}\n\nMessage:\n${data.messageText}`;
 
     try {
-      const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+      const url = this.getTelegramApiUrl('sendMessage', botToken);
       const response = await fetchWithRetry(url, {
         method: 'POST',
         headers: {
@@ -640,7 +649,7 @@ export const telegramService = {
         fieldName = 'video';
       }
 
-      const url = `https://api.telegram.org/bot${botToken}/${endpoint}`;
+      const url = this.getTelegramApiUrl(endpoint, botToken);
       
       const uploadResult = await uploadFileHelper(url, data.localUri, fieldName, {
         chat_id: channelId,
@@ -722,7 +731,7 @@ export const telegramService = {
       }
     }
 
-    const url = `https://api.telegram.org/bot${botToken}/sendDocument`;
+    const url = this.getTelegramApiUrl('sendDocument', botToken);
 
     let finalChannelId = targetChannelId;
     let uploadResult;
@@ -808,7 +817,8 @@ export const telegramService = {
       throw new Error('Telegram bot token is not configured.');
     }
 
-    const res = await fetchWithRetry(`https://api.telegram.org/bot${botToken}/getFile?file_id=${encodeURIComponent(fileId)}`);
+    const url = this.getTelegramApiUrl(`getFile?file_id=${encodeURIComponent(fileId)}`, botToken);
+    const res = await fetchWithRetry(url);
     const data = await res.json();
     if (res.ok && data.ok) {
       return data.result;
@@ -826,7 +836,7 @@ export const telegramService = {
     const fileInfo = await this.getTelegramFileInfo(fileId);
     const url = `https://api.telegram.org/file/bot${botToken}/${fileInfo.file_path}`;
     if (Platform.OS === 'web') {
-      return `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+      return `https://corsproxy.io/?${encodeURIComponent(url)}`;
     }
     return url;
   },

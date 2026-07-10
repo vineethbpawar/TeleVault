@@ -217,7 +217,7 @@ export const previewCacheService = {
           const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id);
           const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
           
-          let previewUri = Platform.OS === 'web' ? `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` : url;
+          let previewUri = Platform.OS === 'web' ? `https://corsproxy.io/?${encodeURIComponent(url)}` : url;
           if (file.is_private) {
             const { encryptionService } = require('./encryptionService');
             if (Platform.OS === 'web') {
@@ -289,7 +289,7 @@ export const previewCacheService = {
                   await FileSystem.deleteAsync(tempEncPath, { idempotent: true });
                 }
               } else {
-                playableUri = Platform.OS === 'web' ? `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` : url;
+                playableUri = Platform.OS === 'web' ? `https://corsproxy.io/?${encodeURIComponent(url)}` : url;
               }
               if (playableUri) {
                 await this.setCachedPreview(file.telegram_file_id, playableUri);
@@ -423,7 +423,7 @@ export const previewCacheService = {
           const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id);
           const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
           
-          let previewUri = Platform.OS === 'web' ? `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` : url;
+          let previewUri = Platform.OS === 'web' ? `https://corsproxy.io/?${encodeURIComponent(url)}` : url;
           if (file.is_private) {
             const { encryptionService } = require('./encryptionService');
             if (Platform.OS === 'web') {

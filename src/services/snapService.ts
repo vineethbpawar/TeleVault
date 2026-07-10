@@ -386,22 +386,9 @@ export const snapService = {
       return cached.url;
     }
 
-    const config = await telegramService.getTelegramConfig();
-    if (!config.botToken) {
-      throw new Error('Telegram bot token is not configured.');
-    }
-
-    const res = await fetchWithRetry(`https://api.telegram.org/bot${config.botToken}/getFile?file_id=${telegramFileId}`);
-    const data = await res.json();
-
-    if (res.ok && data.ok) {
-      const filePath = data.result.file_path;
-      const url = `https://api.telegram.org/file/bot${config.botToken}/${filePath}`;
-      this._urlCache[telegramFileId] = { url, timestamp: Date.now() };
-      return url;
-    } else {
-      throw new Error(data.description || 'Failed to locate file on Telegram.');
-    }
+    const url = await telegramService.getTelegramFileDownloadUrl(telegramFileId);
+    this._urlCache[telegramFileId] = { url, timestamp: Date.now() };
+    return url;
   },
 };
 

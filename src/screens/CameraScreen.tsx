@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Alert, SafeAreaView, ScrollView, Platform, AppState, AppStateStatus } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
@@ -120,16 +120,18 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   // Native GestureDetector Pinch-to-Zoom Gesture handler
   const startZoomShared = useSharedValue(0);
 
-  const pinchGesture = Gesture.Pinch()
-    .onStart(() => {
-      'worklet';
-      startZoomShared.value = zoomShared.value;
-    })
-    .onUpdate((event) => {
-      'worklet';
-      const newZoom = startZoomShared.value + (event.scale - 1) * 0.5;
-      zoomShared.value = Math.max(0, Math.min(1, newZoom));
-    });
+  const pinchGesture = useMemo(() => {
+    return Gesture.Pinch()
+      .onStart(() => {
+        'worklet';
+        startZoomShared.value = zoomShared.value;
+      })
+      .onUpdate((event) => {
+        'worklet';
+        const newZoom = startZoomShared.value + (event.scale - 1) * 0.5;
+        zoomShared.value = Math.max(0, Math.min(1, newZoom));
+      });
+  }, []);
 
   // Web getUserMedia setup effect with AppState listener
   useEffect(() => {
