@@ -1,6 +1,6 @@
 const sw = self as any;
 
-const CACHE_NAME = 'televault-cache-v4';
+const CACHE_NAME = 'televault-cache-v5';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

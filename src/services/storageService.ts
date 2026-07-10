@@ -15,6 +15,10 @@ export const storageService = {
   async getItem(key: string): Promise<string | null> {
     if (Platform.OS === 'web') {
       try {
+        if (key === 'televault_cached_memories' || key.startsWith('televault_cached_')) {
+          const { webDbService } = require('./webDbService');
+          return await webDbService.getItem(key);
+        }
         return localStorage.getItem(key);
       } catch (err) {
         console.error(`localStorage.getItem error for key ${key}:`, err);
@@ -28,6 +32,11 @@ export const storageService = {
   async setItem(key: string, value: string): Promise<void> {
     if (Platform.OS === 'web') {
       try {
+        if (key === 'televault_cached_memories' || key.startsWith('televault_cached_')) {
+          const { webDbService } = require('./webDbService');
+          await webDbService.setItem(key, value);
+          return;
+        }
         localStorage.setItem(key, value);
       } catch (err) {
         console.error(`localStorage.setItem error for key ${key}:`, err);
@@ -40,6 +49,11 @@ export const storageService = {
   async removeItem(key: string): Promise<void> {
     if (Platform.OS === 'web') {
       try {
+        if (key === 'televault_cached_memories' || key.startsWith('televault_cached_')) {
+          const { webDbService } = require('./webDbService');
+          await webDbService.removeItem(key);
+          return;
+        }
         localStorage.removeItem(key);
       } catch (err) {
         console.error(`localStorage.removeItem error for key ${key}:`, err);
@@ -53,6 +67,9 @@ export const storageService = {
     if (Platform.OS === 'web') {
       try {
         localStorage.clear();
+        const { webDbService } = require('./webDbService');
+        const keys = await webDbService.getAllKeys();
+        await webDbService.multiRemove(keys);
       } catch (err) {
         console.error('localStorage.clear error:', err);
       }

@@ -3,6 +3,42 @@ import { telegramService } from './telegramService';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { Platform } from 'react-native';
+import { webDbService } from './webDbService';
+
+async function cacheGetItem(key: string): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    return await webDbService.getItem(key);
+  }
+  return await AsyncStorage.getItem(key);
+}
+
+async function cacheSetItem(key: string, value: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    return await webDbService.setItem(key, value);
+  }
+  return await AsyncStorage.setItem(key, value);
+}
+
+async function cacheRemoveItem(key: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    return await webDbService.removeItem(key);
+  }
+  return await AsyncStorage.removeItem(key);
+}
+
+async function cacheMultiRemove(keys: string[]): Promise<void> {
+  if (Platform.OS === 'web') {
+    return await webDbService.multiRemove(keys);
+  }
+  return await AsyncStorage.multiRemove(keys);
+}
+
+async function cacheGetAllKeys(): Promise<readonly string[]> {
+  if (Platform.OS === 'web') {
+    return await webDbService.getAllKeys();
+  }
+  return await AsyncStorage.getAllKeys();
+}
 
 const CACHE_PREFIX = 'televault_preview_';
 const CACHE_EXPIRY_MS = 40 * 60 * 1000; // 40 minutes expiry for Telegram getFile URLs (links expire in 1 hr)
@@ -23,20 +59,20 @@ async function resolveWebBlobUrl(webBlobUri: string): Promise<string> {
 export const previewCacheService = {
   async getCachedPreview(fileId: string): Promise<string | null> {
     try {
-      const stored = await AsyncStorage.getItem(CACHE_PREFIX + fileId);
+      const stored = await cacheGetItem(CACHE_PREFIX + fileId);
       if (!stored) return null;
 
       const { url, timestamp } = JSON.parse(stored);
       if (Date.now() - timestamp > CACHE_EXPIRY_MS) {
         // Expired
-        await AsyncStorage.removeItem(CACHE_PREFIX + fileId);
+        await cacheRemoveItem(CACHE_PREFIX + fileId);
         return null;
       }
 
       if (Platform.OS === 'web') {
         if (url && url.startsWith('blob:')) {
           // Revoke/evict transient blob URLs that don't persist across page reloads
-          await AsyncStorage.removeItem(CACHE_PREFIX + fileId);
+          await cacheRemoveItem(CACHE_PREFIX + fileId);
           return null;
         }
       } else {
@@ -44,11 +80,11 @@ export const previewCacheService = {
           try {
             const info = await FileSystem.getInfoAsync(url);
             if (!info.exists) {
-              await AsyncStorage.removeItem(CACHE_PREFIX + fileId);
+              await cacheRemoveItem(CACHE_PREFIX + fileId);
               return null;
             }
           } catch (_) {
-            await AsyncStorage.removeItem(CACHE_PREFIX + fileId);
+            await cacheRemoveItem(CACHE_PREFIX + fileId);
             return null;
           }
         }
@@ -56,7 +92,7 @@ export const previewCacheService = {
 
       // Self-healing: Evict old allorigins.win URLs from cache
       if (url && url.indexOf('allorigins.win') !== -1) {
-        await AsyncStorage.removeItem(CACHE_PREFIX + fileId);
+        await cacheRemoveItem(CACHE_PREFIX + fileId);
         return null;
       }
       return url;
@@ -72,7 +108,7 @@ export const previewCacheService = {
         url,
         timestamp: Date.now(),
       };
-      await AsyncStorage.setItem(CACHE_PREFIX + fileId, JSON.stringify(entry));
+      await cacheSetItem(CACHE_PREFIX + fileId, JSON.stringify(entry));
     } catch (err) {
       console.error('Failed to set cached preview:', err);
     }
@@ -80,10 +116,10 @@ export const previewCacheService = {
 
   async clearPreviewCache(): Promise<void> {
     try {
-      const keys = await AsyncStorage.getAllKeys();
+      const keys = await cacheGetAllKeys();
       const previewKeys = keys.filter(key => key.startsWith(CACHE_PREFIX));
       if (previewKeys.length > 0) {
-        await AsyncStorage.multiRemove(previewKeys);
+        await cacheMultiRemove(previewKeys);
       }
     } catch (err) {
       console.error('Failed to clear preview cache:', err);
@@ -92,11 +128,11 @@ export const previewCacheService = {
 
   async getCacheStats(): Promise<{ totalSize: number; count: number }> {
     try {
-      const keys = await AsyncStorage.getAllKeys();
+      const keys = await cacheGetAllKeys();
       const previewKeys = keys.filter(key => key.startsWith(CACHE_PREFIX) || key.startsWith('televault_vid_thumb_'));
       let totalSize = 0;
       for (const key of previewKeys) {
-        const val = await AsyncStorage.getItem(key);
+        const val = await cacheGetItem(key);
         if (val) {
           totalSize += val.length;
         }
@@ -110,10 +146,10 @@ export const previewCacheService = {
   async clearCache(): Promise<void> {
     await this.clearPreviewCache();
     try {
-      const keys = await AsyncStorage.getAllKeys();
+      const keys = await cacheGetAllKeys();
       const thumbKeys = keys.filter(key => key.startsWith('televault_vid_thumb_'));
       if (thumbKeys.length > 0) {
-        await AsyncStorage.multiRemove(thumbKeys);
+        await cacheMultiRemove(thumbKeys);
       }
     } catch (_) {}
   },
@@ -397,7 +433,7 @@ export const previewCacheService = {
 
       if (!previewUri && file.id) {
         try {
-          const cachedThumb = await AsyncStorage.getItem(`televault_vid_thumb_${file.id}`);
+          const cachedThumb = await cacheGetItem(`televault_vid_thumb_${file.id}`);
           if (cachedThumb) {
             if (Platform.OS === 'web') {
               previewUri = cachedThumb;
@@ -427,13 +463,13 @@ export const previewCacheService = {
             if (Platform.OS === 'web') {
               const thumbDataUrl = await getWebVideoThumbnail(playableUri!);
               if (file.id) {
-                await AsyncStorage.setItem(`televault_vid_thumb_${file.id}`, thumbDataUrl);
+                await cacheSetItem(`televault_vid_thumb_${file.id}`, thumbDataUrl);
               }
             } else {
               const thumb = await VideoThumbnails.getThumbnailAsync(playableUri!, { time: 500 });
               if (thumb && thumb.uri) {
                 if (file.id) {
-                  await AsyncStorage.setItem(`televault_vid_thumb_${file.id}`, thumb.uri);
+                  await cacheSetItem(`televault_vid_thumb_${file.id}`, thumb.uri);
                 }
                 if (__DEV__) {
                   console.log(`[VIDEO_PREVIEW_DEV] Background thumbnail generation SUCCESS: ${thumb.uri}`);
@@ -583,9 +619,9 @@ export const previewCacheService = {
         };
       }
       console.log(`[PreviewCache] Repairing corrupted/expired preview for file: ${fileId}`);
-      await AsyncStorage.removeItem(CACHE_PREFIX + fileId);
+      await cacheRemoveItem(CACHE_PREFIX + fileId);
       if (file.id) {
-        await AsyncStorage.removeItem(`televault_vid_thumb_${file.id}`);
+        await cacheRemoveItem(`televault_vid_thumb_${file.id}`);
       }
       const repaired = await this.resolveFilePreview(file, true);
       return {
@@ -608,7 +644,7 @@ export const previewCacheService = {
       for (const file of eligible) {
         try {
           const cacheKey = file.file_type === 'video' ? `televault_vid_thumb_${file.id}` : CACHE_PREFIX + file.telegram_file_id;
-          const exists = await AsyncStorage.getItem(cacheKey);
+          const exists = await cacheGetItem(cacheKey);
           if (exists) continue;
 
           await this.resolveFilePreview(file, false);
@@ -620,14 +656,14 @@ export const previewCacheService = {
 
   async evictCacheIfLimitExceeded(maxSizeBytes = 50 * 1024 * 1024): Promise<void> {
     try {
-      const keys = await AsyncStorage.getAllKeys();
+      const keys = await cacheGetAllKeys();
       const previewKeys = keys.filter(key => key.startsWith(CACHE_PREFIX) || key.startsWith('televault_vid_thumb_'));
       
       let entries: { key: string; size: number; timestamp: number }[] = [];
       let totalSize = 0;
 
       for (const key of previewKeys) {
-        const val = await AsyncStorage.getItem(key);
+        const val = await cacheGetItem(key);
         if (val) {
           let timestamp = Date.now();
           try {
@@ -654,7 +690,7 @@ export const previewCacheService = {
       }
 
       if (keysToRemove.length > 0) {
-        await AsyncStorage.multiRemove(keysToRemove);
+        await cacheMultiRemove(keysToRemove);
       }
     } catch (_) {}
   }
