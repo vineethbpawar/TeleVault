@@ -636,6 +636,10 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
               );
             }
           }}
+          removeClippedSubviews={Platform.OS !== 'web'}
+          maxToRenderPerBatch={8}
+          initialNumToRender={8}
+          windowSize={3}
         />
       )}
 

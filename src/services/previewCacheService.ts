@@ -5,7 +5,9 @@ import * as VideoThumbnails from 'expo-video-thumbnails';
 import { Platform } from 'react-native';
 
 const CACHE_PREFIX = 'televault_preview_';
-const CACHE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour expiry for Telegram getFile URLs
+const CACHE_EXPIRY_MS = 40 * 60 * 1000; // 40 minutes expiry for Telegram getFile URLs (links expire in 1 hr)
+
+const activeResolutions = new Map<string, Promise<any>>();
 
 async function resolveWebBlobUrl(webBlobUri: string): Promise<string> {
   if (!webBlobUri.startsWith('webblob:')) return webBlobUri;
@@ -124,43 +126,65 @@ export const previewCacheService = {
       telegram_file_id?: string | null;
       overlay_metadata?: any;
     },
-    forceRefresh = false
+    forceRefresh = false,
+    signal?: AbortSignal
   ): Promise<string | null> {
-    let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
-    if (resolvedLocalUri) {
-      if (Platform.OS === 'web' && resolvedLocalUri.startsWith('webblob:')) {
-        resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
+    const dedupKey = `file_${file.id}_${forceRefresh}`;
+    if (activeResolutions.has(dedupKey)) {
+      return activeResolutions.get(dedupKey)!;
+    }
+
+    const promise = (async () => {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+      let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
+      if (resolvedLocalUri) {
+        if (Platform.OS === 'web' && resolvedLocalUri.startsWith('webblob:')) {
+          resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
+        }
+        return resolvedLocalUri;
       }
-      return resolvedLocalUri;
-    }
 
-    if (file.media_url) {
-      return file.media_url;
-    }
+      if (file.media_url) {
+        return file.media_url;
+      }
 
-    if (file.telegram_file_id) {
-      if (!forceRefresh) {
-        const cached = await this.getCachedPreview(file.telegram_file_id);
-        if (cached) {
-          return cached;
+      if (file.telegram_file_id) {
+        if (!forceRefresh) {
+          const cached = await this.getCachedPreview(file.telegram_file_id);
+          if (cached) {
+            return cached;
+          }
+        }
+
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+        try {
+          const url = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
+          if (url) {
+            await this.setCachedPreview(file.telegram_file_id, url);
+            return url;
+          }
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') {
+            throw err;
+          }
+          console.error(`Failed to resolve Telegram URL for file ${file.id}:`, err);
         }
       }
 
-      try {
-        const url = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id);
-        if (url) {
-          await this.setCachedPreview(file.telegram_file_id, url);
-          return url;
-        }
-      } catch (err) {
-        console.error(`Failed to resolve Telegram URL for file ${file.id}:`, err);
-      }
-    }
+      return null;
+    })();
 
-    return null;
+    activeResolutions.set(dedupKey, promise);
+    try {
+      return await promise;
+    } finally {
+      activeResolutions.delete(dedupKey);
+    }
   },
 
-  async resolveFilePreview(
+  async resolveFilePreviewInternal(
     file: {
       id: string;
       file_name: string;
@@ -173,7 +197,8 @@ export const previewCacheService = {
       is_private?: boolean | null;
       overlay_metadata?: any;
     },
-    forceRefresh = false
+    forceRefresh = false,
+    signal?: AbortSignal
   ): Promise<{
     type: 'image' | 'video' | 'document' | 'unknown';
     previewUri?: string;
@@ -237,7 +262,7 @@ export const previewCacheService = {
               };
             }
           }
-          const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id);
+          const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id, signal);
           const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
           
           let previewUri = Platform.OS === 'web' ? `https://corsproxy.io/?${url}` : url;
@@ -302,7 +327,7 @@ export const previewCacheService = {
             if (cached) {
               playableUri = cached;
             } else {
-              const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id);
+              const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id, signal);
               const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
               
               if (file.is_private) {
@@ -451,7 +476,7 @@ export const previewCacheService = {
               fallbackIcon,
             };
           }
-          const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id);
+          const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id, signal);
           const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
           
           let previewUri = Platform.OS === 'web' ? `https://corsproxy.io/?${url}` : url;
@@ -481,6 +506,42 @@ export const previewCacheService = {
       fallbackIcon,
       error: 'Failed to resolve preview url.',
     };
+  },
+
+  async resolveFilePreview(
+    file: {
+      id: string;
+      file_name: string;
+      file_type: 'image' | 'video' | 'document' | 'unknown';
+      mime_type?: string | null;
+      local_uri?: string | null;
+      local_thumbnail_uri?: string | null;
+      media_url?: string | null;
+      telegram_file_id?: string | null;
+      is_private?: boolean | null;
+      overlay_metadata?: any;
+    },
+    forceRefresh = false,
+    signal?: AbortSignal
+  ): Promise<{
+    type: 'image' | 'video' | 'document' | 'unknown';
+    previewUri?: string;
+    playableUri?: string;
+    fallbackIcon: string;
+    error?: string;
+  }> {
+    const dedupKey = `preview_${file.id}_${forceRefresh}`;
+    if (activeResolutions.has(dedupKey)) {
+      return activeResolutions.get(dedupKey)!;
+    }
+
+    const promise = this.resolveFilePreviewInternal(file, forceRefresh, signal);
+    activeResolutions.set(dedupKey, promise);
+    try {
+      return await promise;
+    } finally {
+      activeResolutions.delete(dedupKey);
+    }
   },
 
   async forceRepairPreview(fileId: string, file: any): Promise<{ previewUri?: string; playableUri?: string } | null> {

@@ -601,9 +601,9 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
             }
           }}
           removeClippedSubviews={Platform.OS !== 'web'}
-          maxToRenderPerBatch={10}
-          initialNumToRender={10}
-          windowSize={5}
+          maxToRenderPerBatch={8}
+          initialNumToRender={8}
+          windowSize={3}
         />
       )}
 

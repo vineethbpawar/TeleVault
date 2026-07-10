@@ -3,6 +3,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../lib/supabase';
 import { Platform } from 'react-native';
 
+const fileInfoRequests = new Map<string, Promise<any>>();
+
 export async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries = 3): Promise<Response> {
   let attempt = 0;
   while (attempt < maxRetries) {
@@ -811,29 +813,42 @@ export const telegramService = {
     };
   },
 
-  async getTelegramFileInfo(fileId: string): Promise<any> {
-    const { botToken } = await this.getTelegramConfig();
-    if (!botToken) {
-      throw new Error('Telegram bot token is not configured.');
+  async getTelegramFileInfo(fileId: string, signal?: AbortSignal): Promise<any> {
+    if (fileInfoRequests.has(fileId)) {
+      return fileInfoRequests.get(fileId)!;
     }
 
-    const url = this.getTelegramApiUrl(`getFile?file_id=${encodeURIComponent(fileId)}`, botToken);
-    const res = await fetchWithRetry(url);
-    const data = await res.json();
-    if (res.ok && data.ok) {
-      return data.result;
-    } else {
-      throw new Error(data.description || 'Failed to locate file info on Telegram.');
+    const promise = (async () => {
+      const { botToken } = await this.getTelegramConfig();
+      if (!botToken) {
+        throw new Error('Telegram bot token is not configured.');
+      }
+
+      const url = this.getTelegramApiUrl(`getFile?file_id=${encodeURIComponent(fileId)}`, botToken);
+      const res = await fetchWithRetry(url, { signal });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        return data.result;
+      } else {
+        throw new Error(data.description || 'Failed to locate file info on Telegram.');
+      }
+    })();
+
+    fileInfoRequests.set(fileId, promise);
+    try {
+      return await promise;
+    } finally {
+      fileInfoRequests.delete(fileId);
     }
   },
 
-  async getTelegramFileDownloadUrl(fileId: string): Promise<string> {
+  async getTelegramFileDownloadUrl(fileId: string, signal?: AbortSignal): Promise<string> {
     const { botToken } = await this.getTelegramConfig();
     if (!botToken) {
       throw new Error('Telegram bot token is not configured.');
     }
 
-    const fileInfo = await this.getTelegramFileInfo(fileId);
+    const fileInfo = await this.getTelegramFileInfo(fileId, signal);
     const url = `https://api.telegram.org/file/bot${botToken}/${fileInfo.file_path}`;
     if (Platform.OS === 'web') {
       return `https://corsproxy.io/?${url}`;

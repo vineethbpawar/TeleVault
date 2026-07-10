@@ -48,6 +48,7 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
 
     if (configReady === null) {
       return;
@@ -62,6 +63,17 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
     if (isImage || isVideo || file.local_thumbnail_uri) {
       setLoading(true);
       setError(false);
+
+      // 5-second timeout protection to prevent infinite spinner
+      const timeoutId = setTimeout(() => {
+        if (active) {
+          setLoading(false);
+          if (!resolvedUri) {
+            setError(true);
+          }
+        }
+      }, 5000);
+
       previewCacheService.resolveFilePreview({
         id: file.id,
         file_name: file.file_name,
@@ -70,7 +82,9 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
         local_thumbnail_uri: file.local_thumbnail_uri,
         telegram_file_id: file.telegram_file_id,
         is_private: file.is_private,
-      }).then(result => {
+        overlay_metadata: file.overlay_metadata,
+      }, false, controller.signal).then(result => {
+        clearTimeout(timeoutId);
         if (active) {
           if (result.playableUri) {
             setPlayableUri(result.playableUri);
@@ -83,7 +97,6 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
             }
             setError(false);
           } else if (isVideo && result.playableUri) {
-            // Keep resolvedUri null, but clear error state so video fallback renders
             setResolvedUri(null);
             setError(false);
           } else {
@@ -92,6 +105,10 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
           setLoading(false);
         }
       }).catch(err => {
+        clearTimeout(timeoutId);
+        if (err && err.name === 'AbortError') {
+          return; // Ignore abort exceptions
+        }
         if (__DEV__) {
           console.log(`[DEV_PREVIEW_ERR] fileId=${file.id} name=${file.file_name} type=${file.file_type} err:`, err);
         }
@@ -105,6 +122,7 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
     }
     return () => {
       active = false;
+      controller.abort();
     };
   }, [file.id, file.local_thumbnail_uri, file.telegram_file_id, file.file_type, configReady, file.file_name, file.mime_type]);
 
@@ -147,7 +165,7 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
 
     if (isVideo) {
       const durationStr = formatDuration(file.overlay_metadata?.duration);
-      if (Platform.OS === 'web' && playableUri) {
+      if (Platform.OS === 'web' && playableUri && !resolvedUri && variant === 'recent') {
         return (
           <View style={StyleSheet.absoluteFill}>
             <video
@@ -160,12 +178,12 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
                 top: 0,
                 left: 0,
               }}
-              preload="metadata"
+              preload="none"
               muted
               playsInline
             />
             <View style={styles.thumbnailVideoOverlay}>
-              <Play size={variant === 'grid' ? 8 : 12} color="#FFFFFF" fill="#FFFFFF" />
+              <Play size={12} color="#FFFFFF" fill="#FFFFFF" />
             </View>
             {durationStr && (
               <View style={styles.durationBadge}>

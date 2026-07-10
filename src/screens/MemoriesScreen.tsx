@@ -101,6 +101,12 @@ const MemoryGridItem = React.memo<{
       )}
     </View>
   );
+}, (prev, next) => {
+  return prev.item.id === next.item.id &&
+         prev.item.telegram_file_id === next.item.telegram_file_id &&
+         prev.item.is_favorite === next.item.is_favorite &&
+         prev.isSelected === next.isSelected &&
+         prev.isSelectionMode === next.isSelectionMode;
 });
 
 const OnThisDayGridItem = React.memo<{ item: TeleVaultFile; onPress: () => void }>(({ item, onPress }) => {
@@ -117,6 +123,9 @@ const OnThisDayGridItem = React.memo<{ item: TeleVaultFile; onPress: () => void 
       </View>
     </View>
   );
+}, (prev, next) => {
+  return prev.item.id === next.item.id &&
+         prev.item.telegram_file_id === next.item.telegram_file_id;
 });
 
 const FolderPickerModal: React.FC<{
@@ -648,10 +657,10 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
             );
           }}
           removeClippedSubviews={Platform.OS !== 'web'}
-          maxToRenderPerBatch={10}
-          updateCellsBatchingPeriod={50}
-          initialNumToRender={12}
-          windowSize={5}
+          maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={75}
+          initialNumToRender={8}
+          windowSize={3}
         />
       )}
 
