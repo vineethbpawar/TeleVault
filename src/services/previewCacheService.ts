@@ -193,26 +193,33 @@ export const previewCacheService = {
       let resolvedLocalUri = file.local_uri || file.local_thumbnail_uri || file.overlay_metadata?.local_uri;
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
-          if (resolvedLocalUri.startsWith('webblob:')) {
-            resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
+          if (resolvedLocalUri.startsWith('file://')) {
+            // Ignore native file paths on Web
+          } else {
+            if (resolvedLocalUri.startsWith('webblob:')) {
+              resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
+            }
+            if (resolvedLocalUri) {
+              return {
+                type: 'image',
+                previewUri: resolvedLocalUri,
+                fallbackIcon,
+              };
+            }
           }
-          return {
-            type: 'image',
-            previewUri: resolvedLocalUri,
-            fallbackIcon,
-          };
-        }
-        try {
-          const info = await FileSystem.getInfoAsync(resolvedLocalUri);
-          if (info.exists) {
-            return {
-              type: 'image',
-              previewUri: resolvedLocalUri,
-              fallbackIcon,
-            };
+        } else {
+          try {
+            const info = await FileSystem.getInfoAsync(resolvedLocalUri);
+            if (info.exists) {
+              return {
+                type: 'image',
+                previewUri: resolvedLocalUri,
+                fallbackIcon,
+              };
+            }
+          } catch (e) {
+            console.warn('Local image check failed:', e);
           }
-        } catch (e) {
-          console.warn('Local image check failed:', e);
         }
       }
 
@@ -247,16 +254,27 @@ export const previewCacheService = {
           const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id, signal);
           const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
           
-          let previewUri = Platform.OS === 'web' ? `https://corsproxy.io/?${url}` : url;
-          if (file.is_private) {
-            const { encryptionService } = require('./encryptionService');
-            if (Platform.OS === 'web') {
+          let previewUri = url;
+          if (Platform.OS === 'web') {
+            if (file.is_private) {
+              const { encryptionService } = require('./encryptionService');
               previewUri = await encryptionService.decryptFile(url, file.file_name, file.mime_type);
             } else {
+              const { fetchWithRetry } = require('./telegramService');
+              const res = await fetchWithRetry(url, { signal });
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              const blob = await res.blob();
+              previewUri = URL.createObjectURL(blob);
+            }
+          } else {
+            if (file.is_private) {
+              const { encryptionService } = require('./encryptionService');
               const tempEncPath = `${FileSystem.cacheDirectory}temp_enc_${file.id}_${file.file_name}`;
               await FileSystem.downloadAsync(url, tempEncPath);
               previewUri = await encryptionService.decryptFile(tempEncPath, file.file_name, file.mime_type);
               await FileSystem.deleteAsync(tempEncPath, { idempotent: true });
+            } else {
+              previewUri = url;
             }
           }
           await this.setCachedPreview(file.telegram_file_id, previewUri);
@@ -283,10 +301,14 @@ export const previewCacheService = {
       let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
-          if (resolvedLocalUri.startsWith('webblob:')) {
-            resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
+          if (resolvedLocalUri.startsWith('file://')) {
+            // Ignore native file paths on Web
+          } else {
+            if (resolvedLocalUri.startsWith('webblob:')) {
+              resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
+            }
+            playableUri = resolvedLocalUri;
           }
-          playableUri = resolvedLocalUri;
         } else {
           try {
             const info = await FileSystem.getInfoAsync(resolvedLocalUri);
@@ -323,7 +345,15 @@ export const previewCacheService = {
                   await FileSystem.deleteAsync(tempEncPath, { idempotent: true });
                 }
               } else {
-                playableUri = Platform.OS === 'web' ? `https://corsproxy.io/?${url}` : url;
+                if (Platform.OS === 'web') {
+                  const { fetchWithRetry } = require('./telegramService');
+                  const res = await fetchWithRetry(url, { signal });
+                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                  const blob = await res.blob();
+                  playableUri = URL.createObjectURL(blob);
+                } else {
+                  playableUri = url;
+                }
               }
               if (playableUri) {
                 await this.setCachedPreview(file.telegram_file_id, playableUri);
@@ -342,12 +372,18 @@ export const previewCacheService = {
 
       if (file.local_thumbnail_uri) {
         if (Platform.OS === 'web') {
-          let thumbUri = file.local_thumbnail_uri;
-          if (thumbUri.startsWith('webblob:')) {
-            thumbUri = await resolveWebBlobUrl(thumbUri);
+          if (file.local_thumbnail_uri.startsWith('file://')) {
+            // Ignore native file paths on Web
+          } else {
+            let thumbUri = file.local_thumbnail_uri;
+            if (thumbUri.startsWith('webblob:')) {
+              thumbUri = await resolveWebBlobUrl(thumbUri);
+            }
+            if (thumbUri) {
+              previewUri = thumbUri;
+              hasLocalThumb = true;
+            }
           }
-          previewUri = thumbUri;
-          hasLocalThumb = true;
         } else {
           try {
             const info = await FileSystem.getInfoAsync(file.local_thumbnail_uri);
@@ -429,25 +465,32 @@ export const previewCacheService = {
     let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
     if (resolvedLocalUri) {
       if (Platform.OS === 'web') {
-        if (resolvedLocalUri.startsWith('webblob:')) {
-          resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
+        if (resolvedLocalUri.startsWith('file://')) {
+          // Ignore native file paths on Web
+        } else {
+          if (resolvedLocalUri.startsWith('webblob:')) {
+            resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
+          }
+          if (resolvedLocalUri) {
+            return {
+              type: fileType,
+              previewUri: resolvedLocalUri,
+              fallbackIcon,
+            };
+          }
         }
-        return {
-          type: fileType,
-          previewUri: resolvedLocalUri,
-          fallbackIcon,
-        };
+      } else {
+        try {
+          const info = await FileSystem.getInfoAsync(resolvedLocalUri);
+          if (info.exists) {
+            return {
+              type: fileType,
+              previewUri: resolvedLocalUri,
+              fallbackIcon,
+            };
+          }
+        } catch (e) {}
       }
-      try {
-        const info = await FileSystem.getInfoAsync(resolvedLocalUri);
-        if (info.exists) {
-          return {
-            type: fileType,
-            previewUri: resolvedLocalUri,
-            fallbackIcon,
-          };
-        }
-      } catch (e) {}
     }
 
     if (file.telegram_file_id) {
@@ -465,16 +508,27 @@ export const previewCacheService = {
           const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id, signal);
           const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
           
-          let previewUri = Platform.OS === 'web' ? `https://corsproxy.io/?${url}` : url;
-          if (file.is_private) {
-            const { encryptionService } = require('./encryptionService');
-            if (Platform.OS === 'web') {
+          let previewUri = url;
+          if (Platform.OS === 'web') {
+            if (file.is_private) {
+              const { encryptionService } = require('./encryptionService');
               previewUri = await encryptionService.decryptFile(url, file.file_name, file.mime_type);
             } else {
+              const { fetchWithRetry } = require('./telegramService');
+              const res = await fetchWithRetry(url, { signal });
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              const blob = await res.blob();
+              previewUri = URL.createObjectURL(blob);
+            }
+          } else {
+            if (file.is_private) {
+              const { encryptionService } = require('./encryptionService');
               const tempEncPath = `${FileSystem.cacheDirectory}temp_enc_${file.id}_${file.file_name}`;
               await FileSystem.downloadAsync(url, tempEncPath);
               previewUri = await encryptionService.decryptFile(tempEncPath, file.file_name, file.mime_type);
               await FileSystem.deleteAsync(tempEncPath, { idempotent: true });
+            } else {
+              previewUri = url;
             }
           }
           await this.setCachedPreview(file.telegram_file_id, previewUri);

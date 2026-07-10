@@ -6,47 +6,96 @@ import { Platform } from 'react-native';
 const fileInfoRequests = new Map<string, Promise<any>>();
 
 export async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries = 3): Promise<Response> {
-  let attempt = 0;
-  while (attempt < maxRetries) {
-    try {
-      const response = await fetch(url, options);
-      if (response.status === 429) {
-        attempt++;
-        let waitSec = 3;
-        try {
-          const data = await response.clone().json();
-          if (data.parameters && data.parameters.retry_after) {
-            waitSec = data.parameters.retry_after;
+  if (Platform.OS !== 'web') {
+    let attempt = 0;
+    while (attempt < maxRetries) {
+      try {
+        const response = await fetch(url, options);
+        if (response.status === 429) {
+          attempt++;
+          let waitSec = 3;
+          try {
+            const data = await response.clone().json();
+            if (data.parameters && data.parameters.retry_after) {
+              waitSec = data.parameters.retry_after;
+            }
+          } catch (_) {}
+          console.warn(`[Telegram API] 429 Rate Limit. Waiting ${waitSec}s before retry (attempt ${attempt}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, waitSec * 1000));
+          continue;
+        }
+        
+        if (response.status >= 500 && response.status <= 504) {
+          attempt++;
+          if (attempt >= maxRetries) {
+            return response;
           }
-        } catch (_) {}
-        console.warn(`[Telegram API] 429 Rate Limit. Waiting ${waitSec}s before retry (attempt ${attempt}/${maxRetries})...`);
-        await new Promise(resolve => setTimeout(resolve, waitSec * 1000));
-        continue;
-      }
-      
-      if (response.status >= 500 && response.status <= 504) {
+          const backoffMs = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+          console.warn(`[Telegram API] Status ${response.status}. Retrying in ${Math.round(backoffMs)}ms...`);
+          await new Promise(resolve => setTimeout(resolve, backoffMs));
+          continue;
+        }
+        
+        return response;
+      } catch (err: any) {
         attempt++;
         if (attempt >= maxRetries) {
-          return response;
+          throw err;
         }
         const backoffMs = Math.pow(2, attempt) * 1000 + Math.random() * 500;
-        console.warn(`[Telegram API] Status ${response.status}. Retrying in ${Math.round(backoffMs)}ms...`);
+        console.warn(`[Telegram API] Network Error: ${err.message}. Retrying in ${Math.round(backoffMs)}ms...`);
         await new Promise(resolve => setTimeout(resolve, backoffMs));
-        continue;
       }
-      
-      return response;
-    } catch (err: any) {
-      attempt++;
-      if (attempt >= maxRetries) {
-        throw err;
+    }
+    throw new Error('Maximum retries exceeded');
+  }
+
+  // Web fallback proxy logic
+  let rawUrl = url;
+  if (url.startsWith('https://corsproxy.io/?')) {
+    rawUrl = url.substring('https://corsproxy.io/?'.length);
+  } else if (url.startsWith('https://api.allorigins.win/raw?url=')) {
+    rawUrl = decodeURIComponent(url.substring('https://api.allorigins.win/raw?url='.length));
+  } else if (url.startsWith('https://api.codetabs.com/v1/proxy?quest=')) {
+    rawUrl = decodeURIComponent(url.substring('https://api.codetabs.com/v1/proxy?quest='.length));
+  }
+
+  if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
+    return fetch(url, options);
+  }
+
+  const CORS_PROXIES = [
+    (u: string) => `https://corsproxy.io/?${u}`,
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+  ];
+
+  let lastError: any = null;
+  for (const getProxiedUrl of CORS_PROXIES) {
+    const proxiedUrl = getProxiedUrl(rawUrl);
+    let attempt = 0;
+    const currentMaxRetries = 2;
+    while (attempt < currentMaxRetries) {
+      try {
+        console.log(`[Proxy Fallback] Fetching via proxy: ${proxiedUrl}`);
+        const response = await fetch(proxiedUrl, options);
+        if (response.status === 403 || response.status === 429 || response.status >= 500) {
+          console.warn(`[Proxy Fallback] Proxy returned status ${response.status} for ${proxiedUrl}. Trying next proxy...`);
+          break;
+        }
+        return response;
+      } catch (err: any) {
+        attempt++;
+        lastError = err;
+        if (attempt >= currentMaxRetries) {
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
-      const backoffMs = Math.pow(2, attempt) * 1000 + Math.random() * 500;
-      console.warn(`[Telegram API] Network Error: ${err.message}. Retrying in ${Math.round(backoffMs)}ms...`);
-      await new Promise(resolve => setTimeout(resolve, backoffMs));
     }
   }
-  throw new Error('Maximum retries exceeded');
+
+  throw lastError || new Error(`All CORS proxies failed to fetch ${rawUrl}`);
 }
 
 async function uploadFileHelper(

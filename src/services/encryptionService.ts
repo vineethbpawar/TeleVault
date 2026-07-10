@@ -128,7 +128,8 @@ export const encryptionService = {
 
     if (Platform.OS === 'web') {
       try {
-        const res = await fetch(localUri);
+        const { fetchWithRetry } = require('./telegramService');
+        const res = await fetchWithRetry(localUri);
         const encryptedStr = await res.text();
 
         const decrypted = AES.decrypt(encryptedStr, key, {
