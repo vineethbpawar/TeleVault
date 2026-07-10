@@ -115,10 +115,10 @@ const ViewerItem = React.memo<{
       setIsZoomed(prev => !prev);
     } else {
       // Single tap -> Navigation / Controls toggle
-      const x = e.nativeEvent.locationX;
-      if (x < width * 0.22) {
+      const x = e.nativeEvent.pageX;
+      if (x < width * 0.3) {
         onTapLeft();
-      } else if (x > width * 0.78) {
+      } else if (x > width * 0.7) {
         onTapRight();
       } else {
         onToggleControls();
@@ -578,7 +578,14 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
           getItemLayout={(data, index) => ({ length: width, offset: width * index, index })}
           showsHorizontalScrollIndicator={false}
           scrollEnabled={!isHoldActive}
+          decelerationRate="fast"
+          snapToInterval={width}
+          snapToAlignment="center"
           onMomentumScrollEnd={(e) => {
+            const index = Math.round(e.nativeEvent.contentOffset.x / width);
+            setCurrentIndex(index);
+          }}
+          onScrollEndDrag={(e) => {
             const index = Math.round(e.nativeEvent.contentOffset.x / width);
             setCurrentIndex(index);
           }}

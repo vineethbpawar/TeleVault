@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, Image, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { FileImage, FileVideo, FileText, Play, File, AlertTriangle } from 'lucide-react-native';
 import { TeleVaultFile } from '../types/file';
 import { previewCacheService } from '../services/previewCacheService';
@@ -21,6 +21,7 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
   onLongPress,
 }) => {
   const [resolvedUri, setResolvedUri] = useState<string | null>(null);
+  const [playableUri, setPlayableUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [configReady, setConfigReady] = useState<boolean | null>(telegramService.configReady);
@@ -71,12 +72,19 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
         is_private: file.is_private,
       }).then(result => {
         if (active) {
+          if (result.playableUri) {
+            setPlayableUri(result.playableUri);
+          }
           if (result.previewUri && !result.error) {
             if (isVideoUri(result.previewUri)) {
               setResolvedUri(null); // Don't load mp4 in React Native Image
             } else {
               setResolvedUri(result.previewUri);
             }
+            setError(false);
+          } else if (isVideo && result.playableUri) {
+            // Keep resolvedUri null, but clear error state so video fallback renders
+            setResolvedUri(null);
             setError(false);
           } else {
             setError(true);
@@ -139,6 +147,35 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
 
     if (isVideo) {
       const durationStr = formatDuration(file.overlay_metadata?.duration);
+      if (Platform.OS === 'web' && playableUri) {
+        return (
+          <View style={StyleSheet.absoluteFill}>
+            <video
+              src={playableUri}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+              }}
+              preload="metadata"
+              muted
+              playsInline
+            />
+            <View style={styles.thumbnailVideoOverlay}>
+              <Play size={variant === 'grid' ? 8 : 12} color="#FFFFFF" fill="#FFFFFF" />
+            </View>
+            {durationStr && (
+              <View style={styles.durationBadge}>
+                <Text style={styles.durationText}>{durationStr}</Text>
+              </View>
+            )}
+          </View>
+        );
+      }
+
       if (resolvedUri && !error) {
         return (
           <View style={StyleSheet.absoluteFill}>

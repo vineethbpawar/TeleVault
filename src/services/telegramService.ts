@@ -824,7 +824,11 @@ export const telegramService = {
     }
 
     const fileInfo = await this.getTelegramFileInfo(fileId);
-    return `https://api.telegram.org/file/bot${botToken}/${fileInfo.file_path}`;
+    const url = `https://api.telegram.org/file/bot${botToken}/${fileInfo.file_path}`;
+    if (Platform.OS === 'web') {
+      return `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    }
+    return url;
   },
 
   async downloadTelegramFileToCache(fileId: string, fileName: string): Promise<string> {

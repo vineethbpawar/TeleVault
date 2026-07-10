@@ -84,6 +84,14 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   
   const [selectedLens, setSelectedLens] = useState<CameraLensType>('original');
   const zoomShared = useSharedValue(0);
+  const [zoomValue, setZoomValue] = useState(0);
+
+  useAnimatedReaction(
+    () => zoomShared.value,
+    (nextZoom) => {
+      runOnJS(setZoomValue)(nextZoom);
+    }
+  );
   const [defaultDestination, setDefaultDestination] = useState<UploadDestination>('memories');
   
   const [cameraReady, setCameraReady] = useState(false);
@@ -114,19 +122,14 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const pinchGesture = Gesture.Pinch()
     .onStart(() => {
+      'worklet';
       startZoomShared.value = zoomShared.value;
     })
     .onUpdate((event) => {
-      // Map scale to zoom smoothly [0, 1] range.
+      'worklet';
       const newZoom = startZoomShared.value + (event.scale - 1) * 0.5;
       zoomShared.value = Math.max(0, Math.min(1, newZoom));
     });
-
-  const cameraAnimatedProps = useAnimatedProps(() => {
-    return {
-      zoom: zoomShared.value,
-    };
-  });
 
   // Web getUserMedia setup effect with AppState listener
   useEffect(() => {
@@ -1231,7 +1234,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
               facing={facing}
               flash={flash}
               mode="video"
-              animatedProps={cameraAnimatedProps}
+              zoom={zoomValue}
               pictureSize={pictureSize}
               autofocus="off"
               enableTorch={flash === 'on' && isRecording}

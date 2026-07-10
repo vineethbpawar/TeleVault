@@ -255,7 +255,7 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top > 0 ? insets.top : 12 }]}>
       {/* App Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
@@ -445,7 +445,7 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
           )}
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 

@@ -560,22 +560,23 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           }
         }
 
+        // Always record Web via Canvas stream to capture GPU-accelerated CSS zoom cropping in real-time
         let recordStream = webStreamRef.current;
-        if (!hasNativeZoom && zoomShared.value > 0 && webVideoRef.current) {
+        if (webVideoRef.current) {
           console.log('[RECORD_TRACE] Simulating zoom for recording via canvas stream.');
           const video = webVideoRef.current;
           const canvas = document.createElement('canvas');
-          canvas.width = video.videoWidth || 1280;
-          canvas.height = video.videoHeight || 720;
+          canvas.width = video.videoWidth || 1920;
+          canvas.height = video.videoHeight || 1080;
           const ctx = canvas.getContext('2d');
           
           const drawFrame = () => {
             if (ctx && video && !video.paused && !video.ended) {
-              const scale = 1 + zoomShared.value * 7;
-              const sWidth = canvas.width / scale;
-              const sHeight = canvas.height / scale;
-              const sx = (canvas.width - sWidth) / 2;
-              const sy = (canvas.height - sHeight) / 2;
+              const scale = 1 + zoomShared.value * 5; // Maps [0, 1] to [1, 6] to match preview
+              const sWidth = video.videoWidth / scale;
+              const sHeight = video.videoHeight / scale;
+              const sx = (video.videoWidth - sWidth) / 2;
+              const sy = (video.videoHeight - sHeight) / 2;
               
               ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
             }

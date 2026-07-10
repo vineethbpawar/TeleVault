@@ -495,18 +495,7 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
   const groupedData = getGroupedMemories();
   const onThisDayData = getOnThisDayMemories();
 
-  if (configReady === null) {
-    return (
-      <Screen edges={['top']}>
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#FFFC00" />
-          <Text style={{ color: '#8e92af', marginTop: 12, fontSize: 15, fontWeight: '600' }}>
-            Restoring Telegram connection...
-          </Text>
-        </View>
-      </Screen>
-    );
-  }
+
 
   return (
     <Screen edges={['top']}>

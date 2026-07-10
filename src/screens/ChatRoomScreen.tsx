@@ -713,7 +713,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}
     >
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={[styles.container, { paddingTop: insets.top > 0 ? insets.top : 12 }]}>
         <ConversationHeader
           otherFullName={otherFullName || null}
           otherUsername={otherUsername}
