@@ -218,6 +218,31 @@ export const PrivateDriveScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [currentFolder]);
 
+  useEffect(() => {
+    if (!isFocused) return;
+    const channel = supabase
+      .channel('priv_drive_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'files' },
+        () => {
+          loadContent(false);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'folders' },
+        () => {
+          loadContent(false);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isFocused, currentFolder, isUnlocked]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadContent(false);

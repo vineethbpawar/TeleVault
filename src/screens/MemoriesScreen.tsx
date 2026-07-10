@@ -258,6 +258,24 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
     };
   }, [isFocused, filterType, isUnlocked]);
 
+  useEffect(() => {
+    if (!isFocused) return;
+    const channel = supabase
+      .channel('memories_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'files' },
+        () => {
+          loadMemories(false);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isFocused, filterType, isUnlocked]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadMemories(false);

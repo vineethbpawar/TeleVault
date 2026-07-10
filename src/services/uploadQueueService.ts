@@ -377,7 +377,12 @@ export const uploadQueueService = {
       if (Platform.OS === 'web') {
         if (finalSize <= 0) {
           try {
-            if (finalUri.startsWith('blob:')) {
+            if (finalUri.startsWith('webblob:')) {
+              const { getWebBlob } = require('./uploadQueueService');
+              const key = finalUri.split(':')[1];
+              const blob = await getWebBlob(key);
+              finalSize = blob?.size || 0;
+            } else if (finalUri.startsWith('blob:')) {
               const res = await fetch(finalUri);
               const blob = await res.blob();
               finalSize = blob.size;

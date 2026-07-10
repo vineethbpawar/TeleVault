@@ -113,8 +113,12 @@ export const largeFileService = {
     const length = Math.min(chunkSize, totalSize - position);
 
     if (Platform.OS === 'web') {
-      let blob: Blob;
-      if (uri.startsWith('blob:')) {
+      let blob: Blob | null = null;
+      if (uri.startsWith('webblob:')) {
+        const { getWebBlob } = require('./uploadQueueService');
+        const key = uri.split(':')[1];
+        blob = await getWebBlob(key);
+      } else if (uri.startsWith('blob:')) {
         const res = await fetch(uri);
         blob = await res.blob();
       } else if (uri.startsWith('data:')) {
@@ -131,6 +135,7 @@ export const largeFileService = {
         const res = await fetch(uri);
         blob = await res.blob();
       }
+      if (!blob) throw new Error('IndexedDB blob not found for slicing.');
       const slicedBlob = blob.slice(position, position + length);
       return URL.createObjectURL(slicedBlob);
     }

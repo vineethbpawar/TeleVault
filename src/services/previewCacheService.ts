@@ -129,59 +129,38 @@ export const previewCacheService = {
     forceRefresh = false,
     signal?: AbortSignal
   ): Promise<string | null> {
-    const dedupKey = `file_${file.id}_${forceRefresh}`;
-    if (activeResolutions.has(dedupKey)) {
-      return activeResolutions.get(dedupKey)!;
+    let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
+    if (resolvedLocalUri) {
+      if (Platform.OS === 'web' && resolvedLocalUri.startsWith('webblob:')) {
+        resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
+      }
+      return resolvedLocalUri;
     }
 
-    const promise = (async () => {
-      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-
-      let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
-      if (resolvedLocalUri) {
-        if (Platform.OS === 'web' && resolvedLocalUri.startsWith('webblob:')) {
-          resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
-        }
-        return resolvedLocalUri;
-      }
-
-      if (file.media_url) {
-        return file.media_url;
-      }
-
-      if (file.telegram_file_id) {
-        if (!forceRefresh) {
-          const cached = await this.getCachedPreview(file.telegram_file_id);
-          if (cached) {
-            return cached;
-          }
-        }
-
-        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-
-        try {
-          const url = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
-          if (url) {
-            await this.setCachedPreview(file.telegram_file_id, url);
-            return url;
-          }
-        } catch (err) {
-          if (err instanceof DOMException && err.name === 'AbortError') {
-            throw err;
-          }
-          console.error(`Failed to resolve Telegram URL for file ${file.id}:`, err);
-        }
-      }
-
-      return null;
-    })();
-
-    activeResolutions.set(dedupKey, promise);
-    try {
-      return await promise;
-    } finally {
-      activeResolutions.delete(dedupKey);
+    if (file.media_url) {
+      return file.media_url;
     }
+
+    if (file.telegram_file_id) {
+      if (!forceRefresh) {
+        const cached = await this.getCachedPreview(file.telegram_file_id);
+        if (cached) {
+          return cached;
+        }
+      }
+
+      try {
+        const url = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
+        if (url) {
+          await this.setCachedPreview(file.telegram_file_id, url);
+          return url;
+        }
+      } catch (err) {
+        console.error(`Failed to resolve Telegram URL for file ${file.id}:`, err);
+      }
+    }
+
+    return null;
   },
 
   async resolveFilePreviewInternal(
@@ -530,18 +509,7 @@ export const previewCacheService = {
     fallbackIcon: string;
     error?: string;
   }> {
-    const dedupKey = `preview_${file.id}_${forceRefresh}`;
-    if (activeResolutions.has(dedupKey)) {
-      return activeResolutions.get(dedupKey)!;
-    }
-
-    const promise = this.resolveFilePreviewInternal(file, forceRefresh, signal);
-    activeResolutions.set(dedupKey, promise);
-    try {
-      return await promise;
-    } finally {
-      activeResolutions.delete(dedupKey);
-    }
+    return this.resolveFilePreviewInternal(file, forceRefresh, signal);
   },
 
   async forceRepairPreview(fileId: string, file: any): Promise<{ previewUri?: string; playableUri?: string } | null> {

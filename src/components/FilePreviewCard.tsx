@@ -24,7 +24,6 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
   const [playableUri, setPlayableUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
-  const [configReady, setConfigReady] = useState<boolean | null>(telegramService.configReady);
 
   const isVideo = file.file_type === 'video' ||
     (file.mime_type && file.mime_type.startsWith('video/')) ||
@@ -40,39 +39,12 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
   };
 
   useEffect(() => {
-    const unsubscribe = telegramService.subscribeConfigReady(() => {
-      setConfigReady(telegramService.configReady);
-    });
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
     let active = true;
-    const controller = new AbortController();
-
-    if (configReady === null) {
-      return;
-    }
-
-    if (configReady === false) {
-      setError(true);
-      return;
-    }
 
     // Resolve preview for image or video
     if (isImage || isVideo || file.local_thumbnail_uri) {
       setLoading(true);
       setError(false);
-
-      // 5-second timeout protection to prevent infinite spinner
-      const timeoutId = setTimeout(() => {
-        if (active) {
-          setLoading(false);
-          if (!resolvedUri) {
-            setError(true);
-          }
-        }
-      }, 5000);
 
       previewCacheService.resolveFilePreview({
         id: file.id,
@@ -83,8 +55,7 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
         telegram_file_id: file.telegram_file_id,
         is_private: file.is_private,
         overlay_metadata: file.overlay_metadata,
-      }, false, controller.signal).then(result => {
-        clearTimeout(timeoutId);
+      }, false).then(result => {
         if (active) {
           if (result.playableUri) {
             setPlayableUri(result.playableUri);
@@ -105,10 +76,6 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
           setLoading(false);
         }
       }).catch(err => {
-        clearTimeout(timeoutId);
-        if (err && err.name === 'AbortError') {
-          return; // Ignore abort exceptions
-        }
         if (__DEV__) {
           console.log(`[DEV_PREVIEW_ERR] fileId=${file.id} name=${file.file_name} type=${file.file_type} err:`, err);
         }
@@ -122,9 +89,8 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
     }
     return () => {
       active = false;
-      controller.abort();
     };
-  }, [file.id, file.local_thumbnail_uri, file.telegram_file_id, file.file_type, configReady, file.file_name, file.mime_type]);
+  }, [file.id, file.local_thumbnail_uri, file.telegram_file_id, file.file_type, file.file_name, file.mime_type]);
 
   useEffect(() => {
     if (__DEV__ && !loading) {
@@ -148,7 +114,7 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
   };
 
   const renderContent = () => {
-    if (configReady === null || loading) {
+    if (loading) {
       return (
         <View style={[styles.center, styles.skeletonBg]}>
           <ActivityIndicator size="small" color="#FFFC00" />
@@ -290,7 +256,7 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
         );
       }
       
-      const errorMsg = configReady === false ? 'No connection' : 'Failed preview';
+      const errorMsg = 'Failed preview';
       return (
         <View style={[styles.center, styles.errorBg]}>
           <FileImage size={variant === 'row' ? 24 : 32} color="#8E8E93" />

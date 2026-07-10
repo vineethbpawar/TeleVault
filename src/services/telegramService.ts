@@ -63,13 +63,6 @@ async function uploadFileHelper(
       const xhr = new XMLHttpRequest();
       xhr.open('POST', url);
 
-      if (signal) {
-        signal.addEventListener('abort', () => {
-          xhr.abort();
-          reject(new DOMException('Upload aborted', 'AbortError'));
-        });
-      }
-
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable && onProgress) {
           const percent = Math.round((event.loaded / event.total) * 100);
@@ -89,7 +82,29 @@ async function uploadFileHelper(
       };
 
       const formData = new FormData();
-      if (localUri.startsWith('data:')) {
+      
+      const sendFormData = (blob: Blob) => {
+        const fileName = parameters.caption || 'file';
+        formData.append(fieldName, blob, fileName);
+        Object.keys(parameters).forEach((key) => {
+          formData.append(key, parameters[key]);
+        });
+        xhr.send(formData);
+      };
+
+      if (localUri.startsWith('webblob:')) {
+        const { getWebBlob } = require('./uploadQueueService');
+        const key = localUri.split(':')[1];
+        getWebBlob(key)
+          .then((blob: Blob | null) => {
+            if (!blob) {
+              reject(new Error('IndexedDB blob not found for upload.'));
+              return;
+            }
+            sendFormData(blob);
+          })
+          .catch(reject);
+      } else if (localUri.startsWith('data:')) {
         const arr = localUri.split(',');
         const mime = arr[0].match(/:(.*?);/)![1];
         const bstr = atob(arr[1]);
@@ -99,27 +114,15 @@ async function uploadFileHelper(
           u8arr[n] = bstr.charCodeAt(n);
         }
         const blob = new Blob([u8arr], { type: mime });
-        const fileName = parameters.caption || 'file';
-        formData.append(fieldName, blob, fileName);
+        sendFormData(blob);
       } else {
         fetch(localUri)
           .then(res => res.blob())
           .then(blob => {
-            const fileName = parameters.caption || 'file';
-            formData.append(fieldName, blob, fileName);
-            Object.keys(parameters).forEach((key) => {
-              formData.append(key, parameters[key]);
-            });
-            xhr.send(formData);
+            sendFormData(blob);
           })
           .catch(reject);
-        return;
       }
-
-      Object.keys(parameters).forEach((key) => {
-        formData.append(key, parameters[key]);
-      });
-      xhr.send(formData);
     });
   } else {
     const { uploadQueueService } = require('./uploadQueueService');
@@ -445,7 +448,12 @@ export const telegramService = {
     let fileSizeInMB = 0;
     if (Platform.OS === 'web') {
       try {
-        if (localUri.startsWith('data:')) {
+        if (localUri.startsWith('webblob:')) {
+          const { getWebBlob } = require('./uploadQueueService');
+          const key = localUri.split(':')[1];
+          const blob = await getWebBlob(key);
+          fileSizeInMB = (blob?.size || 0) / (1024 * 1024);
+        } else if (localUri.startsWith('data:')) {
           const arr = localUri.split(',');
           const bstr = atob(arr[1]);
           fileSizeInMB = bstr.length / (1024 * 1024);

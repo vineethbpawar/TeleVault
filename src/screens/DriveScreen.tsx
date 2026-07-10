@@ -16,6 +16,7 @@ import {
   Platform,
 } from 'react-native';
 import { previewCacheService } from '../services/previewCacheService';
+import { supabase } from '../lib/supabase';
 import {
   Plus,
   FolderPlus,
@@ -183,6 +184,31 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
       loadContent(true);
     }
   }, [currentFolder]);
+
+  useEffect(() => {
+    if (!isFocused) return;
+    const channel = supabase
+      .channel('drive_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'files' },
+        () => {
+          loadContent(false);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'folders' },
+        () => {
+          loadContent(false);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isFocused, currentFolder, isUnlocked]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
