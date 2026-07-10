@@ -163,6 +163,7 @@ export const uploadQueueService = {
     is_drive_file: boolean;
     overlay_metadata: any | null;
     local_thumbnail_uri?: string | null;
+    db_file_id?: string | null;
   }): Promise<UploadQueueItem> {
     const queue = await this.getUploadQueue();
     const now = new Date().toISOString();
@@ -190,6 +191,7 @@ export const uploadQueueService = {
       upload_mode: uploadMode,
       large_file_id: null,
       local_thumbnail_uri: itemData.local_thumbnail_uri || null,
+      db_file_id: itemData.db_file_id || null,
     };
 
     queue.push(newItem);
@@ -439,20 +441,29 @@ export const uploadQueueService = {
       // 4. Saving metadata stage (90% - 100%)
       await this.updateUploadQueueItem(itemId, { stage: 'Saving metadata...', progress: 92 });
 
-      await fileService.saveFileMetadata({
-        folder_id: pendingItem.folder_id,
-        file_name: pendingItem.file_name,
-        file_type: pendingItem.file_type,
-        mime_type: pendingItem.mime_type,
-        file_size: finalSize,
-        is_private: pendingItem.is_private,
-        is_drive_file: pendingItem.is_drive_file,
-        telegram_message_id: telegramResult.telegramMessageId,
-        telegram_file_id: telegramResult.telegramFileId,
-        telegram_file_unique_id: telegramResult.telegramFileUniqueId,
-        local_thumbnail_uri: pendingItem.file_type === 'image' ? finalUri : (pendingItem.local_thumbnail_uri || null),
-        overlay_metadata: pendingItem.overlay_metadata,
-      });
+      if (pendingItem.db_file_id) {
+        await fileService.updateFileMetadata(pendingItem.db_file_id, {
+          telegram_message_id: telegramResult.telegramMessageId,
+          telegram_file_id: telegramResult.telegramFileId,
+          telegram_file_unique_id: telegramResult.telegramFileUniqueId,
+          local_thumbnail_uri: pendingItem.file_type === 'image' ? finalUri : (pendingItem.local_thumbnail_uri || null),
+        });
+      } else {
+        await fileService.saveFileMetadata({
+          folder_id: pendingItem.folder_id,
+          file_name: pendingItem.file_name,
+          file_type: pendingItem.file_type,
+          mime_type: pendingItem.mime_type,
+          file_size: finalSize,
+          is_private: pendingItem.is_private,
+          is_drive_file: pendingItem.is_drive_file,
+          telegram_message_id: telegramResult.telegramMessageId,
+          telegram_file_id: telegramResult.telegramFileId,
+          telegram_file_unique_id: telegramResult.telegramFileUniqueId,
+          local_thumbnail_uri: pendingItem.file_type === 'image' ? finalUri : (pendingItem.local_thumbnail_uri || null),
+          overlay_metadata: pendingItem.overlay_metadata,
+        });
+      }
 
       await this.updateUploadQueueItem(itemId, { status: 'completed', stage: 'Completed', progress: 100 });
       console.log(`Successfully uploaded and saved metadata for ${pendingItem.file_name}`);

@@ -19,6 +19,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
 import { telegramService } from '../services/telegramService';
 import { uploadQueueService } from '../services/uploadQueueService';
+import { fileService } from '../services/fileService';
 import { locationService } from '../services/locationService';
 import { snapService } from '../services/snapService';
 import UploadProgress from '../components/UploadProgress';
@@ -399,6 +400,27 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     }
 
     try {
+      // 1. Pre-insert the metadata record to Supabase so it shows up instantly in Memories!
+      const metaData = getPackagedMetadata(localThumbnailUri);
+      const dbRecord = await fileService.saveFileMetadata({
+        folder_id: null,
+        file_name: fileName,
+        file_type: type === 'video' ? 'video' : 'image',
+        mime_type: mimeType,
+        file_size: fileSize || 0,
+        is_private: destination === 'private_drive',
+        is_drive_file: destination !== 'memories',
+        local_thumbnail_uri: localThumbnailUri || uri, // fallback to uri for fast preview
+        overlay_metadata: {
+          ...metaData,
+          local_uri: uri
+        },
+        telegram_message_id: null,
+        telegram_file_id: null,
+        telegram_file_unique_id: null,
+      });
+
+      // 2. Add to background upload queue referencing the DB file ID
       await uploadQueueService.addToUploadQueue({
         local_uri: uri,
         file_name: fileName,
@@ -409,11 +431,12 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         folder_id: null,
         is_private: destination === 'private_drive',
         is_drive_file: destination !== 'memories',
-        overlay_metadata: getPackagedMetadata(localThumbnailUri),
+        overlay_metadata: metaData,
         local_thumbnail_uri: localThumbnailUri,
+        db_file_id: dbRecord.id,
       });
 
-      showToast('Saving in background...');
+      showToast('Saving to Memories...');
       navigation.navigate('Main', { screen: 'CameraTab' });
     } catch (error: any) {
       console.error('Queue add failed:', error);

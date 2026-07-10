@@ -11,9 +11,9 @@ export const fileService = {
     file_size: number | null;
     is_private: boolean;
     is_drive_file: boolean;
-    telegram_message_id: string;
-    telegram_file_id: string;
-    telegram_file_unique_id: string;
+    telegram_message_id?: string | null;
+    telegram_file_id?: string | null;
+    telegram_file_unique_id?: string | null;
     local_thumbnail_uri: string | null;
     overlay_metadata?: any;
   }): Promise<TeleVaultFile> {

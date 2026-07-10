@@ -111,11 +111,13 @@ export const previewCacheService = {
       local_uri?: string | null;
       media_url?: string | null;
       telegram_file_id?: string | null;
+      overlay_metadata?: any;
     },
     forceRefresh = false
   ): Promise<string | null> {
-    if (file.local_uri) {
-      return file.local_uri;
+    const resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
+    if (resolvedLocalUri) {
+      return resolvedLocalUri;
     }
 
     if (file.media_url) {
@@ -155,6 +157,7 @@ export const previewCacheService = {
       media_url?: string | null;
       telegram_file_id?: string | null;
       is_private?: boolean | null;
+      overlay_metadata?: any;
     },
     forceRefresh = false
   ): Promise<{
@@ -169,21 +172,21 @@ export const previewCacheService = {
 
     // 1. Image resolution
     if (fileType === 'image') {
-      const localUri = file.local_uri || file.local_thumbnail_uri;
-      if (localUri) {
+      const resolvedLocalUri = file.local_uri || file.local_thumbnail_uri || file.overlay_metadata?.local_uri;
+      if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
           return {
             type: 'image',
-            previewUri: localUri,
+            previewUri: resolvedLocalUri,
             fallbackIcon,
           };
         }
         try {
-          const info = await FileSystem.getInfoAsync(localUri);
+          const info = await FileSystem.getInfoAsync(resolvedLocalUri);
           if (info.exists) {
             return {
               type: 'image',
-              previewUri: localUri,
+              previewUri: resolvedLocalUri,
               fallbackIcon,
             };
           }
@@ -256,14 +259,15 @@ export const previewCacheService = {
       let playableUri: string | undefined;
 
       // Locate video path
-      if (file.local_uri) {
+      const resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
+      if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
-          playableUri = file.local_uri;
+          playableUri = resolvedLocalUri;
         } else {
           try {
-            const info = await FileSystem.getInfoAsync(file.local_uri);
+            const info = await FileSystem.getInfoAsync(resolvedLocalUri);
             if (info.exists) {
-              playableUri = file.local_uri;
+              playableUri = resolvedLocalUri;
             }
           } catch (e) {}
         }
@@ -394,20 +398,21 @@ export const previewCacheService = {
     }
 
     // 3. Document / other resolution
-    if (file.local_uri) {
+    const resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
+    if (resolvedLocalUri) {
       if (Platform.OS === 'web') {
         return {
           type: fileType,
-          previewUri: file.local_uri,
+          previewUri: resolvedLocalUri,
           fallbackIcon,
         };
       }
       try {
-        const info = await FileSystem.getInfoAsync(file.local_uri);
+        const info = await FileSystem.getInfoAsync(resolvedLocalUri);
         if (info.exists) {
           return {
             type: fileType,
-            previewUri: file.local_uri,
+            previewUri: resolvedLocalUri,
             fallbackIcon,
           };
         }
@@ -460,6 +465,13 @@ export const previewCacheService = {
 
   async forceRepairPreview(fileId: string, file: any): Promise<{ previewUri?: string; playableUri?: string } | null> {
     try {
+      if (!fileId) {
+        const repaired = await this.resolveFilePreview(file, true);
+        return {
+          previewUri: repaired.previewUri,
+          playableUri: repaired.playableUri,
+        };
+      }
       console.log(`[PreviewCache] Repairing corrupted/expired preview for file: ${fileId}`);
       await AsyncStorage.removeItem(CACHE_PREFIX + fileId);
       if (file.id) {

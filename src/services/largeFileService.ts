@@ -495,28 +495,54 @@ export const largeFileService = {
       .eq('chunk_index', 0)
       .single();
 
-    const { error: insertError } = await supabase
+    // Check if there is an existing placeholder record in 'files' table for this large file
+    const { data: existingFiles } = await supabase
       .from('files')
-      .insert({
-        user_id: largeFile.owner_id,
-        folder_id: largeFile.folder_id,
-        file_name: largeFile.original_file_name,
-        file_type: largeFile.file_type,
-        mime_type: largeFile.mime_type,
-        file_size: largeFile.total_size,
-        is_private: largeFile.is_private,
-        is_drive_file: largeFile.destination === 'drive' || largeFile.destination === 'private',
-        is_chunked: true,
-        large_file_id: largeFile.id,
-        telegram_message_id: firstChunk?.telegram_message_id || null,
-        telegram_file_id: firstChunk?.telegram_file_id || null,
-        telegram_file_unique_id: null,
-        local_thumbnail_uri: null,
-      });
+      .select('id')
+      .eq('user_id', largeFile.owner_id)
+      .eq('file_name', largeFile.original_file_name)
+      .is('telegram_file_id', null)
+      .order('created_at', { ascending: false });
 
-    if (insertError) {
-      console.error('Finalize Large File insert files error:', insertError);
-      throw new Error(insertError.message || 'Failed to create files record.');
+    if (existingFiles && existingFiles.length > 0) {
+      const { error: updateError } = await supabase
+        .from('files')
+        .update({
+          is_chunked: true,
+          large_file_id: largeFile.id,
+          telegram_message_id: firstChunk?.telegram_message_id || null,
+          telegram_file_id: firstChunk?.telegram_file_id || null,
+        })
+        .eq('id', existingFiles[0].id);
+
+      if (updateError) {
+        console.error('Finalize Large File update files error:', updateError);
+        throw new Error(updateError.message || 'Failed to update files record.');
+      }
+    } else {
+      const { error: insertError } = await supabase
+        .from('files')
+        .insert({
+          user_id: largeFile.owner_id,
+          folder_id: largeFile.folder_id,
+          file_name: largeFile.original_file_name,
+          file_type: largeFile.file_type,
+          mime_type: largeFile.mime_type,
+          file_size: largeFile.total_size,
+          is_private: largeFile.is_private,
+          is_drive_file: largeFile.destination === 'drive' || largeFile.destination === 'private',
+          is_chunked: true,
+          large_file_id: largeFile.id,
+          telegram_message_id: firstChunk?.telegram_message_id || null,
+          telegram_file_id: firstChunk?.telegram_file_id || null,
+          telegram_file_unique_id: null,
+          local_thumbnail_uri: null,
+        });
+
+      if (insertError) {
+        console.error('Finalize Large File insert files error:', insertError);
+        throw new Error(insertError.message || 'Failed to create files record.');
+      }
     }
   },
 

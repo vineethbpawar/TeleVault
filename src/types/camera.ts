@@ -68,6 +68,7 @@ export interface UploadQueueItem {
   chunk_progress?: string;
   stage?: string;
   local_thumbnail_uri?: string | null;
+  db_file_id?: string | null;
   retry_count?: number;
   last_retry_at?: string | null;
 }
