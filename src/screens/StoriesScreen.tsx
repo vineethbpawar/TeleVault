@@ -32,11 +32,21 @@ export const StoriesScreen: React.FC<Props> = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const isFocused = useIsFocused();
 
+  const preloadStoriesUrls = (storiesList: Snap[]) => {
+    // Resolve first 10 stories in background to avoid thread congestion
+    storiesList.slice(0, 10).forEach(story => {
+      if (story.telegram_file_id) {
+        snapService.resolveTelegramUrl(story.telegram_file_id).catch(() => {});
+      }
+    });
+  };
+
   const fetchStories = async () => {
     try {
       // 1. Fetch active stories from other users
       const active = await snapService.getActiveStories();
       setActiveStories(active);
+      preloadStoriesUrls(active);
 
       // 2. Fetch my stories
       const mine = await snapService.getMyStories();

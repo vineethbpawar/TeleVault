@@ -26,10 +26,20 @@ export const SnapInboxScreen: React.FC<Props> = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const isFocused = useIsFocused();
 
+  const preloadSnapsUrls = (snapsList: Snap[]) => {
+    // Resolve first 10 received snaps in background to make loading instant when opened
+    snapsList.slice(0, 10).forEach(snap => {
+      if (snap.telegram_file_id && !snap.is_viewed) {
+        snapService.resolveTelegramUrl(snap.telegram_file_id).catch(() => {});
+      }
+    });
+  };
+
   const fetchSnaps = async () => {
     try {
       const data = await snapService.getReceivedSnaps();
       setSnaps(data);
+      preloadSnapsUrls(data);
     } catch (error) {
       console.error('Fetch Received Snaps Error:', error);
     } finally {

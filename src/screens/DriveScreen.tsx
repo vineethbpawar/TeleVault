@@ -89,6 +89,19 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
   const [sortBy, setSortBy] = useState<SortOption>('date_desc');
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video' | 'document'>('all');
 
+  const handleFilePress = (targetFile: TeleVaultFile, list: TeleVaultFile[]) => {
+    if (targetFile.file_type === 'image' || targetFile.file_type === 'video') {
+      const mediaList = list.filter(f => f.file_type === 'image' || f.file_type === 'video');
+      const idx = mediaList.findIndex(f => f.id === targetFile.id);
+      navigation.navigate('MemoriesViewer', {
+        files: mediaList,
+        initialIndex: idx >= 0 ? idx : 0,
+      });
+    } else {
+      navigation.navigate('FileDetails', { file: targetFile });
+    }
+  };
+
   // Storage Stats State
   const [storageUsage, setStorageUsage] = useState({ totalSize: 0, filesCount: 0 });
 
@@ -539,7 +552,7 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
             renderItem={({ item }) => (
               <RecentFileCard
                 item={item}
-                onPress={() => navigation.navigate('FileDetails', { file: item })}
+                onPress={() => handleFilePress(item, recentFiles)}
                 formatSize={formatSize}
               />
             )}
@@ -581,7 +594,7 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
               return (
                 <FileCard
                   file={item}
-                  onPress={() => navigation.navigate('FileDetails', { file: item })}
+                  onPress={() => handleFilePress(item, sortedFiles)}
                   onMorePress={() => openItemMenu('file', item.id, item.file_name)}
                 />
               );

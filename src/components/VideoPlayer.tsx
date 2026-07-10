@@ -7,9 +7,10 @@ interface VideoPlayerProps {
   source: string;
   style?: any;
   onError?: (error: any) => void;
+  paused?: boolean;
 }
 
-export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError }) => {
+export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError, paused = false }) => {
   const isFocused = useIsFocused();
 
   if (Platform.OS === 'web') {
@@ -26,9 +27,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError
 
       video.addEventListener('error', handleWebError);
 
-      if (isFocused) {
-        video.src = source;
-        video.load();
+      if (isFocused && !paused) {
+        // Load the source only if it's not already loaded/playing this source
+        if (!video.src || video.src.indexOf(source) === -1) {
+          video.src = source;
+          video.load();
+        }
         
         // Attempt to autoplay with audio first
         video.muted = false;
@@ -50,6 +54,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError
 
       return () => {
         video.removeEventListener('error', handleWebError);
+      };
+    }, [source, isFocused, paused]);
+
+    useEffect(() => {
+      return () => {
+        const video = videoRef.current;
+        if (!video) return;
         try {
           video.pause();
           video.muted = true;
@@ -57,7 +68,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError
           video.load();
         } catch (_) {}
       };
-    }, [source, isFocused]);
+    }, []);
 
     return (
       <View style={[styles.container, style]}>
@@ -86,15 +97,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError
     };
   });
 
-  // Play/pause based on navigation focus status
+  // Play/pause based on navigation focus status and paused prop
   useEffect(() => {
     if (!player) return;
-    if (isFocused) {
+    if (isFocused && !paused) {
       player.play();
     } else {
       player.pause();
     }
-  }, [player, isFocused]);
+  }, [player, isFocused, paused]);
 
   // Setup player options, register status listener, and perform deep cleanup on unmount
   useEffect(() => {
@@ -108,7 +119,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError
 
     const subscription = player.addListener('statusChange', (statusPayload: any) => {
       const status = typeof statusPayload === 'string' ? statusPayload : statusPayload?.status;
-      if (status === 'readyToPlay' && isFocused) {
+      if (status === 'readyToPlay' && isFocused && !paused) {
         player.play();
       } else if (status === 'error') {
         const err = statusPayload?.error || { message: 'Video playback error' };

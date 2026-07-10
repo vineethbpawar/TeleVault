@@ -374,10 +374,18 @@ export const snapService = {
     return count || 0;
   },
 
+  _urlCache: {} as Record<string, { url: string; timestamp: number }>,
+
   /**
    * Get download URL from Telegram file ID.
    */
   async resolveTelegramUrl(telegramFileId: string): Promise<string> {
+    const cached = this._urlCache[telegramFileId];
+    // Cache for 45 minutes (Telegram links expire after 1 hour)
+    if (cached && Date.now() - cached.timestamp < 45 * 60 * 1000) {
+      return cached.url;
+    }
+
     const config = await telegramService.getTelegramConfig();
     if (!config.botToken) {
       throw new Error('Telegram bot token is not configured.');
@@ -388,7 +396,9 @@ export const snapService = {
 
     if (res.ok && data.ok) {
       const filePath = data.result.file_path;
-      return `https://api.telegram.org/file/bot${config.botToken}/${filePath}`;
+      const url = `https://api.telegram.org/file/bot${config.botToken}/${filePath}`;
+      this._urlCache[telegramFileId] = { url, timestamp: Date.now() };
+      return url;
     } else {
       throw new Error(data.description || 'Failed to locate file on Telegram.');
     }
