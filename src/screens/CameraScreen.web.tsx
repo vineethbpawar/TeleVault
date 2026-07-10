@@ -103,6 +103,41 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
   const countdownIntervalRef = useRef<any>(null);
   const webCanvasIntervalRef = useRef<any>(null);
 
+  const initialTouchDistanceRef = useRef<number | null>(null);
+  const initialZoomValRef = useRef<number>(0);
+
+  const handleTouchStart = (e: any) => {
+    if (Platform.OS === 'web' && e.nativeEvent.touches && e.nativeEvent.touches.length === 2) {
+      const touches = e.nativeEvent.touches;
+      const dist = Math.hypot(
+        touches[0].clientX - touches[1].clientX,
+        touches[0].clientY - touches[1].clientY
+      );
+      initialTouchDistanceRef.current = dist;
+      initialZoomValRef.current = zoomShared.value;
+    }
+  };
+
+  const handleTouchMove = (e: any) => {
+    if (Platform.OS === 'web' && e.nativeEvent.touches && e.nativeEvent.touches.length === 2 && initialTouchDistanceRef.current !== null) {
+      const touches = e.nativeEvent.touches;
+      const dist = Math.hypot(
+        touches[0].clientX - touches[1].clientX,
+        touches[0].clientY - touches[1].clientY
+      );
+      const scale = dist / initialTouchDistanceRef.current;
+      const sensitivity = 1.2;
+      const targetZoom = initialZoomValRef.current + (scale - 1) * sensitivity;
+      zoomShared.value = Math.min(Math.max(targetZoom, 0), 1);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (Platform.OS === 'web') {
+      initialTouchDistanceRef.current = null;
+    }
+  };
+
   // Web getUserMedia setup effect with AppState listener
   useEffect(() => {
     if (Platform.OS === 'web' && isFocused) {
@@ -1109,14 +1144,18 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
       touchAction: 'none',
     } as any]}>
       {isFocused ? (
-        <View style={[StyleSheet.absoluteFill, { 
-          overflow: 'hidden',
-          userSelect: 'none',
-          WebkitUserSelect: 'none',
-          WebkitTouchCallout: 'none',
-          WebkitTapHighlightColor: 'transparent',
-          touchAction: 'none',
-        } as any]}>
+        <View 
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          style={[StyleSheet.absoluteFill, { 
+            overflow: 'hidden',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            WebkitTouchCallout: 'none',
+            WebkitTapHighlightColor: 'transparent',
+            touchAction: 'none',
+          } as any]}>
           <video
             ref={webVideoRef}
             style={{
