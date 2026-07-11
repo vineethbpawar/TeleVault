@@ -47,7 +47,7 @@ const activeResolutions = new Map<string, Promise<any>>();
 
 async function resolveWebBlobUrl(webBlobUri: string): Promise<string> {
   if (!webBlobUri.startsWith('webblob:')) return webBlobUri;
-  const { getWebBlob } = require('./uploadQueueService');
+  const { getWebBlob } = require('./webBlobStore');
   const key = webBlobUri.split(':')[1];
   const blob = await getWebBlob(key);
   if (blob) {

@@ -281,6 +281,7 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
   // Reusable Media Viewer state
   const [resolvedCache, setResolvedCache] = useState<Record<string, { previewUri?: string; playableUri?: string }>>({});
   const [isHoldActive, setIsHoldActive] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [folders, setFolders] = useState<TeleVaultFolder[]>([]);
   const [folderPickerVisible, setFolderPickerVisible] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -581,14 +582,27 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
           decelerationRate="fast"
           snapToInterval={width}
           snapToAlignment="center"
+          onScrollBeginDrag={() => {
+            setIsDragging(true);
+          }}
           onMomentumScrollEnd={(e) => {
             const index = Math.round(e.nativeEvent.contentOffset.x / width);
             setCurrentIndex(index);
+            setIsDragging(false);
           }}
           onScrollEndDrag={(e) => {
             const index = Math.round(e.nativeEvent.contentOffset.x / width);
             setCurrentIndex(index);
+            setIsDragging(false);
           }}
+          onScroll={(e) => {
+            const offset = e.nativeEvent.contentOffset.x;
+            const index = Math.round(offset / width);
+            if (index !== currentIndex && index >= 0 && index < files.length) {
+              setCurrentIndex(index);
+            }
+          }}
+          scrollEventThrottle={16}
           renderItem={({ item, index }) => {
             const isNearby = Math.abs(index - currentIndex) <= 1;
             return (
@@ -597,7 +611,7 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
                 isActive={index === currentIndex} 
                 isNearby={isNearby}
                 cachedValue={resolvedCache[item.id]}
-                paused={isHoldActive}
+                paused={isHoldActive || isDragging}
                 onTapLeft={goToPrevious}
                 onTapRight={goToNext}
                 onToggleControls={handleToggleControls}

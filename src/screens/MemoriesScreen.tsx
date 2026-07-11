@@ -33,6 +33,7 @@ import PinLockModal from '../components/PinLockModal';
 import AppCard from '../components/AppCard';
 import { previewCacheService } from '../services/previewCacheService';
 import { telegramService } from '../services/telegramService';
+import { storageService } from '../services/storageService';
 import { searchService, SearchFilters } from '../services/searchService';
 import Screen from '../components/Screen';
 import FilePreviewCard from '../components/FilePreviewCard';
@@ -209,7 +210,9 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
 
   const loadMemories = async (showSpinner = true) => {
     console.log("MEMORIES STEP 1: loadMemories called, showSpinner =", showSpinner);
-    if (showSpinner) setLoading(true);
+    // Optimistic check: Only show spinner if files list is empty
+    const shouldShowSpinner = showSpinner && files.length === 0;
+    if (shouldShowSpinner) setLoading(true);
     try {
       console.log("MEMORIES STEP 2: Calling fileService.fetchMemories()");
       let data = await fileService.fetchMemories();
@@ -246,6 +249,27 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
       setRefreshing(false);
     }
   };
+
+  // Load cached memories first on mount/focus to prevent blocking loader spinner
+  useEffect(() => {
+    if (isFocused && filterType !== 'private') {
+      const loadFromCache = async () => {
+        try {
+          const cached = await storageService.getItem('televault_cached_memories');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setFiles(parsed);
+              setLoading(false); // Hide spinner instantly
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to load cached memories:', e);
+        }
+      };
+      loadFromCache();
+    }
+  }, [isFocused, filterType]);
 
   useEffect(() => {
     console.log("MEMORIES EFFECT 1: Fired, isFocused =", isFocused, "filterType =", filterType, "isUnlocked =", isUnlocked);

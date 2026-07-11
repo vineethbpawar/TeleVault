@@ -115,7 +115,7 @@ export const largeFileService = {
     if (Platform.OS === 'web') {
       let blob: Blob | null = null;
       if (uri.startsWith('webblob:')) {
-        const { getWebBlob } = require('./uploadQueueService');
+        const { getWebBlob } = require('./webBlobStore');
         const key = uri.split(':')[1];
         blob = await getWebBlob(key);
       } else if (uri.startsWith('blob:')) {
@@ -625,9 +625,9 @@ export const largeFileService = {
   },
 
   async resumeLargeFileUploadNoUri(largeFileId: string): Promise<void> {
-    const { uploadQueueService } = require('./uploadQueueService');
-    const queue = await uploadQueueService.getUploadQueue();
-    const item = queue.find((i: any) => i.large_file_id === largeFileId);
+    const { queueStore } = require('./queueStore');
+    const { queueProcessorRegistry } = require('./queueProcessorRegistry');
+    const item = await queueStore.getItemByLargeFileId(largeFileId);
     if (!item) {
       throw new Error('Original file not found in upload queue. Please re-upload the file.');
     }
@@ -637,22 +637,22 @@ export const largeFileService = {
       .update({ status: 'pending' })
       .eq('id', largeFileId);
 
-    await uploadQueueService.updateUploadQueueItem(item.id, {
+    await queueStore.updateUploadQueueItem(item.id, {
       status: 'pending',
       progress: 0,
       stage: 'Queued',
       error_message: null,
     });
     
-    uploadQueueService.processUploadQueue().catch((err: any) => {
+    queueProcessorRegistry.triggerQueueProcessing().catch((err: any) => {
       console.error('Failed to process queue on resume:', err);
     });
   },
 
   async retryFailedChunks(largeFileId: string): Promise<void> {
-    const { uploadQueueService } = require('./uploadQueueService');
-    const queue = await uploadQueueService.getUploadQueue();
-    const item = queue.find((i: any) => i.large_file_id === largeFileId);
+    const { queueStore } = require('./queueStore');
+    const { queueProcessorRegistry } = require('./queueProcessorRegistry');
+    const item = await queueStore.getItemByLargeFileId(largeFileId);
     if (!item) {
       throw new Error('Original file not found in upload queue. Please re-upload the file.');
     }
@@ -668,22 +668,22 @@ export const largeFileService = {
       .update({ status: 'pending' })
       .eq('id', largeFileId);
 
-    await uploadQueueService.updateUploadQueueItem(item.id, {
+    await queueStore.updateUploadQueueItem(item.id, {
       status: 'pending',
       progress: 0,
       stage: 'Queued',
       error_message: null,
     });
     
-    uploadQueueService.processUploadQueue().catch((err: any) => {
+    queueProcessorRegistry.triggerQueueProcessing().catch((err: any) => {
       console.error('Failed to process queue on retry:', err);
     });
   },
 
   async retrySingleChunk(largeFileId: string, chunkIndex: number): Promise<void> {
-    const { uploadQueueService } = require('./uploadQueueService');
-    const queue = await uploadQueueService.getUploadQueue();
-    const item = queue.find((i: any) => i.large_file_id === largeFileId);
+    const { queueStore } = require('./queueStore');
+    const { queueProcessorRegistry } = require('./queueProcessorRegistry');
+    const item = await queueStore.getItemByLargeFileId(largeFileId);
     if (!item) {
       throw new Error('Original file not found in upload queue.');
     }
@@ -699,14 +699,14 @@ export const largeFileService = {
       .update({ status: 'pending' })
       .eq('id', largeFileId);
 
-    await uploadQueueService.updateUploadQueueItem(item.id, {
+    await queueStore.updateUploadQueueItem(item.id, {
       status: 'pending',
       progress: 0,
       stage: 'Queued',
       error_message: null,
     });
     
-    uploadQueueService.processUploadQueue().catch((err: any) => {
+    queueProcessorRegistry.triggerQueueProcessing().catch((err: any) => {
       console.error('Failed to process queue on single retry:', err);
     });
   }

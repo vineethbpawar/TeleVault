@@ -1,96 +1,51 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { UploadQueueItem, UploadStatus } from '../types/camera';
+import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import { UploadQueueItem } from '../types/camera';
 import { telegramService } from './telegramService';
 import { fileService } from './fileService';
 import { mediaOptimizationService } from './mediaOptimizationService';
 import { settingsService } from './settingsService';
 import { largeFileService, NORMAL_TELEGRAM_LIMIT_BYTES } from './largeFileService';
-import * as FileSystem from 'expo-file-system/legacy';
-import { Platform } from 'react-native';
+import { dbPromise, getWebBlob, setWebBlob, deleteWebBlob } from './webBlobStore';
+import { activeControllers, activeNativeTasks, activeUploadRegistry } from './activeUploadRegistry';
+import { queueStore } from './queueStore';
+import { queueProcessorRegistry } from './queueProcessorRegistry';
 
-const QUEUE_STORAGE_KEY = 'televault_upload_queue';
-let isProcessing = false;
 let isRecovered = false;
-const activeControllers = new Map<string, AbortController>();
-const activeNativeTasks = new Map<string, any>();
 
-type QueueListener = (queue: UploadQueueItem[]) => void;
-let listeners: QueueListener[] = [];
+export { dbPromise, getWebBlob, setWebBlob, deleteWebBlob };
+export { activeControllers, activeNativeTasks };
 
-export const dbPromise = Platform.OS === 'web' ? new Promise<IDBDatabase>((resolve, reject) => {
-  const request = indexedDB.open('televault_blobs', 1);
-  request.onupgradeneeded = () => {
-    request.result.createObjectStore('blobs');
-  };
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error);
-}) : null;
-
-export async function setWebBlob(key: string, blob: Blob): Promise<void> {
-  if (Platform.OS !== 'web') return;
-  const db = await dbPromise;
-  return new Promise((resolve, reject) => {
-    const tx = db!.transaction('blobs', 'readwrite');
-    const store = tx.objectStore('blobs');
-    const req = store.put(blob, key);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
-}
-
-export async function getWebBlob(key: string): Promise<Blob | null> {
-  if (Platform.OS !== 'web') return null;
-  const db = await dbPromise;
-  return new Promise((resolve, reject) => {
-    const tx = db!.transaction('blobs', 'readonly');
-    const store = tx.objectStore('blobs');
-    const req = store.get(key);
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-export async function deleteWebBlob(key: string): Promise<void> {
-  if (Platform.OS !== 'web') return;
-  const db = await dbPromise;
-  return new Promise((resolve, reject) => {
-    const tx = db!.transaction('blobs', 'readwrite');
-    const store = tx.objectStore('blobs');
-    const req = store.delete(key);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
-}
+// Register the queue processor callback in the registry so other services can trigger it
+queueProcessorRegistry.registerQueueProcessor(async () => {
+  await uploadQueueService.processUploadQueue();
+});
 
 export const uploadQueueService = {
-  activeNativeTasks,
   activeControllers,
+  activeNativeTasks,
 
   registerNativeUploadTask(itemId: string, task: any) {
-    activeNativeTasks.set(itemId, task);
+    activeUploadRegistry.registerNativeUploadTask(itemId, task);
   },
 
   unregisterNativeUploadTask(itemId: string) {
-    activeNativeTasks.delete(itemId);
+    activeUploadRegistry.unregisterNativeUploadTask(itemId);
   },
 
   async pauseUpload(id: string): Promise<void> {
     console.log(`[Queue] Pausing upload: ${id}`);
-    const controller = activeControllers.get(id);
-    if (controller) {
-      controller.abort();
-      activeControllers.delete(id);
-    }
+    activeUploadRegistry.abortUpload(id);
 
     const task = activeNativeTasks.get(id);
     if (task) {
       try {
         await task.cancelAsync();
       } catch (_) {}
-      activeNativeTasks.delete(id);
+      activeUploadRegistry.unregisterNativeUploadTask(id);
     }
 
-    await this.updateUploadQueueItem(id, {
+    await queueStore.updateUploadQueueItem(id, {
       status: 'paused',
       stage: 'Paused',
     });
@@ -98,7 +53,7 @@ export const uploadQueueService = {
 
   async resumeUpload(id: string): Promise<void> {
     console.log(`[Queue] Resuming upload: ${id}`);
-    await this.updateUploadQueueItem(id, {
+    await queueStore.updateUploadQueueItem(id, {
       status: 'pending',
       stage: 'Queued',
       progress: 0,
@@ -111,191 +66,65 @@ export const uploadQueueService = {
 
   async cancelUpload(id: string): Promise<void> {
     console.log(`[Queue] Cancelling upload: ${id}`);
-    const controller = activeControllers.get(id);
-    if (controller) {
-      controller.abort();
-      activeControllers.delete(id);
-    }
+    activeUploadRegistry.abortUpload(id);
 
     const task = activeNativeTasks.get(id);
     if (task) {
       try {
         await task.cancelAsync();
       } catch (_) {}
-      activeNativeTasks.delete(id);
+      activeUploadRegistry.unregisterNativeUploadTask(id);
     }
 
-    await this.removeUploadQueueItem(id);
+    await queueStore.removeUploadQueueItem(id);
   },
 
-  async recoverUploadQueue(): Promise<void> {
-    console.log('[Queue] Running upload queue recovery check...');
-    try {
-      const queue = await this.getUploadQueue();
-      let changed = false;
-      const recovered = queue.map(item => {
-        if (item.status === 'uploading') {
-          changed = true;
-          return {
-            ...item,
-            status: 'pending' as const,
-            stage: 'Recovered',
-            progress: 0,
-          };
-        }
-        return item;
-      });
-
-      if (changed) {
-        await this.saveUploadQueue(recovered);
-        await this.notifyListeners();
-      }
-    } catch (err) {
-      console.error('Queue recovery failed:', err);
-    }
-  },
-
-  subscribeToQueue(listener: QueueListener): () => void {
-    listeners.push(listener);
-    // Initial call
-    this.getUploadQueue().then(queue => listener(queue));
-    return () => {
-      listeners = listeners.filter(l => l !== listener);
-    };
-  },
-
-  async notifyListeners(): Promise<void> {
-    const queue = await this.getUploadQueue();
-    listeners.forEach(listener => {
-      try {
-        listener(queue);
-      } catch (err) {
-        console.error('Error in queue listener:', err);
-      }
-    });
-  },
-
+  // Delegate storage methods to queueStore
   async getUploadQueue(): Promise<UploadQueueItem[]> {
-    try {
-      const stored = await AsyncStorage.getItem(QUEUE_STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-      return [];
-    } catch (error) {
-      console.error('Failed to read upload queue:', error);
-      return [];
-    }
+    return queueStore.getUploadQueue();
   },
 
   async saveUploadQueue(queue: UploadQueueItem[]): Promise<void> {
-    try {
-      await AsyncStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue));
-    } catch (error) {
-      console.error('Failed to save upload queue:', error);
-    }
+    return queueStore.saveUploadQueue(queue);
   },
 
-  async addToUploadQueue(itemData: {
-    local_uri: string;
-    file_name: string;
-    file_type: 'image' | 'video' | 'document';
-    mime_type: string;
-    file_size: number;
-    destination: 'memories' | 'drive' | 'private';
-    folder_id: string | null;
-    is_private: boolean;
-    is_drive_file: boolean;
-    overlay_metadata: any | null;
-    local_thumbnail_uri?: string | null;
-    db_file_id?: string | null;
-  }): Promise<UploadQueueItem> {
-    const queue = await this.getUploadQueue();
-    const now = new Date().toISOString();
-    
-    const uploadMode = itemData.file_size > NORMAL_TELEGRAM_LIMIT_BYTES ? 'chunked' : 'normal';
-
-    const newItem: UploadQueueItem = {
-      id: Math.random().toString(36).substring(2, 11) + Date.now().toString(36),
-      local_uri: itemData.local_uri,
-      file_name: itemData.file_name,
-      file_type: itemData.file_type,
-      mime_type: itemData.mime_type,
-      file_size: itemData.file_size,
-      destination: itemData.destination,
-      folder_id: itemData.folder_id,
-      is_private: itemData.is_private,
-      is_drive_file: itemData.is_drive_file,
-      overlay_metadata: itemData.overlay_metadata,
-      status: 'pending',
-      progress: 0,
-      stage: 'Queued',
-      error_message: null,
-      created_at: now,
-      updated_at: now,
-      upload_mode: uploadMode,
-      large_file_id: null,
-      local_thumbnail_uri: itemData.local_thumbnail_uri || null,
-      db_file_id: itemData.db_file_id || null,
-    };
-
-    queue.push(newItem);
-    await this.saveUploadQueue(queue);
-    await this.notifyListeners();
-    
-    // Start processing asynchronously
+  async addToUploadQueue(itemData: any): Promise<UploadQueueItem> {
+    const newItem = await queueStore.addToUploadQueue(itemData);
     this.processUploadQueue().catch(err => {
       console.error('Asynchronous queue processing error:', err);
     });
-
     return newItem;
   },
 
   async updateUploadQueueItem(id: string, updates: Partial<UploadQueueItem>): Promise<void> {
-    const queue = await this.getUploadQueue();
-    const index = queue.findIndex(item => item.id === id);
-    if (index !== -1) {
-      queue[index] = {
-        ...queue[index],
-        ...updates,
-        updated_at: new Date().toISOString(),
-      };
-      await this.saveUploadQueue(queue);
-      await this.notifyListeners();
-    }
+    return queueStore.updateUploadQueueItem(id, updates);
   },
 
   async removeUploadQueueItem(id: string): Promise<void> {
-    let queue = await this.getUploadQueue();
-    queue = queue.filter(item => item.id !== id);
-    await this.saveUploadQueue(queue);
-    await this.notifyListeners();
+    return queueStore.removeUploadQueueItem(id);
   },
 
   async clearCompletedUploads(): Promise<void> {
-    let queue = await this.getUploadQueue();
-    queue = queue.filter(item => item.status !== 'completed');
-    await this.saveUploadQueue(queue);
-    await this.notifyListeners();
+    return queueStore.clearCompletedUploads();
   },
 
   async retryFailedUpload(id: string): Promise<void> {
-    const queue = await this.getUploadQueue();
-    const index = queue.findIndex(item => item.id === id);
-    if (index !== -1 && queue[index].status === 'failed') {
-      queue[index].status = 'pending';
-      queue[index].progress = 0;
-      queue[index].stage = 'Queued';
-      queue[index].error_message = null;
-      queue[index].updated_at = new Date().toISOString();
-      await this.saveUploadQueue(queue);
-      await this.notifyListeners();
-      
-      // Start processing asynchronously
-      this.processUploadQueue().catch(err => {
-        console.error('Asynchronous retry error:', err);
-      });
-    }
+    await queueStore.retryFailedUpload(id);
+    this.processUploadQueue().catch(err => {
+      console.error('Asynchronous retry error:', err);
+    });
+  },
+
+  subscribeToQueue(listener: (queue: UploadQueueItem[]) => void): () => void {
+    return queueStore.subscribeToQueue(listener);
+  },
+
+  async notifyListeners(): Promise<void> {
+    return queueStore.notifyListeners();
+  },
+
+  async recoverUploadQueue(): Promise<void> {
+    return queueStore.recoverUploadQueue();
   },
 
   async processUploadQueue(): Promise<void> {
@@ -307,7 +136,6 @@ export const uploadQueueService = {
     const settings = await settingsService.getSettings();
     const maxConcurrency = settings.uploadMode === 'Fast' ? 2 : 1;
 
-    // Check current running uploads in queue to get accurate active count
     const queue = await this.getUploadQueue();
     const activeItems = queue.filter(item => item.status === 'uploading');
     let activeCount = activeItems.length;
@@ -317,7 +145,6 @@ export const uploadQueueService = {
       return;
     }
 
-    // Find pending items to process
     const pendingItems = queue.filter(item => item.status === 'pending');
     if (pendingItems.length === 0) {
       console.log('No pending items in upload queue.');
@@ -335,9 +162,7 @@ export const uploadQueueService = {
       }
 
       activeCount++;
-      // Start processQueueItem asynchronously
       this.processQueueItem(pendingItem).finally(() => {
-        // Trigger queue processing again when an item finishes
         this.processUploadQueue().catch(err => {
           console.error('Error triggered after item finish:', err);
         });
@@ -350,7 +175,7 @@ export const uploadQueueService = {
     console.log(`Starting processing for queue item: ${pendingItem.file_name}`);
     let tempEncryptedUri: string | null = null;
     const controller = new AbortController();
-    activeControllers.set(itemId, controller);
+    activeUploadRegistry.registerAbortController(itemId, controller);
 
     try {
       // 1. Preparing stage
@@ -378,7 +203,6 @@ export const uploadQueueService = {
         if (finalSize <= 0) {
           try {
             if (finalUri.startsWith('webblob:')) {
-              const { getWebBlob } = require('./uploadQueueService');
               const key = finalUri.split(':')[1];
               const blob = await getWebBlob(key);
               finalSize = blob?.size || 0;
@@ -526,9 +350,8 @@ export const uploadQueueService = {
       }
       console.log(`Successfully uploaded and saved metadata for ${pendingItem.file_name}`);
     } catch (itemError: any) {
-      activeControllers.delete(itemId);
+      activeUploadRegistry.unregisterAbortController(itemId);
 
-      // Verify current item status before flagging it as failed
       const queue = await this.getUploadQueue();
       const currentItem = queue.find(item => item.id === itemId);
 
@@ -559,7 +382,6 @@ export const uploadQueueService = {
           error_message: `Attempt ${currentRetry + 1} failed: ${itemError.message || 'Unknown error'}`
         });
 
-        // Set foreground timer to trigger queue processing
         setTimeout(() => {
           this.processUploadQueue().catch(err => {
             console.error('Asynchronous retry trigger failed:', err);
@@ -574,7 +396,7 @@ export const uploadQueueService = {
         });
       }
     } finally {
-      activeControllers.delete(itemId);
+      activeUploadRegistry.unregisterAbortController(itemId);
       if (tempEncryptedUri && Platform.OS !== 'web') {
         try {
           await FileSystem.deleteAsync(tempEncryptedUri, { idempotent: true });

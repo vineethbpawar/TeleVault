@@ -154,7 +154,7 @@ async function uploadFileHelper(
       };
 
       if (localUri.startsWith('webblob:')) {
-        const { getWebBlob } = require('./uploadQueueService');
+        const { getWebBlob } = require('./webBlobStore');
         const key = localUri.split(':')[1];
         getWebBlob(key)
           .then((blob: Blob | null) => {
@@ -186,7 +186,7 @@ async function uploadFileHelper(
       }
     });
   } else {
-    const { uploadQueueService } = require('./uploadQueueService');
+    const { activeUploadRegistry } = require('./activeUploadRegistry');
     const task = FileSystem.createUploadTask(
       url,
       localUri,
@@ -205,7 +205,7 @@ async function uploadFileHelper(
     );
 
     if (itemId) {
-      uploadQueueService.registerNativeUploadTask(itemId, task);
+      activeUploadRegistry.registerNativeUploadTask(itemId, task);
     }
 
     try {
@@ -219,7 +219,7 @@ async function uploadFileHelper(
 
       const result = await task.uploadAsync();
       if (itemId) {
-        uploadQueueService.unregisterNativeUploadTask(itemId);
+        activeUploadRegistry.unregisterNativeUploadTask(itemId);
       }
 
       if (!result) {
@@ -232,7 +232,7 @@ async function uploadFileHelper(
       };
     } catch (err) {
       if (itemId) {
-        uploadQueueService.unregisterNativeUploadTask(itemId);
+        activeUploadRegistry.unregisterNativeUploadTask(itemId);
       }
       throw err;
     }
@@ -510,7 +510,7 @@ export const telegramService = {
     if (Platform.OS === 'web') {
       try {
         if (localUri.startsWith('webblob:')) {
-          const { getWebBlob } = require('./uploadQueueService');
+          const { getWebBlob } = require('./webBlobStore');
           const key = localUri.split(':')[1];
           const blob = await getWebBlob(key);
           fileSizeInMB = (blob?.size || 0) / (1024 * 1024);
