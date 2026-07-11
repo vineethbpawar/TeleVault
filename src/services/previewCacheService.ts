@@ -167,10 +167,29 @@ export const previewCacheService = {
   ): Promise<string | null> {
     let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
     if (resolvedLocalUri) {
-      if (Platform.OS === 'web' && resolvedLocalUri.startsWith('webblob:')) {
-        resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
+      if (Platform.OS === 'web') {
+        if (resolvedLocalUri.startsWith('file://') || resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
+          resolvedLocalUri = null;
+        } else if (resolvedLocalUri.startsWith('webblob:')) {
+          resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
+        }
+      } else {
+        if (resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
+          // Keep it
+        } else {
+          try {
+            const info = await FileSystem.getInfoAsync(resolvedLocalUri);
+            if (!info.exists) {
+              resolvedLocalUri = null;
+            }
+          } catch (_) {
+            resolvedLocalUri = null;
+          }
+        }
       }
-      return resolvedLocalUri;
+      if (resolvedLocalUri) {
+        return resolvedLocalUri;
+      }
     }
 
     if (file.media_url) {
@@ -229,7 +248,7 @@ export const previewCacheService = {
       let resolvedLocalUri = file.local_uri || file.local_thumbnail_uri || file.overlay_metadata?.local_uri;
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
-          if (resolvedLocalUri.startsWith('file://')) {
+          if (resolvedLocalUri.startsWith('file://') || resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
             // Ignore native file paths on Web
           } else {
             if (resolvedLocalUri.startsWith('webblob:')) {
@@ -244,6 +263,13 @@ export const previewCacheService = {
             }
           }
         } else {
+          if (resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
+            return {
+              type: 'image',
+              previewUri: resolvedLocalUri,
+              fallbackIcon,
+            };
+          }
           try {
             const info = await FileSystem.getInfoAsync(resolvedLocalUri);
             if (info.exists) {
@@ -337,7 +363,7 @@ export const previewCacheService = {
       let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
-          if (resolvedLocalUri.startsWith('file://')) {
+          if (resolvedLocalUri.startsWith('file://') || resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
             // Ignore native file paths on Web
           } else {
             if (resolvedLocalUri.startsWith('webblob:')) {
@@ -346,12 +372,16 @@ export const previewCacheService = {
             playableUri = resolvedLocalUri;
           }
         } else {
-          try {
-            const info = await FileSystem.getInfoAsync(resolvedLocalUri);
-            if (info.exists) {
-              playableUri = resolvedLocalUri;
-            }
-          } catch (e) {}
+          if (resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
+            playableUri = resolvedLocalUri;
+          } else {
+            try {
+              const info = await FileSystem.getInfoAsync(resolvedLocalUri);
+              if (info.exists) {
+                playableUri = resolvedLocalUri;
+              }
+            } catch (e) {}
+          }
         }
       }
 
@@ -408,7 +438,7 @@ export const previewCacheService = {
 
       if (file.local_thumbnail_uri) {
         if (Platform.OS === 'web') {
-          if (file.local_thumbnail_uri.startsWith('file://')) {
+          if (file.local_thumbnail_uri.startsWith('file://') || file.local_thumbnail_uri.startsWith('ph://') || file.local_thumbnail_uri.startsWith('assets-library://')) {
             // Ignore native file paths on Web
           } else {
             let thumbUri = file.local_thumbnail_uri;
@@ -421,13 +451,18 @@ export const previewCacheService = {
             }
           }
         } else {
-          try {
-            const info = await FileSystem.getInfoAsync(file.local_thumbnail_uri);
-            if (info.exists) {
-              previewUri = file.local_thumbnail_uri;
-              hasLocalThumb = true;
-            }
-          } catch (e) {}
+          if (file.local_thumbnail_uri.startsWith('ph://') || file.local_thumbnail_uri.startsWith('assets-library://')) {
+            previewUri = file.local_thumbnail_uri;
+            hasLocalThumb = true;
+          } else {
+            try {
+              const info = await FileSystem.getInfoAsync(file.local_thumbnail_uri);
+              if (info.exists) {
+                previewUri = file.local_thumbnail_uri;
+                hasLocalThumb = true;
+              }
+            } catch (e) {}
+          }
         }
       }
 
@@ -501,7 +536,7 @@ export const previewCacheService = {
     let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
     if (resolvedLocalUri) {
       if (Platform.OS === 'web') {
-        if (resolvedLocalUri.startsWith('file://')) {
+        if (resolvedLocalUri.startsWith('file://') || resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
           // Ignore native file paths on Web
         } else {
           if (resolvedLocalUri.startsWith('webblob:')) {
@@ -516,6 +551,13 @@ export const previewCacheService = {
           }
         }
       } else {
+        if (resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
+          return {
+            type: fileType,
+            previewUri: resolvedLocalUri,
+            fallbackIcon,
+          };
+        }
         try {
           const info = await FileSystem.getInfoAsync(resolvedLocalUri);
           if (info.exists) {

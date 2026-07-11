@@ -15,6 +15,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError
 
   if (Platform.OS === 'web') {
     const videoRef = useRef<HTMLVideoElement>(null);
+    console.log('[DEBUG_VIEWER] VideoPlayer Web before rendering:', {
+      id: undefined,
+      type: 'video',
+      telegram_file_id: undefined,
+      preview_url: undefined,
+      thumbnail_url: undefined,
+      local_uri: undefined,
+      resolvedUri: source
+    });
 
     useEffect(() => {
       const video = videoRef.current;
@@ -83,6 +92,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError
   }
 
   // Native iOS/Android implementation using expo-video
+  console.log('[DEBUG_VIEWER] VideoPlayer Native before rendering:', {
+    id: undefined,
+    type: 'video',
+    telegram_file_id: undefined,
+    preview_url: undefined,
+    thumbnail_url: undefined,
+    local_uri: undefined,
+    resolvedUri: source
+  });
   const player = useVideoPlayer(source, (playerInstance) => {
     playerInstance.loop = true;
     playerInstance.bufferOptions = {

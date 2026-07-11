@@ -18,6 +18,16 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
 }) => {
   if (!visible || !mediaUrl) return null;
 
+  console.log('[DEBUG_VIEWER] MediaViewer before rendering:', {
+    id: undefined,
+    type: mediaType,
+    telegram_file_id: undefined,
+    preview_url: undefined,
+    thumbnail_url: undefined,
+    local_uri: undefined,
+    resolvedUri: mediaUrl
+  });
+
   return (
     <Modal
       visible={visible}

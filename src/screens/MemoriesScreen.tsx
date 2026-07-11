@@ -416,6 +416,16 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
     // Track recently viewed file
     searchService.trackFileViewed(item.id);
 
+    console.log('[DEBUG_VIEWER] MemoriesScreen before navigation:', {
+      id: item.id,
+      type: item.file_type || (item as any).type,
+      telegram_file_id: item.telegram_file_id,
+      preview_url: (item as any).preview_url,
+      thumbnail_url: (item as any).thumbnail_url,
+      local_uri: item.local_thumbnail_uri || item.overlay_metadata?.local_uri || (item as any).local_uri,
+      resolvedUri: undefined
+    });
+
     navigation.navigate('MemoriesViewer', {
       files: filteredList,
       initialIndex: index >= 0 ? index : 0,

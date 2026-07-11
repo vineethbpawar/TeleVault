@@ -145,6 +145,17 @@ const ViewerItem = React.memo<{
     );
   }
 
+  // Log resolved values right before rendering
+  console.log('[DEBUG_VIEWER] ViewerItem before rendering:', {
+    id: file.id,
+    type: file.file_type || (file as any).type,
+    telegram_file_id: file.telegram_file_id,
+    preview_url: (file as any).preview_url,
+    thumbnail_url: (file as any).thumbnail_url,
+    local_uri: file.local_thumbnail_uri || file.overlay_metadata?.local_uri || (file as any).local_uri,
+    resolvedUri: file.file_type === 'video' ? resolved.playableUri : resolved.previewUri
+  });
+
   if (resolved.loading) {
     return (
       <View style={styles.itemContainer}>
@@ -262,6 +273,18 @@ const ViewerItem = React.memo<{
 
 export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => {
   const { files: initialFiles, initialIndex } = route.params;
+  
+  const targetItem = initialFiles?.[initialIndex];
+  console.log('[DEBUG_VIEWER] MemoriesViewerScreen immediately after receiving route params:', {
+    id: targetItem?.id,
+    type: targetItem?.file_type || (targetItem as any)?.type,
+    telegram_file_id: targetItem?.telegram_file_id,
+    preview_url: (targetItem as any)?.preview_url,
+    thumbnail_url: (targetItem as any)?.thumbnail_url,
+    local_uri: targetItem?.local_thumbnail_uri || targetItem?.overlay_metadata?.local_uri || (targetItem as any)?.local_uri,
+    resolvedUri: undefined
+  });
+
   const insets = useSafeAreaInsets();
   
   const [files, setFiles] = useState<TeleVaultFile[]>(initialFiles);
