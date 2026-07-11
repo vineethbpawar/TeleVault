@@ -210,9 +210,7 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
 
   const loadMemories = async (showSpinner = true) => {
     console.log("MEMORIES STEP 1: loadMemories called, showSpinner =", showSpinner);
-    // Optimistic check: Only show spinner if files list is empty
-    const shouldShowSpinner = showSpinner && files.length === 0;
-    if (shouldShowSpinner) setLoading(true);
+    if (showSpinner) setLoading(true);
     try {
       console.log("MEMORIES STEP 2: Calling fileService.fetchMemories()");
       let data = await fileService.fetchMemories();
@@ -234,12 +232,6 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
       }
       console.log("MEMORIES STEP 5: Setting files state");
       setFiles(data);
-      if (data && data.length > 0) {
-        console.log("MEMORIES STEP 6: Calling pregenerateThumbnailsInBackground");
-        previewCacheService.pregenerateThumbnailsInBackground(data);
-        console.log("MEMORIES STEP 7: Calling evictCacheIfLimitExceeded");
-        previewCacheService.evictCacheIfLimitExceeded(50 * 1024 * 1024);
-      }
       console.log("MEMORIES STEP 8: Success path completed");
     } catch (error: any) {
       console.error('MEMORIES STEP ERROR: Failed to load memories:', error);
@@ -249,27 +241,6 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
       setRefreshing(false);
     }
   };
-
-  // Load cached memories first on mount/focus to prevent blocking loader spinner
-  useEffect(() => {
-    if (isFocused && filterType !== 'private') {
-      const loadFromCache = async () => {
-        try {
-          const cached = await storageService.getItem('televault_cached_memories');
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setFiles(parsed);
-              setLoading(false); // Hide spinner instantly
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to load cached memories:', e);
-        }
-      };
-      loadFromCache();
-    }
-  }, [isFocused, filterType]);
 
   useEffect(() => {
     console.log("MEMORIES EFFECT 1: Fired, isFocused =", isFocused, "filterType =", filterType, "isUnlocked =", isUnlocked);
@@ -348,18 +319,37 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const getFilteredFiles = () => {
-    const filters: SearchFilters = {
-      query: searchQuery,
-      fileType: (filterType === 'image' || filterType === 'video') ? filterType : 'all',
-      isFavorite: filterType === 'favorites' ? true : undefined,
-      isArchived: filterType === 'archive' ? true : undefined,
-      isDeleted: filterType === 'trash' ? true : undefined,
-    };
-    // If not looking at archive or trash specifically, exclude them
-    if (filterType !== 'archive') filters.isArchived = false;
-    if (filterType !== 'trash') filters.isDeleted = false;
+    let list = [...files];
 
-    return searchService.filterFiles(files, filters);
+    // Sort by created_at descending
+    list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    // Simple text search
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(f => f.file_name.toLowerCase().includes(q) || (f.caption && f.caption.toLowerCase().includes(q)));
+    }
+
+    // Simple file type matching
+    if (filterType === 'image' || filterType === 'video') {
+      list = list.filter(f => f.file_type === filterType);
+    } else if (filterType === 'favorites') {
+      list = list.filter(f => f.is_favorite);
+    } else if (filterType === 'archive') {
+      list = list.filter(f => f.overlay_metadata?.is_archived);
+    } else if (filterType === 'trash') {
+      list = list.filter(f => f.overlay_metadata?.deleted_at);
+    }
+
+    // Unless looking at archive or trash specifically, exclude them
+    if (filterType !== 'archive') {
+      list = list.filter(f => !f.overlay_metadata?.is_archived);
+    }
+    if (filterType !== 'trash') {
+      list = list.filter(f => !f.overlay_metadata?.deleted_at);
+    }
+
+    return list;
   };
 
   const getOnThisDayMemories = () => {

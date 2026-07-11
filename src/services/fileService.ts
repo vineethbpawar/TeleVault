@@ -51,49 +51,24 @@ export const fileService = {
   },
 
   async fetchMemories(): Promise<TeleVaultFile[]> {
-    console.log("FETCHMEMORIES STEP A: fetchMemories starting");
+    console.log("FETCHMEMORIES: fetchMemories starting");
     const { data: { user } } = await supabase.auth.getUser();
-    console.log("FETCHMEMORIES STEP B: User resolved", user?.id);
     if (!user) throw new Error('Not logged in.');
 
-    try {
-      console.log("FETCHMEMORIES STEP C: Querying supabase 'files'");
-      const { data, error } = await supabase
-        .from('files')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_private', false)
-        .eq('is_drive_file', false)
-        .order('created_at', { ascending: false });
+    const { data, error } = await supabase
+      .from('files')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_private', false)
+      .eq('is_drive_file', false)
+      .order('created_at', { ascending: false });
 
-      if (error) {
-        console.log("FETCHMEMORIES STEP D: Supabase error", error);
-        throw new Error(error.message);
-      }
-
-      console.log("FETCHMEMORIES STEP E: Query success, length =", data?.length);
-      const files = (data || []) as TeleVaultFile[];
-      try {
-        console.log("FETCHMEMORIES STEP F: Caching memories locally");
-        await storageService.setItem('televault_cached_memories', JSON.stringify(files));
-        console.log("FETCHMEMORIES STEP G: Cache write success");
-      } catch (cacheErr) {
-        console.log("FETCHMEMORIES STEP H: Cache write failed", cacheErr);
-      }
-      return files;
-    } catch (err: any) {
-      console.warn('FETCHMEMORIES STEP I: Failed to fetch memories online, using local cache:', err);
-      try {
-        const cached = await storageService.getItem('televault_cached_memories');
-        if (cached) {
-          console.log("FETCHMEMORIES STEP J: Cached content parsed successfully");
-          return JSON.parse(cached) as TeleVaultFile[];
-        }
-      } catch (cacheReadErr) {
-        console.log("FETCHMEMORIES STEP K: Cached read failed", cacheReadErr);
-      }
-      throw err;
+    if (error) {
+      console.error("FETCHMEMORIES error:", error);
+      throw new Error(error.message);
     }
+
+    return (data || []) as TeleVaultFile[];
   },
 
   async fetchDriveFiles(folderId: string | null): Promise<TeleVaultFile[]> {

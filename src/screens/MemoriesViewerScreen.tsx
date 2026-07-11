@@ -582,9 +582,6 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
           decelerationRate="fast"
           snapToInterval={width}
           snapToAlignment="center"
-          onScrollBeginDrag={() => {
-            setIsDragging(true);
-          }}
           onMomentumScrollEnd={(e) => {
             const index = Math.round(e.nativeEvent.contentOffset.x / width);
             setCurrentIndex(index);
@@ -601,6 +598,9 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
             if (index !== currentIndex && index >= 0 && index < files.length) {
               setCurrentIndex(index);
             }
+            // Instantly pause video when user begins swiping/scrolling away from snap point
+            const isNearSnap = Math.abs(offset - index * width) < 2;
+            setIsDragging(!isNearSnap);
           }}
           scrollEventThrottle={16}
           renderItem={({ item, index }) => {

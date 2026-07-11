@@ -159,9 +159,7 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
   }, [isFocused, isUnlocked]);
 
   const loadContent = async (showSpinner = true) => {
-    // Optimistic: Only show spinner if folders and files lists are empty
-    const shouldShowSpinner = showSpinner && files.length === 0 && folders.length === 0;
-    if (shouldShowSpinner) setLoading(true);
+    if (showSpinner) setLoading(true);
     try {
       const parentId = currentFolder ? currentFolder.id : null;
       const [fetchedFolders, fetchedFiles, fetchedRecents, usage] = await Promise.all([
@@ -174,17 +172,6 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
       setFiles(fetchedFiles);
       setRecentFiles(fetchedRecents);
       setStorageUsage(usage);
-
-      // Cache the root folders and files locally to avoid spinners on next visit
-      if (!parentId) {
-        try {
-          await storageService.setItem('televault_cached_drive_folders', JSON.stringify(fetchedFolders));
-          await storageService.setItem('televault_cached_drive_files', JSON.stringify(fetchedFiles));
-          await storageService.setItem('televault_cached_drive_recents', JSON.stringify(fetchedRecents));
-        } catch (cacheErr) {
-          console.warn('Failed to cache drive root content:', cacheErr);
-        }
-      }
     } catch (error) {
       console.error('Failed to load drive content:', error);
     } finally {
@@ -192,30 +179,6 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
       setRefreshing(false);
     }
   };
-
-  // Load cached root content on mount / focus to prevent blocking loader spinner
-  useEffect(() => {
-    if (isFocused && !currentFolder && (isUnlocked || !pinModalVisible)) {
-      const loadFromCache = async () => {
-        try {
-          const cachedFolders = await storageService.getItem('televault_cached_drive_folders');
-          const cachedFiles = await storageService.getItem('televault_cached_drive_files');
-          const cachedRecents = await storageService.getItem('televault_cached_drive_recents');
-          
-          if (cachedFolders) setFolders(JSON.parse(cachedFolders));
-          if (cachedFiles) setFiles(JSON.parse(cachedFiles));
-          if (cachedRecents) setRecentFiles(JSON.parse(cachedRecents));
-          
-          if (cachedFolders || cachedFiles) {
-            setLoading(false); // Hide spinner instantly
-          }
-        } catch (e) {
-          console.warn('Failed to load cached drive content:', e);
-        }
-      };
-      loadFromCache();
-    }
-  }, [isFocused, currentFolder, isUnlocked, pinModalVisible]);
 
   useEffect(() => {
     if (isUnlocked || !pinModalVisible) {

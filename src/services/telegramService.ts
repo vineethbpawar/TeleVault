@@ -131,6 +131,11 @@ async function uploadFileHelper(
         }
       };
 
+      xhr.timeout = 45000; // 45 seconds timeout
+      xhr.ontimeout = () => {
+        reject(new Error('Upload request timed out'));
+      };
+
       xhr.onload = () => {
         resolve({
           status: xhr.status,
@@ -208,6 +213,16 @@ async function uploadFileHelper(
       activeUploadRegistry.registerNativeUploadTask(itemId, task);
     }
 
+    let timeoutId: any;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(async () => {
+        try {
+          await task.cancelAsync();
+        } catch (_) {}
+        reject(new Error('Upload task timed out'));
+      }, 60000); // 60 seconds timeout
+    });
+
     try {
       if (signal) {
         signal.addEventListener('abort', async () => {
@@ -217,7 +232,8 @@ async function uploadFileHelper(
         });
       }
 
-      const result = await task.uploadAsync();
+      const result = await Promise.race([task.uploadAsync(), timeoutPromise]);
+      clearTimeout(timeoutId);
       if (itemId) {
         activeUploadRegistry.unregisterNativeUploadTask(itemId);
       }

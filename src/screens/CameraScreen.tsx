@@ -625,7 +625,10 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           canvas.height = video.videoHeight || 720;
           const ctx = canvas.getContext('2d');
           
+          let isRecordingActive = true;
+          let animationFrameId: number;
           const drawFrame = () => {
+            if (!isRecordingActive) return;
             if (ctx && video && !video.paused && !video.ended) {
               const scale = 1 + zoomShared.value * 7;
               const sWidth = canvas.width / scale;
@@ -635,11 +638,16 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
               
               ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
             }
+            animationFrameId = requestAnimationFrame(drawFrame);
           };
 
           drawFrame();
-          const interval = setInterval(drawFrame, 1000 / 30);
-          webCanvasIntervalRef.current = interval;
+          webCanvasIntervalRef.current = {
+            stop: () => {
+              isRecordingActive = false;
+              cancelAnimationFrame(animationFrameId);
+            }
+          };
 
           if (typeof (canvas as any).captureStream === 'function') {
             const canvasStream = (canvas as any).captureStream(30);
@@ -789,7 +797,11 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     if (Platform.OS === 'web') {
       console.log('[RECORD_TRACE] 5. stopRecording called. Stopping Web MediaRecorder.');
       if (webCanvasIntervalRef.current) {
-        clearInterval(webCanvasIntervalRef.current);
+        if (webCanvasIntervalRef.current.stop) {
+          webCanvasIntervalRef.current.stop();
+        } else {
+          clearInterval(webCanvasIntervalRef.current);
+        }
         webCanvasIntervalRef.current = null;
       }
       if (webMediaRecorderRef.current && webMediaRecorderRef.current.state !== 'inactive') {
@@ -822,7 +834,11 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
       recordingIntervalRef.current = null;
     }
     if (webCanvasIntervalRef.current) {
-      clearInterval(webCanvasIntervalRef.current);
+      if (webCanvasIntervalRef.current.stop) {
+        webCanvasIntervalRef.current.stop();
+      } else {
+        clearInterval(webCanvasIntervalRef.current);
+      }
       webCanvasIntervalRef.current = null;
     }
     setIsRecording(false);
