@@ -417,7 +417,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
       let finalThumbUri = localThumbnailUri;
 
       if (Platform.OS === 'web') {
-        const { setWebBlob } = require('../services/uploadQueueService');
+        const { setWebBlob } = require('../services/webBlobStore');
         let mainBlob: Blob | null = null;
         if (uri.startsWith('data:')) {
           mainBlob = dataURItoBlob(uri);
