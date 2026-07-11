@@ -22,12 +22,12 @@ export const Screen: React.FC<ScreenProps> = ({
   const includeLeft = edges.includes('left');
   const includeRight = edges.includes('right');
 
-  const paddingStyle = Platform.OS === 'web' ? {
-    paddingTop: includeTop ? 'max(env(safe-area-inset-top), 12px)' : '0px',
-    paddingBottom: includeBottom ? 'max(env(safe-area-inset-bottom), 12px)' : '0px',
-    paddingLeft: includeLeft ? 'max(env(safe-area-inset-left), 12px)' : '0px',
-    paddingRight: includeRight ? 'max(env(safe-area-inset-right), 12px)' : '0px',
-  } as any : {
+  const paddingStyle = Platform.OS === 'web' ? ({
+    paddingTop: includeTop ? 'max(env(safe-area-inset-top), 12px)' : 0,
+    paddingBottom: includeBottom ? 'max(env(safe-area-inset-bottom), 12px)' : 0,
+    paddingLeft: includeLeft ? 'max(env(safe-area-inset-left), 12px)' : 0,
+    paddingRight: includeRight ? 'max(env(safe-area-inset-right), 12px)' : 0,
+  } as any) : {
     paddingTop: includeTop ? (insets.top > 0 ? insets.top : 12) : 0,
     paddingBottom: includeBottom ? (insets.bottom > 0 ? insets.bottom : 12) : 0,
     paddingLeft: includeLeft ? insets.left : 0,
@@ -44,11 +44,12 @@ export const Screen: React.FC<ScreenProps> = ({
       <View style={{ flex: 1, backgroundColor }}>
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={[styles.scrollContent, paddingStyle]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {children}
+          <View style={[styles.scrollContent, paddingStyle]}>
+            {children}
+          </View>
         </ScrollView>
       </View>
     );

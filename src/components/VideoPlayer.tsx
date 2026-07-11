@@ -1,7 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, Platform } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 
 interface VideoPlayerProps {
   source: string;
@@ -12,6 +12,29 @@ interface VideoPlayerProps {
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError, paused = false }) => {
   const isFocused = useIsFocused();
+  const [isNavigatingAway, setIsNavigatingAway] = useState(false);
+
+  let navigation: any = null;
+  try {
+    navigation = useNavigation();
+  } catch (_) {}
+
+  useEffect(() => {
+    if (!navigation) return;
+
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      setIsNavigatingAway(true);
+    });
+
+    const unsubscribeBeforeRemove = navigation.addListener('beforeRemove', () => {
+      setIsNavigatingAway(true);
+    });
+
+    return () => {
+      unsubscribeBlur();
+      unsubscribeBeforeRemove();
+    };
+  }, [navigation]);
 
   if (Platform.OS === 'web') {
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -36,7 +59,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError
 
       video.addEventListener('error', handleWebError);
 
-      if (isFocused && !paused) {
+      if (isFocused && !paused && !isNavigatingAway) {
         // Load the source only if it's not already loaded/playing this source
         if (!video.src || video.src.indexOf(source) === -1) {
           video.src = source;
@@ -71,7 +94,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError
           video.load();
         } catch (_) {}
       };
-    }, [source, isFocused, paused]);
+    }, [source, isFocused, paused, isNavigatingAway]);
 
     return (
       <View style={[styles.container, style]}>
@@ -112,12 +135,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError
   // Play/pause based on navigation focus status and paused prop
   useEffect(() => {
     if (!player) return;
-    if (isFocused && !paused) {
+    if (isFocused && !paused && !isNavigatingAway) {
       player.play();
     } else {
       player.pause();
     }
-  }, [player, isFocused, paused]);
+  }, [player, isFocused, paused, isNavigatingAway]);
 
   // Setup player options, register status listener, and perform deep cleanup on unmount
   useEffect(() => {
@@ -131,7 +154,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError
 
     const subscription = player.addListener('statusChange', (statusPayload: any) => {
       const status = typeof statusPayload === 'string' ? statusPayload : statusPayload?.status;
-      if (status === 'readyToPlay' && isFocused && !paused) {
+      if (status === 'readyToPlay' && isFocused && !paused && !isNavigatingAway) {
         player.play();
       } else if (status === 'error') {
         const err = statusPayload?.error || { message: 'Video playback error' };
@@ -147,7 +170,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError
         player.replace(null); // Instantly unload video source, stop decoder, and silence playback
       } catch (_) {}
     };
-  }, [player]);
+  }, [player, isFocused, paused, isNavigatingAway]);
 
   return (
     <View style={[styles.container, style]}>

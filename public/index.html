@@ -37,12 +37,27 @@
       html,
       body {
         height: 100%;
+        height: -webkit-fill-available;
         margin: 0;
         padding: 0;
         background-color: #0b0e1b;
         overscroll-behavior-y: contain; /* Disable pull-to-refresh */
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+      }
+
+      /* PWA Safe Area Classes */
+      .safe-top {
+        padding-top: max(env(safe-area-inset-top), 12px) !important;
+      }
+      .safe-bottom {
+        padding-bottom: max(env(safe-area-inset-bottom), 12px) !important;
+      }
+      .safe-left {
+        padding-left: max(env(safe-area-inset-left), 12px) !important;
+      }
+      .safe-right {
+        padding-right: max(env(safe-area-inset-right), 12px) !important;
       }
 
       /* Force premium Outfit font across all React Native Web DOM nodes */
@@ -79,6 +94,7 @@
       #root {
         display: flex;
         height: 100%;
+        height: -webkit-fill-available;
         flex: 1;
       }
     </style>

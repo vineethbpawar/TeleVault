@@ -52,7 +52,8 @@ export const fileService = {
 
   async fetchMemories(): Promise<TeleVaultFile[]> {
     console.log("FETCHMEMORIES: fetchMemories starting");
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) throw new Error('Not logged in.');
 
     const { data, error } = await supabase

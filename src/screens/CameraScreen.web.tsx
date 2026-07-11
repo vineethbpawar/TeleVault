@@ -990,7 +990,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
     if (!showToolsPanel) return null;
 
     return (
-      <View style={[styles.toolsPanelContainer, { top: insets.top > 0 ? insets.top + 50 : 70 }]}>
+      <View style={[styles.toolsPanelContainer, { top: (Platform.OS === 'web' ? 'calc(50px + env(safe-area-inset-top))' : (insets.top > 0 ? insets.top + 50 : 70)) as any }]}>
         <View style={styles.toolsPanelHeader}>
           <Text style={styles.toolsPanelTitle}>Quick Tools</Text>
           <TouchableOpacity onPress={() => setShowToolsPanel(false)}>
@@ -1186,7 +1186,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
           {renderLiveOverlay()}
 
           {/* Upper Safe Overlay (Avatar, Pill, Settings) */}
-          <View style={[styles.newTopBar, { top: 20 }]}>
+          <View style={[styles.newTopBar, { top: (Platform.OS === 'web' ? 'calc(10px + env(safe-area-inset-top))' : (insets.top > 0 ? insets.top + 10 : 20)) as any }]}>
             <TouchableOpacity
               style={styles.profileShortcut}
               onPress={() => navigation.navigate('MyProfile')}
@@ -1226,7 +1226,7 @@ export const CameraScreen: React.FC<Props> = ({ navigation, route }) => {
 
           {/* Recording Indicator */}
           {isRecording && (
-            <View style={[styles.recordingIndicator, { top: 80 }]}>
+            <View style={[styles.recordingIndicator, { top: (Platform.OS === 'web' ? 'calc(70px + env(safe-area-inset-top))' : (insets.top > 0 ? insets.top + 60 : 80)) as any }]}>
               <View style={styles.recordingRedDot} />
               <Text style={styles.recordingTimerText}>{formatDuration(recordingDuration)}</Text>
             </View>

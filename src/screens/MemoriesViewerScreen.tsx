@@ -15,6 +15,7 @@ import {
   Pressable,
   Animated,
   ScrollView,
+  PanResponder,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -309,6 +310,16 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
   const [folderPickerVisible, setFolderPickerVisible] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
 
+  // Snapchat-style story viewing progress and pan gestures
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const progressVal = useRef(0);
+  const currentDuration = useRef(5000); // default 5s
+  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  // Swipe-down-to-dismiss translation values
+  const translateY = useRef(new Animated.Value(0)).current;
+  const overlayOpacity = useRef(new Animated.Value(1)).current;
+
   // Sync Favorite status
   useEffect(() => {
     if (currentFile) {
@@ -347,6 +358,46 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
         .catch(console.error);
     }
   }, [folderPickerVisible]);
+
+  // Track progress bar value updates
+  useEffect(() => {
+    const listenerId = progressAnim.addListener(({ value }) => {
+      progressVal.current = value;
+    });
+    return () => {
+      progressAnim.removeListener(listenerId);
+    };
+  }, []);
+
+  const startProgress = (resume = false) => {
+    if (animationRef.current) {
+      animationRef.current.stop();
+    }
+
+    const startVal = resume ? progressVal.current : 0;
+    progressAnim.setValue(startVal);
+
+    const remainingTime = currentDuration.current * (1 - startVal / 100);
+
+    const anim = Animated.timing(progressAnim, {
+      toValue: 100,
+      duration: Math.max(0, remainingTime),
+      useNativeDriver: false,
+    });
+
+    animationRef.current = anim;
+    anim.start(({ finished }) => {
+      if (finished) {
+        goToNext();
+      }
+    });
+  };
+
+  const pauseProgress = () => {
+    if (animationRef.current) {
+      animationRef.current.stop();
+    }
+  };
 
   const resetHideTimer = () => {
     if (hideTimerRef.current) {
@@ -387,7 +438,9 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
     if (currentIndex < files.length - 1) {
       const nextIndex = currentIndex + 1;
       setCurrentIndex(nextIndex);
-      flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
+      flatListRef.current?.scrollToIndex({ index: nextIndex, animated: false });
+    } else {
+      navigation.goBack();
     }
   };
 
@@ -395,19 +448,109 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
     if (currentIndex > 0) {
       const prevIndex = currentIndex - 1;
       setCurrentIndex(prevIndex);
-      flatListRef.current?.scrollToIndex({ index: prevIndex, animated: true });
+      flatListRef.current?.scrollToIndex({ index: prevIndex, animated: false });
+    } else {
+      // Restart current snap
+      progressAnim.setValue(0);
+      progressVal.current = 0;
+      startProgress(false);
     }
   };
 
   const handleHoldStart = () => {
     setIsHoldActive(true);
     setControlsVisible(false); // Hide controls on hold (Snapchat UX)
+    pauseProgress();
   };
 
   const handleHoldEnd = () => {
     setIsHoldActive(false);
     setControlsVisible(true);
+    startProgress(true); // Resume
   };
+
+  // Sync index changes and timing durations
+  useEffect(() => {
+    if (files.length === 0) return;
+
+    const file = files[currentIndex];
+    if (file) {
+      if (file.file_type === 'video') {
+        currentDuration.current = (file.overlay_metadata?.duration || 10) * 1000;
+      } else {
+        currentDuration.current = 5000; // 5 seconds for images
+      }
+    }
+
+    progressAnim.setValue(0);
+    progressVal.current = 0;
+
+    if (!isHoldActive && !isDragging) {
+      startProgress(false);
+    }
+
+    return () => {
+      if (animationRef.current) {
+        animationRef.current.stop();
+      }
+    };
+  }, [currentIndex, files]);
+
+  // Pause when modals or dragging are active
+  const isSheetOpen = infoVisible || renameVisible || captionVisible || folderPickerVisible;
+
+  useEffect(() => {
+    if (isSheetOpen || isDragging) {
+      pauseProgress();
+    } else {
+      startProgress(true);
+    }
+  }, [isSheetOpen, isDragging]);
+
+  // Swipe-down-to-dismiss gesture setup
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return Math.abs(gestureState.dy) > 10 && gestureState.vy > 0 && !isHoldActive && !isSheetOpen;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (gestureState.dy > 0) {
+          translateY.setValue(gestureState.dy);
+          const newOpacity = Math.max(0.3, 1 - gestureState.dy / 400);
+          overlayOpacity.setValue(newOpacity);
+        }
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (gestureState.dy > 120 || gestureState.vy > 0.8) {
+          Animated.parallel([
+            Animated.timing(translateY, {
+              toValue: height,
+              duration: 220,
+              useNativeDriver: true,
+            }),
+            Animated.timing(overlayOpacity, {
+              toValue: 0,
+              duration: 220,
+              useNativeDriver: true,
+            })
+          ]).start(() => {
+            navigation.goBack();
+          });
+        } else {
+          Animated.parallel([
+            Animated.spring(translateY, {
+              toValue: 0,
+              useNativeDriver: true,
+            }),
+            Animated.spring(overlayOpacity, {
+              toValue: 1,
+              useNativeDriver: true,
+            })
+          ]).start();
+        }
+      },
+    })
+  ).current;
 
   const formatSize = (bytes: number | null | undefined): string => {
     if (!bytes) return '0 B';
@@ -583,7 +726,16 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
   });
 
   return (
-    <View style={styles.container}>
+    <Animated.View 
+      style={[
+        styles.container,
+        {
+          transform: [{ translateY }],
+          opacity: overlayOpacity,
+        }
+      ]}
+      {...panResponder.panHandlers}
+    >
       {/* Immersive Touch Gesture Area wrapping the swiper */}
       <View 
         style={StyleSheet.absoluteFill}
@@ -634,7 +786,7 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
                 isActive={index === currentIndex} 
                 isNearby={isNearby}
                 cachedValue={resolvedCache[item.id]}
-                paused={isHoldActive || isDragging}
+                paused={isHoldActive || isDragging || isSheetOpen}
                 onTapLeft={goToPrevious}
                 onTapRight={goToNext}
                 onToggleControls={handleToggleControls}
@@ -647,9 +799,55 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
         />
       </View>
 
+      {/* Snapchat-style Top Progress Indicator Row */}
+      {controlsVisible && (
+        <View 
+          style={[
+            styles.progressContainer, 
+            { 
+              top: (Platform.OS === 'web' 
+                ? 'calc(env(safe-area-inset-top) + 12px)' 
+                : (insets.top > 0 ? insets.top + 6 : 12)) as any
+            }
+          ]}
+        >
+          {files.map((file, idx) => {
+            return (
+              <View key={file.id} style={styles.progressBarBackground}>
+                <Animated.View
+                  style={[
+                    styles.progressBarActive,
+                    {
+                      width: idx < currentIndex
+                        ? '100%'
+                        : idx > currentIndex
+                          ? '0%'
+                          : progressAnim.interpolate({
+                              inputRange: [0, 100],
+                              outputRange: ['0%', '100%'],
+                            }),
+                    },
+                  ]}
+                />
+              </View>
+            );
+          })}
+        </View>
+      )}
+
       {/* Top Header Overlay */}
       {controlsVisible && (
-        <View style={[styles.headerOverlay, { top: insets.top || 16 }]} pointerEvents="box-none">
+        <View 
+          style={[
+            styles.headerOverlay, 
+            { 
+              top: (Platform.OS === 'web' 
+                ? 'calc(env(safe-area-inset-top) + 24px)' 
+                : (insets.top > 0 ? insets.top + 16 : 24)) as any
+            }
+          ]} 
+          pointerEvents="box-none"
+        >
           <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
             <X size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -669,7 +867,17 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
 
       {/* Bottom Actions Overlay */}
       {controlsVisible && (
-        <View style={[styles.bottomOverlay, { bottom: insets.bottom || 16 }]} pointerEvents="box-none">
+        <View 
+          style={[
+            styles.bottomOverlay, 
+            { 
+              bottom: (Platform.OS === 'web' 
+                ? 'calc(env(safe-area-inset-bottom) + 24px)' 
+                : (insets.bottom > 0 ? insets.bottom + 16 : 24)) as any
+            }
+          ]} 
+          pointerEvents="box-none"
+        >
           <TouchableOpacity style={styles.actionBtn} onPress={triggerCaption}>
             <Type size={18} color="#FFFFFF" />
             <Text style={styles.actionBtnLabel}>Caption</Text>
@@ -701,7 +909,16 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
       >
         <View style={styles.modalBg}>
           <TouchableOpacity style={styles.modalDismissHitbox} onPress={() => setInfoVisible(false)} />
-          <View style={[styles.sheetContent, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+          <View 
+            style={[
+              styles.sheetContent, 
+              { 
+                paddingBottom: (Platform.OS === 'web' 
+                  ? 'calc(env(safe-area-inset-bottom) + 20px)' 
+                  : Math.max(insets.bottom, 20)) as any
+              }
+            ]}
+          >
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Memory Details</Text>
               <TouchableOpacity onPress={() => setInfoVisible(false)}>
@@ -865,7 +1082,7 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
           </View>
         </View>
       </Modal>
-    </View>
+    </Animated.View>
   );
 };
 
@@ -1102,6 +1319,28 @@ const styles = StyleSheet.create({
     color: '#FFFC00',
     fontSize: 14,
     fontWeight: '800',
+  },
+  progressContainer: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 4,
+    zIndex: 15,
+  },
+  progressBarBackground: {
+    flex: 1,
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
+    borderRadius: 2,
+    marginHorizontal: 2,
+    overflow: 'hidden',
+  },
+  progressBarActive: {
+    height: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 2,
   },
 });
 

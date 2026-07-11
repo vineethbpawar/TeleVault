@@ -250,7 +250,15 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="UserProfile" component={UserProfileScreen} />
               <Stack.Screen name="MyProfile" component={MyProfileScreen} />
               <Stack.Screen name="SendTo" component={SendToScreen} />
-              <Stack.Screen name="MemoriesViewer" component={MemoriesViewerScreen} />
+              <Stack.Screen
+                name="MemoriesViewer"
+                component={MemoriesViewerScreen}
+                options={{
+                  presentation: 'transparentModal',
+                  animation: 'fade',
+                  contentStyle: { backgroundColor: 'transparent' }
+                }}
+              />
               <Stack.Screen name="StorageAnalytics" component={StorageAnalyticsScreen} />
             </>
           )

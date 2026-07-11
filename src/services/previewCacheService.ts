@@ -322,11 +322,7 @@ export const previewCacheService = {
               const { encryptionService } = require('./encryptionService');
               previewUri = await encryptionService.decryptFile(url, file.file_name, file.mime_type);
             } else {
-              const { fetchWithRetry } = require('./telegramService');
-              const res = await fetchWithRetry(url, { signal });
-              if (!res.ok) throw new Error(`HTTP ${res.status}`);
-              const blob = await res.blob();
-              previewUri = URL.createObjectURL(blob);
+              previewUri = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
             }
           } else {
             if (file.is_private) {
@@ -412,11 +408,7 @@ export const previewCacheService = {
                 }
               } else {
                 if (Platform.OS === 'web') {
-                  const { fetchWithRetry } = require('./telegramService');
-                  const res = await fetchWithRetry(url, { signal });
-                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                  const blob = await res.blob();
-                  playableUri = URL.createObjectURL(blob);
+                  playableUri = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
                 } else {
                   playableUri = url;
                 }
@@ -592,11 +584,7 @@ export const previewCacheService = {
               const { encryptionService } = require('./encryptionService');
               previewUri = await encryptionService.decryptFile(url, file.file_name, file.mime_type);
             } else {
-              const { fetchWithRetry } = require('./telegramService');
-              const res = await fetchWithRetry(url, { signal });
-              if (!res.ok) throw new Error(`HTTP ${res.status}`);
-              const blob = await res.blob();
-              previewUri = URL.createObjectURL(blob);
+              previewUri = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
             }
           } else {
             if (file.is_private) {

@@ -214,9 +214,14 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
     return unsubscribe;
   }, []);
 
+  const filesRef = React.useRef(files);
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
+
   const loadMemories = async (showSpinner = true) => {
     console.log("MEMORIES STEP 1: loadMemories called, showSpinner =", showSpinner);
-    if (showSpinner) setLoading(true);
+    if (showSpinner && filesRef.current.length === 0) setLoading(true);
     try {
       console.log("MEMORIES STEP 2: Calling fileService.fetchMemories()");
       let data = await fileService.fetchMemories();
@@ -225,15 +230,19 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
       // If private mode is active and unlocked, load private memories
       if (filterType === 'private' && isUnlocked) {
         console.log("MEMORIES STEP 4: Loading private memories");
-        const { data: privData, error } = await supabase
-          .from('files')
-          .select('*')
-          .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
-          .eq('is_private', true)
-          .eq('is_drive_file', false)
-          .order('created_at', { ascending: false });
-        if (!error && privData) {
-          data = privData as TeleVaultFile[];
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id;
+        if (userId) {
+          const { data: privData, error } = await supabase
+            .from('files')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('is_private', true)
+            .eq('is_drive_file', false)
+            .order('created_at', { ascending: false });
+          if (!error && privData) {
+            data = privData as TeleVaultFile[];
+          }
         }
       }
       console.log("MEMORIES STEP 5: Setting files state");
