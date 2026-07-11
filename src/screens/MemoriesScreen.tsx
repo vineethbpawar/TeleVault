@@ -582,9 +582,16 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.cancelSelectionHeaderBtnText}>Cancel</Text>
             </TouchableOpacity>
           ) : (
-            <Text style={styles.headerCountBadge}>
-              {files.length === 1 ? '1 Memory' : `${files.length} Memories`}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {files.length > 0 && (
+                <TouchableOpacity onPress={() => { setIsSelectionMode(true); setSelectedIds([]); }} style={styles.selectHeaderBtn}>
+                  <Text style={styles.selectHeaderBtnText}>Select</Text>
+                </TouchableOpacity>
+              )}
+              <Text style={styles.headerCountBadge}>
+                {files.length === 1 ? '1 Memory' : `${files.length} Memories`}
+              </Text>
+            </View>
           )}
         </View>
         {!isSelectionMode && (
@@ -968,6 +975,18 @@ const styles = StyleSheet.create({
   },
   cancelSelectionHeaderBtnText: {
     color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  selectHeaderBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: '#FFFC00',
+    borderRadius: 16,
+    marginRight: 8,
+  },
+  selectHeaderBtnText: {
+    color: '#000000',
     fontSize: 12,
     fontWeight: '700',
   },

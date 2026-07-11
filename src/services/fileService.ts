@@ -540,12 +540,47 @@ export const fileService = {
     return data as TeleVaultFile;
   },
 
+  async bulkUpdateOverlayMetadata(ids: string[], keyValues: Record<string, any>): Promise<void> {
+    if (!ids || ids.length === 0) return;
+    
+    // 1. Fetch current overlay_metadata for all IDs in one select query
+    const { data: currentFiles, error: fetchError } = await supabase
+      .from('files')
+      .select('id, overlay_metadata')
+      .in('id', ids);
+
+    if (fetchError || !currentFiles) {
+      throw new Error(fetchError?.message || 'Failed to fetch files for bulk update.');
+    }
+
+    // 2. Perform updates sequentially to avoid database lock contention and rate limits
+    for (const file of currentFiles) {
+      const currentMeta = (file.overlay_metadata && typeof file.overlay_metadata === 'object' && !Array.isArray(file.overlay_metadata))
+        ? file.overlay_metadata
+        : {};
+      const updatedMeta = {
+        ...currentMeta,
+        ...keyValues,
+      };
+
+      try {
+        const { error } = await supabase
+          .from('files')
+          .update({ overlay_metadata: updatedMeta })
+          .eq('id', file.id);
+        if (error) throw error;
+      } catch (err) {
+        console.error(`Failed to update metadata for file ${file.id}:`, err);
+      }
+    }
+  },
+
   async bulkArchive(ids: string[], archive: boolean): Promise<void> {
-    await Promise.all(ids.map(id => this.archiveFile(id, archive)));
+    await this.bulkUpdateOverlayMetadata(ids, { is_archived: archive });
   },
 
   async bulkHide(ids: string[], hide: boolean): Promise<void> {
-    await Promise.all(ids.map(id => this.hideFile(id, hide)));
+    await this.bulkUpdateOverlayMetadata(ids, { is_hidden: hide });
   },
 
   async bulkDelete(ids: string[], hardDelete: boolean = false): Promise<void> {
@@ -559,12 +594,12 @@ export const fileService = {
       }
     } else {
       const now = new Date().toISOString();
-      await Promise.all(ids.map(id => this.updateOverlayMetadata(id, { deleted_at: now })));
+      await this.bulkUpdateOverlayMetadata(ids, { deleted_at: now });
     }
   },
 
   async bulkRestore(ids: string[]): Promise<void> {
-    await Promise.all(ids.map(id => this.updateOverlayMetadata(id, { deleted_at: null })));
+    await this.bulkUpdateOverlayMetadata(ids, { deleted_at: null });
   },
 
   async bulkMove(ids: string[], targetFolderId: string | null): Promise<void> {
