@@ -88,10 +88,13 @@ const MemoryGridItem = React.memo<{
         </View>
       )}
       {isSelectionMode && (
-        <View style={[
-          styles.selectionOverlay,
-          isSelected && styles.selectionOverlaySelected
-        ]}>
+        <View 
+          pointerEvents="none"
+          style={[
+            styles.selectionOverlay,
+            isSelected && styles.selectionOverlaySelected
+          ]}
+        >
           <View style={[
             styles.checkbox,
             isSelected && styles.checkboxSelected
