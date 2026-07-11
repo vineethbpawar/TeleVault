@@ -37,6 +37,7 @@ import { storageService } from '../services/storageService';
 import { searchService, SearchFilters } from '../services/searchService';
 import Screen from '../components/Screen';
 import FilePreviewCard from '../components/FilePreviewCard';
+import { showToast } from '../components/ToastBanner';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'MemoriesTab'>,
@@ -44,7 +45,6 @@ type Props = CompositeScreenProps<
 >;
 
 const { width } = Dimensions.get('window');
-const GRID_SIZE = (width - 48) / 3;
 
 interface GroupedMemories {
   title: string;
@@ -53,17 +53,18 @@ interface GroupedMemories {
 
 const MemoryGridItem = React.memo<{
   item: TeleVaultFile;
+  size: number;
   onPress: () => void;
   onLongPress: () => void;
   isSelected: boolean;
   isSelectionMode: boolean;
-}>(({ item, onPress, onLongPress, isSelected, isSelectionMode }) => {
+}>(({ item, size, onPress, onLongPress, isSelected, isSelectionMode }) => {
   return (
-    <View style={{ margin: 4, position: 'relative' }}>
+    <View style={{ margin: 2, position: 'relative' }}>
       <FilePreviewCard
         file={item}
         variant="grid"
-        size={GRID_SIZE}
+        size={size}
         onPress={onPress}
         onLongPress={onLongPress}
       />
@@ -113,7 +114,8 @@ const MemoryGridItem = React.memo<{
          prev.item.telegram_file_id === next.item.telegram_file_id &&
          prev.item.is_favorite === next.item.is_favorite &&
          prev.isSelected === next.isSelected &&
-         prev.isSelectionMode === next.isSelectionMode;
+         prev.isSelectionMode === next.isSelectionMode &&
+         prev.size === next.size;
 });
 
 const OnThisDayGridItem = React.memo<{ item: TeleVaultFile; onPress: () => void }>(({ item, onPress }) => {
@@ -207,6 +209,21 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
   const isFocused = useIsFocused();
   const [configReady, setConfigReady] = useState<boolean | null>(telegramService.configReady);
 
+  // Dynamic grid state
+  const [numColumns, setNumColumns] = useState(3);
+  const [scrollY, setScrollY] = useState(0);
+
+  // Touch gesture state for pinch to zoom & two finger drag select
+  const touchDistanceRef = React.useRef<number | null>(null);
+
+  // Quick Action menu states
+  const [activeMenuFile, setActiveMenuFile] = useState<TeleVaultFile | null>(null);
+  const [captionModalVisible, setCaptionModalVisible] = useState(false);
+  const [captionFile, setCaptionFile] = useState<TeleVaultFile | null>(null);
+  const [captionText, setCaptionText] = useState('');
+
+  const gridSize = (width - 24 - (numColumns * 4)) / numColumns;
+
   useEffect(() => {
     const unsubscribe = telegramService.subscribeConfigReady(() => {
       setConfigReady(telegramService.configReady);
@@ -218,6 +235,153 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     filesRef.current = files;
   }, [files]);
+
+  // Quick action handlers
+  const handleMenuSend = (file: TeleVaultFile) => {
+    setActiveMenuFile(null);
+    previewCacheService.resolveFilePreview(file).then(res => {
+      const uri = res.playableUri || res.previewUri;
+      if (uri) {
+        navigation.navigate('SendTo', {
+          mediaUri: uri,
+          mediaType: file.file_type as 'image' | 'video',
+          metadata: file.overlay_metadata,
+        });
+      } else {
+        Alert.alert('Error', 'Unable to resolve file path.');
+      }
+    });
+  };
+
+  const handleMenuFavorite = async (file: TeleVaultFile) => {
+    setActiveMenuFile(null);
+    try {
+      const updated = await fileService.toggleFavoriteFile(file.id, !file.is_favorite);
+      await loadMemories(false);
+      showToast(updated.is_favorite ? 'Added to favorites.' : 'Removed from favorites.');
+    } catch (_) {
+      Alert.alert('Error', 'Failed to update favorite status.');
+    }
+  };
+
+  const handleMenuHide = async (file: TeleVaultFile) => {
+    setActiveMenuFile(null);
+    try {
+      await fileService.bulkHide([file.id], true);
+      await loadMemories(false);
+      Alert.alert('Success', 'Snap moved to Private Vault.');
+    } catch (_) {}
+  };
+
+  const handleMenuDelete = async (file: TeleVaultFile) => {
+    setActiveMenuFile(null);
+    Alert.alert(
+      'Delete Snap',
+      'Are you sure you want to delete this snap?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await fileService.bulkDelete([file.id], false);
+              await loadMemories(false);
+              showToast('Snap moved to Trash.');
+            } catch (_) {}
+          }
+        }
+      ]
+    );
+  };
+
+  const saveMenuCaption = async () => {
+    if (!captionFile) return;
+    try {
+      await fileService.updateFileCaption(captionFile.id, captionText.trim());
+      setCaptionModalVisible(false);
+      await loadMemories(false);
+      showToast('Caption updated.');
+    } catch (_) {
+      Alert.alert('Error', 'Failed to update caption.');
+    }
+  };
+
+  // Multi-touch gestures: Pinch to zoom & Two-finger drag multi-select
+  const handleTouchStart = (e: any) => {
+    const touches = e.nativeEvent.touches;
+    if (touches && touches.length === 2) {
+      const dx = touches[0].pageX - touches[1].pageX;
+      const dy = touches[0].pageY - touches[1].pageY;
+      touchDistanceRef.current = Math.sqrt(dx * dx + dy * dy);
+      
+      if (!isSelectionMode) {
+        setIsSelectionMode(true);
+      }
+    }
+  };
+
+  const handleTouchMove = (e: any) => {
+    const touches = e.nativeEvent.touches;
+    if (touches && touches.length === 2) {
+      // 1. Two-finger drag row selection
+      const y1 = touches[0].pageY;
+      const y2 = touches[1].pageY;
+      const avgY = (y1 + y2) / 2 - 180 + scrollY;
+      
+      const rowHeight = gridSize + 4;
+      const rowIndex = Math.floor(avgY / rowHeight);
+      
+      const allRows = getGroupedMemories().reduce((acc, section) => {
+        return acc.concat(section.data);
+      }, [] as TeleVaultFile[][]);
+      
+      if (rowIndex >= 0 && rowIndex < allRows.length) {
+        const rowFiles = allRows[rowIndex];
+        setSelectedIds(prev => {
+          const next = [...prev];
+          let updated = false;
+          rowFiles.forEach(f => {
+            if (!next.includes(f.id)) {
+              next.push(f.id);
+              updated = true;
+            }
+          });
+          return updated ? next : prev;
+        });
+      }
+
+      // 2. Pinch to zoom / resize columns
+      if (touchDistanceRef.current !== null) {
+        const dx = touches[0].pageX - touches[1].pageX;
+        const dy = touches[0].pageY - touches[1].pageY;
+        const currentDistance = Math.sqrt(dx * dx + dy * dy);
+        const ratio = currentDistance / touchDistanceRef.current;
+
+        if (ratio > 1.35) {
+          setNumColumns(prev => {
+            const next = Math.max(prev - 1, 2);
+            if (next !== prev) {
+              touchDistanceRef.current = currentDistance;
+            }
+            return next;
+          });
+        } else if (ratio < 0.65) {
+          setNumColumns(prev => {
+            const next = Math.min(prev + 1, 5);
+            if (next !== prev) {
+              touchDistanceRef.current = currentDistance;
+            }
+            return next;
+          });
+        }
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    touchDistanceRef.current = null;
+  };
 
   const loadMemories = async (showSpinner = true) => {
     console.log("MEMORIES STEP 1: loadMemories called, showSpinner =", showSpinner);
@@ -403,8 +567,8 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
     return Object.keys(sections).map((title) => {
       const items = sections[title];
       const chunked: TeleVaultFile[][] = [];
-      for (let i = 0; i < items.length; i += 3) {
-        chunked.push(items.slice(i, i + 3));
+      for (let i = 0; i < items.length; i += numColumns) {
+        chunked.push(items.slice(i, i + numColumns));
       }
       return {
         title,
@@ -442,11 +606,10 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleItemLongPress = (item: TeleVaultFile) => {
-    if (!isSelectionMode) {
-      setIsSelectionMode(true);
-      setSelectedIds([item.id]);
-    } else {
+    if (isSelectionMode) {
       toggleSelectFile(item.id);
+    } else {
+      setActiveMenuFile(item);
     }
   };
 
@@ -708,40 +871,52 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
           }
         />
       ) : (
-        <SectionList
-          sections={groupedData as any}
-          keyExtractor={(item, index) => index.toString()}
-          contentContainerStyle={{ paddingBottom: isSelectionMode ? 180 : 100 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFC00" />}
-          renderSectionHeader={({ section: { title } }) => (
-            <View style={[styles.dateHeader, { paddingHorizontal: 16, backgroundColor: '#000000', paddingVertical: 8 }]}>
-              <Calendar size={14} color="#8e92af" style={{ marginRight: 6 }} />
-              <Text style={styles.dateTitle}>{title}</Text>
-            </View>
-          )}
-          renderItem={({ item }) => {
-            return (
-              <View style={{ flexDirection: 'row', justifyContent: 'flex-start', paddingHorizontal: 12 }}>
-                {item.map((file: TeleVaultFile) => (
-                  <View key={file.id} style={{ margin: 2 }}>
-                    <MemoryGridItem
-                      item={file}
-                      onPress={() => handleItemPress(file)}
-                      onLongPress={() => handleItemLongPress(file)}
-                      isSelected={selectedIds.includes(file.id)}
-                      isSelectionMode={isSelectionMode}
-                    />
-                  </View>
-                ))}
+        <View 
+          style={{ flex: 1 }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <SectionList
+            sections={groupedData as any}
+            keyExtractor={(item, index) => index.toString()}
+            contentContainerStyle={{ paddingBottom: isSelectionMode ? 180 : 100 }}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFC00" />}
+            onScroll={(e) => {
+              setScrollY(e.nativeEvent.contentOffset.y);
+            }}
+            scrollEventThrottle={16}
+            renderSectionHeader={({ section: { title } }) => (
+              <View style={[styles.dateHeader, { paddingHorizontal: 16, backgroundColor: '#000000', paddingVertical: 8 }]}>
+                <Calendar size={14} color="#8e92af" style={{ marginRight: 6 }} />
+                <Text style={styles.dateTitle}>{title}</Text>
               </View>
-            );
-          }}
-          removeClippedSubviews={Platform.OS !== 'web'}
-          maxToRenderPerBatch={8}
-          updateCellsBatchingPeriod={75}
-          initialNumToRender={8}
-          windowSize={3}
-        />
+            )}
+            renderItem={({ item }) => {
+              return (
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-start', paddingHorizontal: 12 }}>
+                  {item.map((file: TeleVaultFile) => (
+                    <View key={file.id} style={{ margin: 2 }}>
+                      <MemoryGridItem
+                        item={file}
+                        size={gridSize}
+                        onPress={() => handleItemPress(file)}
+                        onLongPress={() => handleItemLongPress(file)}
+                        isSelected={selectedIds.includes(file.id)}
+                        isSelectionMode={isSelectionMode}
+                      />
+                    </View>
+                  ))}
+                </View>
+              );
+            }}
+            removeClippedSubviews={Platform.OS !== 'web'}
+            maxToRenderPerBatch={8}
+            updateCellsBatchingPeriod={75}
+            initialNumToRender={8}
+            windowSize={3}
+          />
+        </View>
       )}
 
       {/* Pin lock Modal */}
@@ -807,6 +982,111 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
           </ScrollView>
         </View>
       )}
+
+      {/* Snapchat-style Long Press Quick Action Menu */}
+      {activeMenuFile && (
+        <Modal
+          visible={!!activeMenuFile}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setActiveMenuFile(null)}
+        >
+          <TouchableOpacity 
+            style={styles.menuModalBg} 
+            activeOpacity={1} 
+            onPress={() => setActiveMenuFile(null)}
+          >
+            <View style={styles.menuContainer}>
+              {/* Preview card of the snap */}
+              <View style={styles.menuPreviewCard}>
+                <FilePreviewCard
+                  file={activeMenuFile}
+                  variant="grid"
+                  size={180}
+                />
+                <Text style={styles.menuPreviewTitle} numberOfLines={1}>
+                  {activeMenuFile.file_name}
+                </Text>
+              </View>
+
+              {/* Action Buttons list */}
+              <View style={styles.menuActionsList}>
+                <TouchableOpacity 
+                  style={styles.menuActionItem}
+                  onPress={() => handleMenuSend(activeMenuFile)}
+                >
+                  <Text style={styles.menuActionText}>🚀 Send Snap</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.menuActionItem}
+                  onPress={() => {
+                    setCaptionFile(activeMenuFile);
+                    setCaptionText(activeMenuFile.caption || '');
+                    setActiveMenuFile(null);
+                    setCaptionModalVisible(true);
+                  }}
+                >
+                  <Text style={styles.menuActionText}>✏️ Edit Caption</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.menuActionItem}
+                  onPress={() => handleMenuHide(activeMenuFile)}
+                >
+                  <Text style={styles.menuActionText}>🔒 Move to Private</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.menuActionItem}
+                  onPress={() => handleMenuFavorite(activeMenuFile)}
+                >
+                  <Text style={styles.menuActionText}>
+                    {activeMenuFile.is_favorite ? '⭐ Remove Favorite' : '⭐ Favorite'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.menuActionItem, styles.menuActionDelete]}
+                  onPress={() => handleMenuDelete(activeMenuFile)}
+                >
+                  <Text style={[styles.menuActionText, { color: '#FF453A' }]}>🗑️ Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Quick Action Caption Modal */}
+      <Modal
+        visible={captionModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCaptionModalVisible(false)}
+      >
+        <View style={styles.alertBg}>
+          <View style={styles.alertBox}>
+            <Text style={styles.alertTitle}>Edit Caption</Text>
+            <TextInput
+              style={styles.alertInput}
+              value={captionText}
+              onChangeText={setCaptionText}
+              placeholder="Add caption..."
+              placeholderTextColor="#8E8E93"
+              autoFocus
+            />
+            <View style={styles.alertActions}>
+              <TouchableOpacity style={styles.alertBtn} onPress={() => setCaptionModalVisible(false)}>
+                <Text style={styles.alertCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.alertBtn} onPress={saveMenuCaption}>
+                <Text style={styles.alertConfirmText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 };
@@ -1115,6 +1395,112 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+  // Snapchat-style Long Press menu styles
+  menuModalBg: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuContainer: {
+    width: '80%',
+    maxWidth: 320,
+    backgroundColor: '#0F1123',
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    overflow: 'hidden',
+    alignItems: 'center',
+    padding: 20,
+  },
+  menuPreviewCard: {
+    alignItems: 'center',
+    marginBottom: 20,
+    width: '100%',
+  },
+  menuPreviewTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 10,
+    textAlign: 'center',
+    width: '100%',
+  },
+  menuActionsList: {
+    width: '100%',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    paddingTop: 10,
+  },
+  menuActionItem: {
+    paddingVertical: 14,
+    width: '100%',
+    alignItems: 'center',
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  menuActionText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  menuActionDelete: {
+    borderBottomWidth: 0,
+    backgroundColor: 'rgba(255, 69, 58, 0.05)',
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  alertBg: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  alertBox: {
+    backgroundColor: '#0F1123',
+    borderRadius: 20,
+    width: '100%',
+    padding: 20,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  alertTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  alertInput: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 10,
+    color: '#FFFFFF',
+    padding: 12,
+    fontSize: 14,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  alertActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  alertBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  alertCancelText: {
+    color: '#8E8E93',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  alertConfirmText: {
+    color: '#FFFC00',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });
 
