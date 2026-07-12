@@ -38,22 +38,17 @@ const ViewerItem = React.memo<{
 
   useEffect(() => {
     let active = true;
+    setLoading(true);
 
-    // Resolve media URI: local_uri -> previewCache / telegram_url
-    if (file.local_uri) {
-      setResolvedUri(file.local_uri);
-      setLoading(false);
-    } else {
-      previewCacheService.resolveFilePreview(file).then(res => {
-        if (active) {
-          const uri = res.playableUri || res.previewUri;
-          if (uri) {
-            setResolvedUri(uri);
-          }
-          setLoading(false);
+    previewCacheService.resolveFilePreview(file).then(res => {
+      if (active) {
+        const uri = res.playableUri || res.previewUri;
+        if (uri) {
+          setResolvedUri(uri);
         }
-      });
-    }
+        setLoading(false);
+      }
+    });
 
     return () => {
       active = false;

@@ -51,27 +51,15 @@ const MemoryGridItem = React.memo<{
   useEffect(() => {
     let active = true;
     
-    // Resolve thumbnail URL pipeline: local_thumbnail_uri -> previewCache / telegram_url
-    if (item.local_thumbnail_uri) {
-      setImgUri(item.local_thumbnail_uri);
-    } else if (item.overlay_metadata?.thumbnail_url) {
-      setImgUri(item.overlay_metadata.thumbnail_url);
-    } else if (item.telegram_file_id) {
-      previewCacheService.getCachedPreview(item.telegram_file_id).then(url => {
-        if (active) {
-          if (url) {
-            setImgUri(url);
-          } else {
-            // Fetch remote Telegram URL on demand
-            previewCacheService.resolvePreviewForFile(item).then(resolved => {
-              if (active && resolved) {
-                setImgUri(resolved);
-              }
-            });
-          }
-        }
-      });
-    }
+    previewCacheService.resolvePreviewForFile({
+      id: item.id,
+      local_uri: item.local_thumbnail_uri || item.overlay_metadata?.thumbnail_url,
+      telegram_file_id: item.telegram_file_id,
+    }).then(resolved => {
+      if (active && resolved) {
+        setImgUri(resolved);
+      }
+    });
 
     return () => {
       active = false;
