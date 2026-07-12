@@ -3,521 +3,144 @@ import {
   StyleSheet,
   View,
   Text,
-  TouchableOpacity,
-  Dimensions,
   FlatList,
   Image,
-  ActivityIndicator,
-  Modal,
-  Alert,
-  TextInput,
-  Platform,
-  Pressable,
+  TouchableOpacity,
+  Dimensions,
+  PanResponder,
   Animated,
   ScrollView,
-  PanResponder,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { X, Trash2, Lock, Star, MoreVertical, Send, Calendar, Type } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
-import { TeleVaultFile, TeleVaultFolder } from '../types/file';
-import { previewCacheService } from '../services/previewCacheService';
-import { fileService } from '../services/fileService';
-import { telegramService } from '../services/telegramService';
 import VideoPlayer from '../components/VideoPlayer';
-import { X, Info, Share2, Send, Edit, Trash2, Calendar, HardDrive, Type, Star, FolderInput } from 'lucide-react-native';
-import * as Sharing from 'expo-sharing';
+import { fileService } from '../services/fileService';
+import { previewCacheService } from '../services/previewCacheService';
 import { showToast } from '../components/ToastBanner';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'MemoriesViewer'>;
 
 const { width, height } = Dimensions.get('window');
 
-// Item Component for each slide
+// Individual Viewer Slide Item
 const ViewerItem = React.memo<{
-  file: TeleVaultFile;
+  file: any;
   isActive: boolean;
-  isNearby: boolean;
-  cachedValue?: { previewUri?: string; playableUri?: string };
   paused: boolean;
-  onTapLeft: () => void;
-  onTapRight: () => void;
-  onToggleControls: () => void;
-  onCacheResolve: (fileId: string, res: { previewUri?: string; playableUri?: string }) => void;
-}>(({ file, isActive, isNearby, cachedValue, paused, onTapLeft, onTapRight, onToggleControls, onCacheResolve }) => {
-  const [resolved, setResolved] = useState<{
-    previewUri?: string;
-    playableUri?: string;
-    loading: boolean;
-    error?: string;
-  }>({ loading: !cachedValue, ...cachedValue });
+}>(({ file, isActive, paused }) => {
+  const [resolvedUri, setResolvedUri] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const [isZoomed, setIsZoomed] = useState(false);
-  const lastTapRef = useRef<number>(0);
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  // Sync cache updates
   useEffect(() => {
-    if (cachedValue) {
-      setResolved({
-        previewUri: cachedValue.previewUri,
-        playableUri: cachedValue.playableUri,
-        loading: false,
+    let active = true;
+
+    // Resolve media URI: local_uri -> previewCache / telegram_url
+    if (file.local_uri) {
+      setResolvedUri(file.local_uri);
+      setLoading(false);
+    } else {
+      previewCacheService.resolveFilePreview(file).then(res => {
+        if (active) {
+          const uri = res.playableUri || res.previewUri;
+          if (uri) {
+            setResolvedUri(uri);
+          }
+          setLoading(false);
+        }
       });
     }
-  }, [cachedValue]);
-
-  // Resolve preview if not cached
-  useEffect(() => {
-    if (cachedValue || !isNearby) return;
-
-    let isMounted = true;
-    previewCacheService.resolveFilePreview(file)
-      .then((res) => {
-        if (isMounted) {
-          const update = {
-            previewUri: res.previewUri,
-            playableUri: res.playableUri,
-            loading: false,
-            error: res.error,
-          };
-          setResolved(update);
-          onCacheResolve(file.id, { previewUri: res.previewUri, playableUri: res.playableUri });
-        }
-      })
-      .catch((err) => {
-        if (isMounted) {
-          setResolved({
-            loading: false,
-            error: err.message || 'Failed preview resolution',
-          });
-        }
-      });
 
     return () => {
-      isMounted = false;
+      active = false;
     };
-  }, [file, cachedValue, isNearby]);
+  }, [file]);
 
-  useEffect(() => {
-    Animated.spring(scaleAnim, {
-      toValue: isZoomed ? 1.75 : 1.0,
-      useNativeDriver: true,
-      friction: 8,
-      tension: 40,
-    }).start();
-  }, [isZoomed]);
-
-  const handleTouch = (e: any) => {
-    const now = Date.now();
-    const DOUBLE_TAP_DELAY = 300;
-    if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
-      // Double tap -> Toggle Zoom
-      setIsZoomed(prev => !prev);
-    } else {
-      // Single tap -> Navigation / Controls toggle
-      const x = e.nativeEvent.pageX;
-      if (x < width * 0.3) {
-        onTapLeft();
-      } else if (x > width * 0.7) {
-        onTapRight();
-      } else {
-        onToggleControls();
-      }
-    }
-    lastTapRef.current = now;
-  };
-
-  // If the media is distant, destroy its players and render a simple thumbnail or black background to save memory
-  if (!isNearby) {
+  if (loading) {
     return (
-      <View style={styles.itemContainer}>
-        {resolved.previewUri ? (
-          <Image
-            source={{ uri: resolved.previewUri }}
-            style={[StyleSheet.absoluteFill, { opacity: 0.15 }]}
-            resizeMode="cover"
-            blurRadius={15}
-          />
-        ) : (
-          <View style={StyleSheet.absoluteFill} />
-        )}
-      </View>
-    );
-  }
-
-  // Log resolved values right before rendering
-  console.log('[DEBUG_VIEWER] ViewerItem before rendering:', {
-    id: file.id,
-    type: file.file_type || (file as any).type,
-    telegram_file_id: file.telegram_file_id,
-    preview_url: (file as any).preview_url,
-    thumbnail_url: (file as any).thumbnail_url,
-    local_uri: file.local_thumbnail_uri || file.overlay_metadata?.local_uri || (file as any).local_uri,
-    resolvedUri: file.file_type === 'video' ? resolved.playableUri : resolved.previewUri
-  });
-
-  if (resolved.loading) {
-    return (
-      <View style={styles.itemContainer}>
+      <View style={styles.itemCenter}>
         <ActivityIndicator size="large" color="#FFFC00" />
       </View>
     );
   }
 
-  const zoomStyle = { transform: [{ scale: scaleAnim }] };
-
-  if (file.file_type === 'video') {
-    if (isActive && resolved.playableUri) {
-      return (
-        <Pressable style={styles.itemContainer} onPress={handleTouch}>
-          <Animated.View style={[StyleSheet.absoluteFill, zoomStyle]}>
-            <VideoPlayer
-              source={resolved.playableUri}
-              style={StyleSheet.absoluteFill}
-              paused={paused}
-              onError={async () => {
-                if (file.telegram_file_id) {
-                  const repaired = await previewCacheService.forceRepairPreview(file.telegram_file_id, {
-                    id: file.id,
-                    file_name: file.file_name,
-                    file_type: 'video',
-                    mime_type: file.mime_type,
-                    local_thumbnail_uri: file.local_thumbnail_uri,
-                    telegram_file_id: file.telegram_file_id,
-                    is_private: file.is_private,
-                  });
-                  if (repaired) {
-                    const update = { ...resolved, ...repaired };
-                    setResolved(update);
-                    onCacheResolve(file.id, { previewUri: repaired.previewUri, playableUri: repaired.playableUri });
-                  }
-                }
-              }}
-            />
-          </Animated.View>
-        </Pressable>
-      );
-    }
-
+  if (!resolvedUri) {
     return (
-      <Pressable style={styles.itemContainer} onPress={handleTouch}>
-        {resolved.previewUri ? (
-          <Animated.Image
-            source={{ uri: resolved.previewUri }}
-            style={[StyleSheet.absoluteFill, zoomStyle]}
-            resizeMode="contain"
-            onError={async () => {
-              if (file.telegram_file_id) {
-                const repaired = await previewCacheService.forceRepairPreview(file.telegram_file_id, {
-                  id: file.id,
-                  file_name: file.file_name,
-                  file_type: 'video',
-                  mime_type: file.mime_type,
-                  local_thumbnail_uri: file.local_thumbnail_uri,
-                  telegram_file_id: file.telegram_file_id,
-                  is_private: file.is_private,
-                });
-                if (repaired) {
-                  const update = { ...resolved, ...repaired };
-                  setResolved(update);
-                  onCacheResolve(file.id, { previewUri: repaired.previewUri, playableUri: repaired.playableUri });
-                }
-              }
-            }}
-          />
-        ) : (
-          <View style={[StyleSheet.absoluteFill, styles.fallbackContainer]}>
-            <ActivityIndicator size="small" color="#8E8E93" />
-          </View>
-        )}
-      </Pressable>
+      <View style={styles.itemCenter}>
+        <Text style={{ color: '#8E8E93' }}>Unable to load media</Text>
+      </View>
     );
   }
 
-  if (resolved.previewUri) {
-    return (
-      <Pressable style={styles.itemContainer} onPress={handleTouch}>
-        <Animated.Image
-          source={{ uri: resolved.previewUri }}
-          style={[StyleSheet.absoluteFill, zoomStyle]}
-          resizeMode="contain"
-          onError={async () => {
-            if (file.telegram_file_id) {
-              const repaired = await previewCacheService.forceRepairPreview(file.telegram_file_id, {
-                id: file.id,
-                file_name: file.file_name,
-                file_type: 'image',
-                mime_type: file.mime_type,
-                local_thumbnail_uri: file.local_thumbnail_uri,
-                telegram_file_id: file.telegram_file_id,
-                is_private: file.is_private,
-              });
-              if (repaired) {
-                const update = { ...resolved, ...repaired };
-                setResolved(update);
-                onCacheResolve(file.id, { previewUri: repaired.previewUri, playableUri: repaired.playableUri });
-              }
-            }
-          }}
-        />
-      </Pressable>
-    );
-  }
+  const isVideo = file.file_type === 'video';
 
   return (
-    <Pressable style={styles.itemContainer} onPress={handleTouch}>
-      <Text style={styles.errorText}>{resolved.error || 'Failed preview.'}</Text>
-    </Pressable>
+    <View style={styles.itemContainer}>
+      {isVideo ? (
+        <VideoPlayer
+          source={resolvedUri}
+          style={styles.fullMedia}
+          paused={paused}
+        />
+      ) : (
+        <ScrollView
+          maximumZoomScale={3}
+          minimumZoomScale={1}
+          showsHorizontalScrollIndicator={false}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ width, height, justifyContent: 'center', alignItems: 'center' }}
+        >
+          <Image
+            source={{ uri: resolvedUri }}
+            style={styles.fullMedia}
+            resizeMode="contain"
+          />
+        </ScrollView>
+      )}
+
+      {/* Caption Overlay */}
+      {file.caption && (
+        <View style={styles.captionContainer}>
+          <Text style={styles.captionText}>{file.caption}</Text>
+        </View>
+      )}
+    </View>
   );
+}, (prev, next) => {
+  return prev.file.id === next.file.id &&
+         prev.isActive === next.isActive &&
+         prev.paused === next.paused;
 });
 
-export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { files: initialFiles, initialIndex } = route.params;
-  
-  const targetItem = initialFiles?.[initialIndex];
-  console.log('[DEBUG_VIEWER] MemoriesViewerScreen immediately after receiving route params:', {
-    id: targetItem?.id,
-    type: targetItem?.file_type || (targetItem as any)?.type,
-    telegram_file_id: targetItem?.telegram_file_id,
-    preview_url: (targetItem as any)?.preview_url,
-    thumbnail_url: (targetItem as any)?.thumbnail_url,
-    local_uri: targetItem?.local_thumbnail_uri || targetItem?.overlay_metadata?.local_uri || (targetItem as any)?.local_uri,
-    resolvedUri: undefined
-  });
+export const MemoriesViewerScreen: React.FC<Props> = ({ route, navigation }) => {
+  const { files, initialIndex } = route.params;
 
-  const insets = useSafeAreaInsets();
-  
-  const [files, setFiles] = useState<TeleVaultFile[]>(initialFiles);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [infoVisible, setInfoVisible] = useState(false);
-  const [renameVisible, setRenameVisible] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [captionVisible, setCaptionVisible] = useState(false);
-  const [newCaption, setNewCaption] = useState('');
-
-  const [controlsVisible, setControlsVisible] = useState(true);
-  const hideTimerRef = useRef<any>(null);
-
-  const flatListRef = useRef<FlatList>(null);
-  const currentFile = files[currentIndex] || null;
-
-  // Reusable Media Viewer state
-  const [resolvedCache, setResolvedCache] = useState<Record<string, { previewUri?: string; playableUri?: string }>>({});
   const [isHoldActive, setIsHoldActive] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [folders, setFolders] = useState<TeleVaultFolder[]>([]);
-  const [folderPickerVisible, setFolderPickerVisible] = useState(false);
-  const [isFavorite, setIsFavorite] = useState(false);
-
-  // Snapchat-style story viewing progress and pan gestures
-  const progressAnim = useRef(new Animated.Value(0)).current;
-  const progressVal = useRef(0);
-  const currentDuration = useRef(5000); // default 5s
-  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
-
-  // Swipe-down-to-dismiss translation values
-  const translateY = useRef(new Animated.Value(0)).current;
-  const overlayOpacity = useRef(new Animated.Value(1)).current;
-
-  // Sync Favorite status
-  useEffect(() => {
-    if (currentFile) {
-      setIsFavorite(currentFile.is_favorite || false);
-    }
-  }, [currentFile]);
-
-  // Preload resolved URLs for nearby media items dynamically on index change
-  useEffect(() => {
-    const preloadIndices = [currentIndex - 1, currentIndex + 1];
-    preloadIndices.forEach(idx => {
-      if (idx >= 0 && idx < files.length) {
-        const file = files[idx];
-        if (file && !resolvedCache[file.id]) {
-          previewCacheService.resolveFilePreview(file)
-            .then(res => {
-              setResolvedCache(prev => ({
-                ...prev,
-                [file.id]: {
-                  previewUri: res.previewUri,
-                  playableUri: res.playableUri
-                }
-              }));
-            })
-            .catch(err => console.warn('[PRELOAD] Failed to preload media index', idx, err));
-        }
-      }
-    });
-  }, [currentIndex, files, resolvedCache]);
-
-  // Fetch folders for Move Folder modal when visible
-  useEffect(() => {
-    if (folderPickerVisible) {
-      fileService.fetchDriveFolders(null)
-        .then(setFolders)
-        .catch(console.error);
-    }
-  }, [folderPickerVisible]);
-
-  // Track progress bar value updates
-  useEffect(() => {
-    const listenerId = progressAnim.addListener(({ value }) => {
-      progressVal.current = value;
-    });
-    return () => {
-      progressAnim.removeListener(listenerId);
-    };
-  }, []);
-
-  const startProgress = (resume = false) => {
-    if (animationRef.current) {
-      animationRef.current.stop();
-    }
-
-    const startVal = resume ? progressVal.current : 0;
-    progressAnim.setValue(startVal);
-
-    const remainingTime = currentDuration.current * (1 - startVal / 100);
-
-    const anim = Animated.timing(progressAnim, {
-      toValue: 100,
-      duration: Math.max(0, remainingTime),
-      useNativeDriver: false,
-    });
-
-    animationRef.current = anim;
-    anim.start(({ finished }) => {
-      if (finished) {
-        goToNext();
-      }
-    });
-  };
-
-  const pauseProgress = () => {
-    if (animationRef.current) {
-      animationRef.current.stop();
-    }
-  };
-
-  const resetHideTimer = () => {
-    if (hideTimerRef.current) {
-      clearTimeout(hideTimerRef.current);
-    }
-    if (!infoVisible && !renameVisible && !captionVisible && !folderPickerVisible) {
-      hideTimerRef.current = setTimeout(() => {
-        setControlsVisible(false);
-      }, 3000);
-    }
-  };
-
-  const handleToggleControls = () => {
-    setControlsVisible((prev) => {
-      const next = !prev;
-      if (next) {
-        resetHideTimer();
-      } else {
-        if (hideTimerRef.current) {
-          clearTimeout(hideTimerRef.current);
-        }
-      }
-      return next;
-    });
-  };
-
-  useEffect(() => {
-    setControlsVisible(true);
-    resetHideTimer();
-    return () => {
-      if (hideTimerRef.current) {
-        clearTimeout(hideTimerRef.current);
-      }
-    };
-  }, [currentIndex, infoVisible, renameVisible, captionVisible, folderPickerVisible]);
-
-  const goToNext = () => {
-    if (currentIndex < files.length - 1) {
-      const nextIndex = currentIndex + 1;
-      setCurrentIndex(nextIndex);
-      flatListRef.current?.scrollToIndex({ index: nextIndex, animated: false });
-    } else {
-      navigation.goBack();
-    }
-  };
-
-  const goToPrevious = () => {
-    if (currentIndex > 0) {
-      const prevIndex = currentIndex - 1;
-      setCurrentIndex(prevIndex);
-      flatListRef.current?.scrollToIndex({ index: prevIndex, animated: false });
-    } else {
-      // Restart current snap
-      progressAnim.setValue(0);
-      progressVal.current = 0;
-      startProgress(false);
-    }
-  };
-
-  const handleHoldStart = () => {
-    setIsHoldActive(true);
-    setControlsVisible(false); // Hide controls on hold (Snapchat UX)
-    pauseProgress();
-  };
-
-  const handleHoldEnd = () => {
-    setIsHoldActive(false);
-    setControlsVisible(true);
-    startProgress(true); // Resume
-  };
-
-  // Sync index changes and timing durations
-  useEffect(() => {
-    if (files.length === 0) return;
-
-    const file = files[currentIndex];
-    if (file) {
-      if (file.file_type === 'video') {
-        currentDuration.current = (file.overlay_metadata?.duration || 10) * 1000;
-      } else {
-        currentDuration.current = 5000; // 5 seconds for images
-      }
-    }
-
-    progressAnim.setValue(0);
-    progressVal.current = 0;
-
-    if (!isHoldActive && !isDragging) {
-      startProgress(false);
-    }
-
-    return () => {
-      if (animationRef.current) {
-        animationRef.current.stop();
-      }
-    };
-  }, [currentIndex, files]);
-
-  // Pause when modals or dragging are active
-  const isSheetOpen = infoVisible || renameVisible || captionVisible || folderPickerVisible;
-
-  useEffect(() => {
-    if (isSheetOpen || isDragging) {
-      pauseProgress();
-    } else {
-      startProgress(true);
-    }
-  }, [isSheetOpen, isDragging]);
 
   // Swipe-down-to-dismiss gesture setup
+  const translateY = useRef(new Animated.Value(0)).current;
+  const overlayOpacity = useRef(new Animated.Value(1)).current;
+  const flatListRef = useRef<FlatList>(null);
+
+  const activeFile = files[currentIndex];
+
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return Math.abs(gestureState.dy) > 10 && gestureState.vy > 0 && !isHoldActive && !isSheetOpen;
+        // Intercept vertical downward drag only
+        return Math.abs(gestureState.dy) > 15 && gestureState.dy > 0 && !isHoldActive && !isMenuOpen;
       },
       onPanResponderMove: (evt, gestureState) => {
         if (gestureState.dy > 0) {
           translateY.setValue(gestureState.dy);
-          const newOpacity = Math.max(0.3, 1 - gestureState.dy / 400);
-          overlayOpacity.setValue(newOpacity);
+          overlayOpacity.setValue(Math.max(0.4, 1 - gestureState.dy / height));
         }
       },
       onPanResponderRelease: (evt, gestureState) => {
@@ -525,12 +148,12 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
           Animated.parallel([
             Animated.timing(translateY, {
               toValue: height,
-              duration: 220,
+              duration: 200,
               useNativeDriver: true,
             }),
             Animated.timing(overlayOpacity, {
               toValue: 0,
-              duration: 220,
+              duration: 200,
               useNativeDriver: true,
             })
           ]).start(() => {
@@ -552,181 +175,104 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
     })
   ).current;
 
-  const formatSize = (bytes: number | null | undefined): string => {
-    if (!bytes) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  // Horizontal tap navigation (Snapchat style)
+  const handleScreenPress = (evt: any) => {
+    const x = evt.nativeEvent.pageX;
+    const threshold = width * 0.3; // Left 30%
+    if (x < threshold) {
+      goToPrevious();
+    } else {
+      goToNext();
+    }
   };
 
-  const handleShare = async () => {
-    if (!currentFile) return;
+  const goToNext = () => {
+    if (currentIndex < files.length - 1) {
+      const nextIndex = currentIndex + 1;
+      setCurrentIndex(nextIndex);
+      flatListRef.current?.scrollToIndex({ index: nextIndex, animated: false });
+    } else {
+      // Auto close on last story
+      navigation.goBack();
+    }
+  };
+
+  const goToPrevious = () => {
+    if (currentIndex > 0) {
+      const prevIndex = currentIndex - 1;
+      setCurrentIndex(prevIndex);
+      flatListRef.current?.scrollToIndex({ index: prevIndex, animated: false });
+    }
+  };
+
+  const handleScrollEnd = (e: any) => {
+    setIsDragging(false);
+    const contentOffsetX = e.nativeEvent.contentOffset.x;
+    const index = Math.round(contentOffsetX / width);
+    if (index !== currentIndex && index >= 0 && index < files.length) {
+      setCurrentIndex(index);
+    }
+  };
+
+  // Quick Action Menu Operations
+  const handleMenuFavorite = async () => {
+    setIsMenuOpen(false);
     try {
-      showToast('Preparing file to share...');
-      const res = await previewCacheService.resolveFilePreview(currentFile);
-      const targetUri = res.playableUri || res.previewUri;
-      if (!targetUri) {
-        Alert.alert('Share Failed', 'Unable to resolve file link.');
-        return;
-      }
-
-      let localPath = targetUri;
-      if (targetUri.startsWith('http')) {
-        localPath = await telegramService.downloadTelegramFileToCache(
-          currentFile.telegram_file_id || '',
-          currentFile.file_name
-        );
-      }
-
-      const available = await Sharing.isAvailableAsync();
-      if (available) {
-        await Sharing.shareAsync(localPath);
-      } else {
-        Alert.alert('Error', 'Sharing is not available on this device.');
-      }
-    } catch (error: any) {
-      console.error('Share error:', error);
-      Alert.alert('Share Failed', error.message || 'Unable to share this file.');
+      const updated = await fileService.toggleFavoriteFile(activeFile.id, !activeFile.is_favorite);
+      activeFile.is_favorite = updated.is_favorite;
+      showToast(updated.is_favorite ? 'Added to favorites.' : 'Removed from favorites.');
+    } catch (_) {
+      Alert.alert('Error', 'Failed to toggle favorite.');
     }
   };
 
-  const handleSendTo = () => {
-    if (!currentFile) return;
-    if (currentFile.file_type === 'document') {
-      Alert.alert('Unsupported', 'Documents cannot be sent as snaps.');
-      return;
+  const handleMenuHide = async () => {
+    setIsMenuOpen(false);
+    try {
+      await fileService.bulkHide([activeFile.id], true);
+      showToast('Moved to Private Vault.');
+      navigation.goBack();
+    } catch (_) {
+      Alert.alert('Error', 'Failed to hide snap.');
     }
-    previewCacheService.resolveFilePreview(currentFile).then(res => {
+  };
+
+  const handleMenuDelete = async () => {
+    setIsMenuOpen(false);
+    Alert.alert('Delete Snap', 'Are you sure you want to delete this snap?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await fileService.bulkDelete([activeFile.id], false);
+            showToast('Moved to Trash.');
+            navigation.goBack();
+          } catch (_) {}
+        }
+      }
+    ]);
+  };
+
+  const handleMenuSend = () => {
+    setIsMenuOpen(false);
+    previewCacheService.resolveFilePreview(activeFile).then(res => {
       const uri = res.playableUri || res.previewUri;
       if (uri) {
         navigation.navigate('SendTo', {
           mediaUri: uri,
-          mediaType: currentFile.file_type as 'image' | 'video',
-          metadata: currentFile.overlay_metadata,
+          mediaType: activeFile.file_type as 'image' | 'video',
+          metadata: activeFile.overlay_metadata,
         });
       } else {
-        Alert.alert('Error', 'Unable to resolve file path for sharing.');
+        Alert.alert('Error', 'Unable to resolve file.');
       }
     });
   };
 
-  const handleDelete = () => {
-    if (!currentFile) return;
-    Alert.alert(
-      'Delete Memory',
-      'Are you sure you want to delete this memory?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await fileService.deleteFileMetadata(currentFile.id);
-              showToast('Memory deleted.');
-              
-              const updated = files.filter(f => f.id !== currentFile.id);
-              if (updated.length === 0) {
-                navigation.goBack();
-              } else {
-                setFiles(updated);
-                const nextIndex = Math.min(currentIndex, updated.length - 1);
-                setCurrentIndex(nextIndex);
-              }
-            } catch (err: any) {
-              Alert.alert('Delete Failed', err.message || 'Failed to delete file.');
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const handleToggleFavorite = async () => {
-    if (!currentFile) return;
-    try {
-      const updated = await fileService.toggleFavoriteFile(currentFile.id, !isFavorite);
-      setIsFavorite(updated.is_favorite || false);
-      const updatedList = files.map(f => f.id === currentFile.id ? { ...f, is_favorite: updated.is_favorite } : f);
-      setFiles(updatedList);
-      showToast(updated.is_favorite ? 'Added to favorites.' : 'Removed from favorites.');
-    } catch (err: any) {
-      Alert.alert('Error', 'Failed to update favorite status.');
-    }
-  };
-
-  const handleMoveFile = async (folderId: string | null) => {
-    if (!currentFile) return;
-    try {
-      await fileService.moveFile(currentFile.id, folderId);
-      const updatedList = files.map(f => f.id === currentFile.id ? { ...f, folder_id: folderId } : f);
-      setFiles(updatedList);
-      setFolderPickerVisible(false);
-      showToast('File moved successfully.');
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to move file.');
-    }
-  };
-
-  const triggerRename = () => {
-    if (!currentFile) return;
-    setNewName(currentFile.file_name);
-    setInfoVisible(false);
-    setRenameVisible(true);
-  };
-
-  const executeRename = async () => {
-    if (!currentFile || !newName.trim()) return;
-    try {
-      const updated = await fileService.renameFile(currentFile.id, newName.trim());
-      const updatedList = files.map(f => f.id === currentFile.id ? updated : f);
-      setFiles(updatedList);
-      setRenameVisible(false);
-      showToast('Renamed successfully.');
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to rename.');
-    }
-  };
-
-  const triggerCaption = () => {
-    if (!currentFile) return;
-    setNewCaption(currentFile.caption || '');
-    setInfoVisible(false);
-    setCaptionVisible(true);
-  };
-
-  const executeCaption = async () => {
-    if (!currentFile) return;
-    try {
-      const updated = await fileService.updateFileCaption(currentFile.id, newCaption.trim());
-      const updatedList = files.map(f => f.id === currentFile.id ? updated : f);
-      setFiles(updatedList);
-      setCaptionVisible(false);
-      showToast('Caption updated.');
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to update caption.');
-    }
-  };
-
-  if (!currentFile) {
-    return (
-      <View style={styles.fallbackContainer}>
-        <ActivityIndicator size="large" color="#FFFC00" />
-      </View>
-    );
-  }
-
-  const dateString = new Date(currentFile.created_at).toLocaleDateString([], {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
   return (
-    <Animated.View 
+    <Animated.View
       style={[
         styles.container,
         {
@@ -736,351 +282,152 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ navigation, route }) => 
       ]}
       {...panResponder.panHandlers}
     >
-      {/* Immersive Touch Gesture Area wrapping the swiper */}
-      <View 
-        style={StyleSheet.absoluteFill}
-        onTouchStart={handleHoldStart}
-        onTouchEnd={handleHoldEnd}
-        onTouchCancel={handleHoldEnd}
-      >
-        {/* Horizontal FlatList Swiper */}
-        <FlatList
-          ref={flatListRef}
-          horizontal
-          pagingEnabled
-          data={files}
-          keyExtractor={(item) => item.id}
-          initialScrollIndex={initialIndex}
-          getItemLayout={(data, index) => ({ length: width, offset: width * index, index })}
-          showsHorizontalScrollIndicator={false}
-          scrollEnabled={!isHoldActive}
-          decelerationRate="fast"
-          snapToInterval={width}
-          snapToAlignment="center"
-          onMomentumScrollEnd={(e) => {
-            const index = Math.round(e.nativeEvent.contentOffset.x / width);
-            setCurrentIndex(index);
-            setIsDragging(false);
-          }}
-          onScrollEndDrag={(e) => {
-            const index = Math.round(e.nativeEvent.contentOffset.x / width);
-            setCurrentIndex(index);
-            setIsDragging(false);
-          }}
-          onScroll={(e) => {
-            const offset = e.nativeEvent.contentOffset.x;
-            const index = Math.round(offset / width);
-            if (index !== currentIndex && index >= 0 && index < files.length) {
-              setCurrentIndex(index);
-            }
-            // Instantly pause video when user begins swiping/scrolling away from snap point
-            const isNearSnap = Math.abs(offset - index * width) < 2;
-            setIsDragging(!isNearSnap);
-          }}
-          scrollEventThrottle={16}
-          renderItem={({ item, index }) => {
-            const isNearby = Math.abs(index - currentIndex) <= 1;
-            return (
-              <ViewerItem 
-                file={item} 
-                isActive={index === currentIndex} 
-                isNearby={isNearby}
-                cachedValue={resolvedCache[item.id]}
-                paused={isHoldActive || isDragging || isSheetOpen}
-                onTapLeft={goToPrevious}
-                onTapRight={goToNext}
-                onToggleControls={handleToggleControls}
-                onCacheResolve={(fileId, res) => {
-                  setResolvedCache(prev => ({ ...prev, [fileId]: res }));
-                }}
-              />
-            );
-          }}
+      {/* Tap Gesture Overlay for Left/Right Jumps */}
+      {!isMenuOpen && (
+        <TouchableOpacity
+          activeOpacity={1}
+          style={StyleSheet.absoluteFill}
+          onPress={handleScreenPress}
+          onLongPress={() => setIsHoldActive(true)}
+          onPressOut={() => setIsHoldActive(false)}
         />
-      </View>
+      )}
 
-      {/* Snapchat-style Top Progress Indicator Row */}
-      {controlsVisible && (
-        <View 
-          style={[
-            styles.progressContainer, 
-            { 
-              top: (Platform.OS === 'web' 
-                ? 'calc(env(safe-area-inset-top) + 12px)' 
-                : (insets.top > 0 ? insets.top + 6 : 12)) as any
-            }
-          ]}
-        >
-          {files.map((file, idx) => {
-            return (
-              <View key={file.id} style={styles.progressBarBackground}>
-                <Animated.View
+      {/* Immersive Horizontal FlatList */}
+      <FlatList
+        ref={flatListRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        data={files}
+        keyExtractor={(item) => item.id}
+        initialScrollIndex={initialIndex}
+        getItemLayout={(data, index) => ({
+          length: width,
+          offset: width * index,
+          index,
+        })}
+        onScrollBeginDrag={() => setIsDragging(true)}
+        onMomentumScrollEnd={handleScrollEnd}
+        renderItem={({ item, index }) => {
+          const isCurrent = index === currentIndex;
+          const isPrev = index === currentIndex - 1;
+          const isNext = index === currentIndex + 1;
+          const isNearby = isCurrent || isPrev || isNext;
+
+          // STRICT CLEANUP (Free resources outside ±1 page)
+          if (!isNearby) {
+            return <View style={{ width, height, backgroundColor: '#000000' }} />;
+          }
+
+          return (
+            <ViewerItem
+              file={item}
+              isActive={isCurrent}
+              paused={!isCurrent || isHoldActive || isDragging || isMenuOpen}
+            />
+          );
+        }}
+        windowSize={3}
+        maxToRenderPerBatch={1}
+        updateCellsBatchingPeriod={100}
+        initialNumToRender={1}
+        removeClippedSubviews={Platform.OS !== 'web'}
+      />
+
+      {/* Top Overlay HUD (Progress bar and Close) */}
+      {!isHoldActive && !isMenuOpen && (
+        <View style={styles.topHudContainer}>
+          {/* Progress Segment indicators */}
+          <View style={styles.progressContainer}>
+            {files.map((_, idx) => (
+              <View key={idx} style={styles.progressBarBackground}>
+                <View
                   style={[
                     styles.progressBarActive,
                     {
-                      width: idx < currentIndex
-                        ? '100%'
-                        : idx > currentIndex
-                          ? '0%'
-                          : progressAnim.interpolate({
-                              inputRange: [0, 100],
-                              outputRange: ['0%', '100%'],
-                            }),
-                    },
+                      width: idx < currentIndex ? '100%' : idx === currentIndex ? '100%' : '0%',
+                      backgroundColor: idx === currentIndex ? '#FFFC00' : '#FFFFFF',
+                    }
                   ]}
                 />
               </View>
-            );
-          })}
+            ))}
+          </View>
+
+          {/* Title / Action bar */}
+          <View style={styles.topBar}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Calendar size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.dateText}>
+                {new Date(activeFile.created_at).toLocaleDateString([], {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric'
+                })}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.hudBtn}>
+              <X size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
-      {/* Top Header Overlay */}
-      {controlsVisible && (
-        <View 
-          style={[
-            styles.headerOverlay, 
-            { 
-              top: (Platform.OS === 'web' 
-                ? 'calc(env(safe-area-inset-top) + 24px)' 
-                : (insets.top > 0 ? insets.top + 16 : 24)) as any
-            }
-          ]} 
-          pointerEvents="box-none"
-        >
-          <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
-            <X size={24} color="#FFFFFF" />
+      {/* Bottom Action HUD */}
+      {!isHoldActive && !isMenuOpen && (
+        <View style={styles.bottomHudContainer}>
+          <TouchableOpacity style={styles.bottomActionBtn} onPress={handleMenuSend}>
+            <Send size={20} color="#000000" fill="#000000" />
+            <Text style={styles.bottomActionText}>Send</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.menuTriggerBtn} onPress={() => setIsMenuOpen(true)}>
+            <MoreVertical size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      )}
 
-          <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle} numberOfLines={1}>
-              {currentFile.caption || currentFile.file_name}
+      {/* Snapchat-style Bottom Action Sheet Menu */}
+      <Modal
+        visible={isMenuOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsMenuOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.sheetOverlay}
+          activeOpacity={1}
+          onPress={() => setIsMenuOpen(false)}
+        >
+          <View style={styles.sheetContainer}>
+            <View style={styles.sheetDragIndicator} />
+            <Text style={styles.sheetTitle} numberOfLines={1}>
+              {activeFile.file_name}
             </Text>
-            <Text style={styles.headerSub}>{dateString}</Text>
+
+            <TouchableOpacity style={styles.sheetItem} onPress={handleMenuSend}>
+              <Send size={18} color="#FFFFFF" style={{ marginRight: 12 }} />
+              <Text style={styles.sheetText}>Send Snap</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.sheetItem} onPress={handleMenuFavorite}>
+              <Star size={18} color="#FFFFFF" style={{ marginRight: 12 }} />
+              <Text style={styles.sheetText}>
+                {activeFile.is_favorite ? 'Remove Favorite' : 'Add to Favorites'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.sheetItem} onPress={handleMenuHide}>
+              <Lock size={18} color="#FFFFFF" style={{ marginRight: 12 }} />
+              <Text style={styles.sheetText}>Move to Private Vault</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.sheetItem, styles.sheetItemDelete]} onPress={handleMenuDelete}>
+              <Trash2 size={18} color="#FF453A" style={{ marginRight: 12 }} />
+              <Text style={[styles.sheetText, { color: '#FF453A' }]}>Delete Snap</Text>
+            </TouchableOpacity>
           </View>
-
-          <TouchableOpacity style={styles.headerBtn} onPress={() => setInfoVisible(true)}>
-            <Info size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Bottom Actions Overlay */}
-      {controlsVisible && (
-        <View 
-          style={[
-            styles.bottomOverlay, 
-            { 
-              bottom: (Platform.OS === 'web' 
-                ? 'calc(env(safe-area-inset-bottom) + 24px)' 
-                : (insets.bottom > 0 ? insets.bottom + 16 : 24)) as any
-            }
-          ]} 
-          pointerEvents="box-none"
-        >
-          <TouchableOpacity style={styles.actionBtn} onPress={triggerCaption}>
-            <Type size={18} color="#FFFFFF" />
-            <Text style={styles.actionBtnLabel}>Caption</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.actionBtn} onPress={handleShare}>
-            <Share2 size={18} color="#FFFFFF" />
-            <Text style={styles.actionBtnLabel}>Share</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.actionBtn} onPress={handleSendTo}>
-            <Send size={18} color="#FFFFFF" />
-            <Text style={styles.actionBtnLabel}>Send</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.actionBtn} onPress={() => setInfoVisible(true)}>
-            <Info size={18} color="#FFFC00" />
-            <Text style={[styles.actionBtnLabel, { color: '#FFFC00' }]}>Details</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Metadata Bottom Sheet Modal */}
-      <Modal
-        visible={infoVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setInfoVisible(false)}
-      >
-        <View style={styles.modalBg}>
-          <TouchableOpacity style={styles.modalDismissHitbox} onPress={() => setInfoVisible(false)} />
-          <View 
-            style={[
-              styles.sheetContent, 
-              { 
-                paddingBottom: (Platform.OS === 'web' 
-                  ? 'calc(env(safe-area-inset-bottom) + 20px)' 
-                  : Math.max(insets.bottom, 20)) as any
-              }
-            ]}
-          >
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Memory Details</Text>
-              <TouchableOpacity onPress={() => setInfoVisible(false)}>
-                <Text style={styles.sheetCloseBtn}>Done</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.detailRow}>
-              <HardDrive size={15} color="#8E8E93" style={{ marginRight: 8 }} />
-              <Text style={styles.detailLabel}>File Name:</Text>
-              <Text style={styles.detailValue} numberOfLines={1}>{currentFile.file_name}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Calendar size={15} color="#8E8E93" style={{ marginRight: 8 }} />
-              <Text style={styles.detailLabel}>Created At:</Text>
-              <Text style={styles.detailValue}>{dateString}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <HardDrive size={15} color="#8E8E93" style={{ marginRight: 8 }} />
-              <Text style={styles.detailLabel}>File Size:</Text>
-              <Text style={styles.detailValue}>{formatSize(currentFile.file_size)}</Text>
-            </View>
-
-            {currentFile.caption && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Caption:</Text>
-                <Text style={styles.detailValue} numberOfLines={2}>{currentFile.caption}</Text>
-              </View>
-            )}
-
-            {/* Actions Grid */}
-            <View style={styles.sheetActionsContainer}>
-              <TouchableOpacity style={styles.sheetActionBtn} onPress={handleToggleFavorite}>
-                <Star size={16} color={isFavorite ? '#FFFC00' : '#FFFFFF'} fill={isFavorite ? '#FFFC00' : 'none'} style={{ marginBottom: 4 }} />
-                <Text style={styles.sheetActionBtnLabel}>{isFavorite ? 'Unfavorite' : 'Favorite'}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.sheetActionBtn} onPress={() => { setInfoVisible(false); setFolderPickerVisible(true); }}>
-                <FolderInput size={16} color="#FFFFFF" style={{ marginBottom: 4 }} />
-                <Text style={styles.sheetActionBtnLabel}>Move To</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.sheetActionBtn} onPress={triggerRename}>
-                <Edit size={16} color="#FFFFFF" style={{ marginBottom: 4 }} />
-                <Text style={styles.sheetActionBtnLabel}>Rename</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.sheetActionBtn} onPress={triggerCaption}>
-                <Type size={16} color="#FFFFFF" style={{ marginBottom: 4 }} />
-                <Text style={styles.sheetActionBtnLabel}>Caption</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={[styles.sheetActionBtn, styles.deleteBtn]} onPress={handleDelete}>
-                <Trash2 size={16} color="#FF453A" style={{ marginBottom: 4 }} />
-                <Text style={[styles.sheetActionBtnLabel, { color: '#FF453A' }]}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Folder Picker Modal */}
-      <Modal
-        visible={folderPickerVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setFolderPickerVisible(false)}
-      >
-        <View style={styles.modalBg}>
-          <TouchableOpacity style={styles.modalDismissHitbox} onPress={() => setFolderPickerVisible(false)} />
-          <View style={[styles.sheetContent, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Move to Folder</Text>
-              <TouchableOpacity onPress={() => setFolderPickerVisible(false)}>
-                <Text style={styles.sheetCloseBtn}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={{ maxHeight: 300, marginBottom: 20 }}>
-              <TouchableOpacity
-                style={styles.folderRow}
-                onPress={() => handleMoveFile(null)}
-              >
-                <HardDrive size={18} color="#FFFC00" style={{ marginRight: 12 }} />
-                <Text style={styles.folderName}>Root (No Folder)</Text>
-              </TouchableOpacity>
-
-              {folders.map(f => (
-                <TouchableOpacity
-                  key={f.id}
-                  style={styles.folderRow}
-                  onPress={() => handleMoveFile(f.id)}
-                >
-                  <HardDrive size={18} color="#8E8E93" style={{ marginRight: 12 }} />
-                  <Text style={styles.folderName}>{f.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Rename Prompt Modal */}
-      <Modal
-        visible={renameVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setRenameVisible(false)}
-      >
-        <View style={styles.alertBg}>
-          <View style={styles.alertBox}>
-            <Text style={styles.alertTitle}>Rename Memory</Text>
-            <TextInput
-              style={styles.alertInput}
-              value={newName}
-              onChangeText={setNewName}
-              placeholder="Enter new file name"
-              placeholderTextColor="#8E8E93"
-              autoFocus
-            />
-            <View style={styles.alertActions}>
-              <TouchableOpacity style={styles.alertBtn} onPress={() => setRenameVisible(false)}>
-                <Text style={styles.alertCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.alertBtn} onPress={executeRename}>
-                <Text style={styles.alertConfirmText}>Save</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Caption Prompt Modal */}
-      <Modal
-        visible={captionVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCaptionVisible(false)}
-      >
-        <View style={styles.alertBg}>
-          <View style={styles.alertBox}>
-            <Text style={styles.alertTitle}>Memory Caption</Text>
-            <TextInput
-              style={styles.alertInput}
-              value={newCaption}
-              onChangeText={setNewCaption}
-              placeholder="Add caption details..."
-              placeholderTextColor="#8E8E93"
-              autoFocus
-            />
-            <View style={styles.alertActions}>
-              <TouchableOpacity style={styles.alertBtn} onPress={() => setCaptionVisible(false)}>
-                <Text style={styles.alertCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.alertBtn} onPress={executeCaption}>
-                <Text style={styles.alertConfirmText}>Save</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
     </Animated.View>
   );
@@ -1097,250 +444,156 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#000000',
-    position: 'relative',
   },
-  fallbackContainer: {
+  itemCenter: {
+    width,
+    height,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#000000',
   },
-  thumbnailBackground: {
-    ...StyleSheet.absoluteFill,
-    opacity: 0.15,
+  fullMedia: {
+    width: '100%',
+    height: '100%',
   },
-  errorText: {
-    color: '#FF453A',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  headerOverlay: {
+  captionContainer: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    zIndex: 10,
-  },
-  headerBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitleContainer: {
-    flex: 1,
-    marginHorizontal: 12,
-    alignItems: 'center',
-  },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  headerSub: {
-    color: '#CCCCCC',
-    fontSize: 11,
-    fontWeight: '500',
-    marginTop: 2,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  bottomOverlay: {
-    position: 'absolute',
+    bottom: 120,
     left: 20,
     right: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    borderRadius: 24,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    zIndex: 10,
-  },
-  actionBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  actionBtnLabel: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  modalBg: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
-  },
-  modalDismissHitbox: {
-    flex: 1,
-  },
-  sheetContent: {
-    backgroundColor: '#0F1123',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    borderTopWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  sheetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  sheetTitle: {
+  captionText: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  sheetCloseBtn: {
-    color: '#FFFC00',
     fontSize: 14,
-    fontWeight: '700',
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  detailLabel: {
-    color: '#8E8E93',
-    fontSize: 13,
     fontWeight: '600',
-    width: 90,
-  },
-  detailValue: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-    flex: 1,
-  },
-  sheetActionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 24,
-  },
-  sheetActionBtn: {
-    flex: 1,
-    marginHorizontal: 4,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  sheetActionBtnLabel: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  deleteBtn: {
-    backgroundColor: 'rgba(255,69,58,0.1)',
-    borderColor: 'rgba(255,69,58,0.2)',
-  },
-  folderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  folderName: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  alertBg: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  alertBox: {
-    backgroundColor: '#0F1123',
-    borderRadius: 20,
-    width: '100%',
-    padding: 20,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-  },
-  alertTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '800',
-    marginBottom: 16,
     textAlign: 'center',
   },
-  alertInput: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 10,
-    color: '#FFFFFF',
-    padding: 12,
-    fontSize: 14,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  alertActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  alertBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  alertCancelText: {
-    color: '#8E8E93',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  alertConfirmText: {
-    color: '#FFFC00',
-    fontSize: 14,
-    fontWeight: '800',
+  topHudContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 20,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    zIndex: 10,
   },
   progressContainer: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
     flexDirection: 'row',
-    alignItems: 'center',
-    height: 4,
-    zIndex: 15,
+    height: 3,
+    gap: 4,
+    marginBottom: 12,
   },
   progressBarBackground: {
     flex: 1,
-    height: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.35)',
+    height: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     borderRadius: 2,
-    marginHorizontal: 2,
     overflow: 'hidden',
   },
   progressBarActive: {
     height: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 2,
+  },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dateText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  hudBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bottomHudContainer: {
+    position: 'absolute',
+    bottom: 30,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  bottomActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFC00',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+  },
+  bottomActionText: {
+    color: '#000000',
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  menuTriggerBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  sheetContainer: {
+    backgroundColor: '#0F1123',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 12,
+    paddingBottom: 40,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  sheetDragIndicator: {
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  sheetTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  sheetItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  sheetItemDelete: {
+    borderBottomWidth: 0,
+    marginTop: 10,
+  },
+  sheetText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
 

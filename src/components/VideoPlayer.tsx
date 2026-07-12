@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, Platform } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useIsFocused, useNavigation } from '@react-navigation/native';
+import { useIsFocused } from '@react-navigation/native';
 
 interface VideoPlayerProps {
   source: string;
@@ -10,167 +10,88 @@ interface VideoPlayerProps {
   paused?: boolean;
 }
 
-export const VideoPlayer: React.FC<VideoPlayerProps> = ({ source, style, onError, paused = false }) => {
+export const VideoPlayer: React.FC<VideoPlayerProps> = ({
+  source,
+  style,
+  onError,
+  paused = false,
+}) => {
   const isFocused = useIsFocused();
-  const [isNavigatingAway, setIsNavigatingAway] = useState(false);
 
-  let navigation: any = null;
-  try {
-    navigation = useNavigation();
-  } catch (_) {}
-
-  useEffect(() => {
-    if (!navigation) return;
-
-    const unsubscribeBlur = navigation.addListener('blur', () => {
-      setIsNavigatingAway(true);
-    });
-
-    const unsubscribeBeforeRemove = navigation.addListener('beforeRemove', () => {
-      setIsNavigatingAway(true);
-    });
-
-    return () => {
-      unsubscribeBlur();
-      unsubscribeBeforeRemove();
-    };
-  }, [navigation]);
-
+  // Web Implementation
   if (Platform.OS === 'web') {
     const videoRef = useRef<HTMLVideoElement>(null);
-    console.log('[DEBUG_VIEWER] VideoPlayer Web before rendering:', {
-      id: undefined,
-      type: 'video',
-      telegram_file_id: undefined,
-      preview_url: undefined,
-      thumbnail_url: undefined,
-      local_uri: undefined,
-      resolvedUri: source
-    });
 
     useEffect(() => {
       const video = videoRef.current;
       if (!video) return;
 
-      const handleWebError = (e: any) => {
-        console.error("Web video element error:", e);
+      const handleError = (e: any) => {
         if (onError) onError(e);
       };
 
-      video.addEventListener('error', handleWebError);
+      video.addEventListener('error', handleError);
 
-      if (isFocused && !paused && !isNavigatingAway) {
-        // Load the source only if it's not already loaded/playing this source
-        if (!video.src || video.src.indexOf(source) === -1) {
+      if (isFocused && !paused) {
+        if (video.src !== source) {
           video.src = source;
           video.load();
         }
-        
-        // Attempt to autoplay with audio first
         video.muted = false;
-        const playPromise = video.play();
-        
-        if (playPromise !== undefined) {
-          playPromise.catch((err) => {
-            console.log("Autoplay with audio was blocked, trying muted autoplay:", err);
-            // Fallback to muted autoplay if browser blocks audio
-            video.muted = true;
-            video.play().catch((err2) => {
-              console.error("Muted autoplay also blocked:", err2);
-            });
-          });
-        }
+        video.play().catch(() => {
+          // Fallback to muted autoplay if browser blocks audio
+          video.muted = true;
+          video.play().catch(() => {});
+        });
       } else {
         video.pause();
-        video.muted = true;
       }
 
       return () => {
-        video.removeEventListener('error', handleWebError);
+        video.removeEventListener('error', handleError);
         try {
           video.pause();
-          video.muted = true;
-          video.src = "";
+          video.src = '';
           video.load();
         } catch (_) {}
       };
-    }, [source, isFocused, paused, isNavigatingAway]);
+    }, [source, isFocused, paused]);
 
     return (
       <View style={[styles.container, style]}>
         <video
           ref={videoRef}
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-          }}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           loop
           playsInline
           controls={false}
-          onContextMenu={(e) => e.preventDefault()}
         />
       </View>
     );
   }
 
-  // Native iOS/Android implementation using expo-video
-  console.log('[DEBUG_VIEWER] VideoPlayer Native before rendering:', {
-    id: undefined,
-    type: 'video',
-    telegram_file_id: undefined,
-    preview_url: undefined,
-    thumbnail_url: undefined,
-    local_uri: undefined,
-    resolvedUri: source
-  });
+  // Native iOS/Android Implementation
   const player = useVideoPlayer(source, (playerInstance) => {
     playerInstance.loop = true;
-    playerInstance.bufferOptions = {
-      preferredForwardBufferDuration: 2,
-      minBufferForPlayback: 0.5,
-    };
   });
 
-  // Play/pause based on navigation focus status and paused prop
   useEffect(() => {
     if (!player) return;
-    if (isFocused && !paused && !isNavigatingAway) {
+
+    if (isFocused && !paused) {
       player.play();
     } else {
       player.pause();
     }
-  }, [player, isFocused, paused, isNavigatingAway]);
-
-  // Setup player options, register status listener, and perform deep cleanup on unmount
-  useEffect(() => {
-    if (!player) return;
-
-    player.loop = true;
-    player.bufferOptions = {
-      preferredForwardBufferDuration: 2,
-      minBufferForPlayback: 0.5,
-    };
-
-    const subscription = player.addListener('statusChange', (statusPayload: any) => {
-      const status = typeof statusPayload === 'string' ? statusPayload : statusPayload?.status;
-      if (status === 'readyToPlay' && isFocused && !paused && !isNavigatingAway) {
-        player.play();
-      } else if (status === 'error') {
-        const err = statusPayload?.error || { message: 'Video playback error' };
-        if (onError) onError(err);
-      }
-    });
 
     return () => {
-      subscription.remove();
       try {
         player.pause();
         player.muted = true;
-        player.replace(null); // Instantly unload video source, stop decoder, and silence playback
+        player.replace(null); // Instantly unload video source to release ExoPlayer/AVPlayer
       } catch (_) {}
     };
-  }, [player, isFocused, paused, isNavigatingAway]);
+  }, [player, source, isFocused, paused]);
 
   return (
     <View style={[styles.container, style]}>
@@ -189,8 +110,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: '#000000',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   video: {
     width: '100%',
