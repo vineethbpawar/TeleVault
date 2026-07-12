@@ -175,6 +175,23 @@ export const fileService = {
     return (data || []) as TeleVaultFolder[];
   },
 
+  async fetchAllDriveFolders(isPrivate: boolean): Promise<TeleVaultFolder[]> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not logged in.');
+
+    const { data, error } = await supabase
+      .from('folders')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_private', isPrivate)
+      .order('name', { ascending: true });
+
+    if (error) {
+      throw new Error(error.message || 'Failed to fetch all drive folders.');
+    }
+    return (data || []) as TeleVaultFolder[];
+  },
+
   async createFolder(name: string, parentFolderId: string | null, isPrivate: boolean): Promise<TeleVaultFolder> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not logged in.');
