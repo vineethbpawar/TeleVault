@@ -42,7 +42,7 @@ export interface MediaOverlayItem {
   created_at: string;
 }
 
-export type UploadStatus = 'pending' | 'uploading' | 'completed' | 'failed' | 'paused';
+export type UploadStatus = 'pending' | 'uploading' | 'processing' | 'completed' | 'failed' | 'paused';
 
 export type UploadDestination = 'memories' | 'drive' | 'private';
 
