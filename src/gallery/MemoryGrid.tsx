@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { StyleSheet, FlatList, View, Dimensions, RefreshControl, Platform } from 'react-native';
+import { StyleSheet, SectionList, View, Text, Dimensions, RefreshControl, Platform } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { useSharedValue, runOnJS } from 'react-native-reanimated';
 
@@ -8,6 +8,25 @@ import { MemoryGridProps, GalleryItem } from './types';
 import { showToast } from '../components/ToastBanner';
 
 const { width: screenWidth } = Dimensions.get('window');
+
+const formatDateHeader = (dateStr: string) => {
+  try {
+    const date = new Date(dateStr);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+
+    if (date.toDateString() === today.toDateString()) {
+      return 'Today';
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      return 'Yesterday';
+    } else {
+      return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
+  } catch (_) {
+    return 'Other';
+  }
+};
 
 export const MemoryGrid: React.FC<MemoryGridProps> = ({
   items,
@@ -22,7 +41,6 @@ export const MemoryGrid: React.FC<MemoryGridProps> = ({
 
   // Compute item size dynamically based on columns
   const itemSize = useMemo(() => {
-    // 4px total margin between items (2px left, 2px right)
     return (screenWidth - (columns * 4)) / columns;
   }, [columns]);
 
@@ -60,32 +78,70 @@ export const MemoryGrid: React.FC<MemoryGridProps> = ({
       })(scale);
     });
 
-  // FlatList optimization parameters for lag-free rendering
-  const renderItem = ({ item }: { item: GalleryItem }) => (
-    <MemoryItem
-      item={item}
-      size={itemSize}
-      onPress={() => onPressItem(item)}
-      onLongPress={() => onLongPressItem(item)}
-      isSelected={selectedIds.has(item.id)}
-      isSelectionMode={isSelectionMode}
-    />
-  );
+  // Group items by date header, then partition into rows of size 'columns'
+  const sections = useMemo(() => {
+    const groups: { [key: string]: GalleryItem[] } = {};
+    
+    for (const item of items) {
+      const header = formatDateHeader(item.created_at || item.uploaded_at);
+      if (!groups[header]) {
+        groups[header] = [];
+      }
+      groups[header].push(item);
+    }
+
+    const result: { title: string; data: GalleryItem[][] }[] = [];
+    
+    for (const title of Object.keys(groups)) {
+      const groupItems = groups[title];
+      const rows: GalleryItem[][] = [];
+      
+      for (let i = 0; i < groupItems.length; i += columns) {
+        rows.push(groupItems.slice(i, i + columns));
+      }
+      
+      result.push({
+        title,
+        data: rows
+      });
+    }
+    
+    return result;
+  }, [items, columns]);
 
   return (
     <GestureDetector gesture={pinchGesture}>
       <View style={styles.container}>
-        <FlatList
-          key={`grid-cols-${columns}`} // Force key recreate to adjust column dimensions
-          data={items}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          numColumns={columns}
+        <SectionList
+          sections={sections}
+          keyExtractor={(row, index) => `row-${row[0]?.id}-${index}`}
+          stickySectionHeadersEnabled={true}
+          renderSectionHeader={({ section: { title } }) => (
+            <View style={styles.sectionHeaderContainer}>
+              <Text style={styles.sectionHeaderTitle}>{title}</Text>
+            </View>
+          )}
+          renderItem={({ item: row }) => (
+            <View style={styles.rowContainer}>
+              {row.map((item) => (
+                <MemoryItem
+                  key={item.id}
+                  item={item}
+                  size={itemSize}
+                  onPress={() => onPressItem(item)}
+                  onLongPress={() => onLongPressItem(item)}
+                  isSelected={selectedIds.has(item.id)}
+                  isSelectionMode={isSelectionMode}
+                />
+              ))}
+              {row.length < columns && 
+                Array.from({ length: columns - row.length }).map((_, i) => (
+                  <View key={`pad-${i}`} style={{ width: itemSize, margin: 2 }} />
+                ))
+              }
+            </View>
+          )}
           showsVerticalScrollIndicator={false}
-          maxToRenderPerBatch={8}
-          windowSize={5}
-          initialNumToRender={12}
-          removeClippedSubviews={Platform.OS !== 'web'}
           contentContainerStyle={styles.gridContent}
           refreshControl={
             onRefresh ? (
@@ -112,6 +168,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingTop: 8,
     paddingBottom: 80,
+  },
+  rowContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+  },
+  sectionHeaderContainer: {
+    backgroundColor: '#000000',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  sectionHeaderTitle: {
+    color: '#8E8E93',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
   },
 });
 export default MemoryGrid;

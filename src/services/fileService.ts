@@ -61,7 +61,6 @@ export const fileService = {
       .from('files')
       .select('*')
       .eq('user_id', user.id)
-      .eq('is_private', false)
       .eq('is_drive_file', false)
       .order('created_at', { ascending: false });
 
