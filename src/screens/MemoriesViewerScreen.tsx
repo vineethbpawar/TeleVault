@@ -405,6 +405,9 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ route, navigation }) => 
                   year: 'numeric'
                 })}
               </Text>
+              <Text style={styles.indexIndicatorText}>
+                {currentIndex + 1} of {files.length}
+              </Text>
             </View>
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.hudBtn}>
               <X size={24} color="#FFFFFF" />
@@ -633,6 +636,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '600',
+  },
+  indexIndicatorText: {
+    color: '#FFFC00',
+    fontSize: 12,
+    fontWeight: '800',
+    marginLeft: 8,
+    backgroundColor: 'rgba(255, 252, 0, 0.15)',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 6,
   },
 });
 

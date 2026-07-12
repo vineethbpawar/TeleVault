@@ -986,6 +986,30 @@ export const telegramService = {
     });
   },
 
+  async deleteTelegramMessage(messageId: number): Promise<boolean> {
+    try {
+      const { botToken, channelId } = await this.getTelegramConfig();
+      if (!botToken || !channelId) return false;
+      
+      const url = `https://api.telegram.org/bot${botToken}/deleteMessage`;
+      const response = await fetchWithRetry(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: channelId,
+          message_id: messageId,
+        }),
+      });
+      const data = await response.json();
+      return !!data.ok;
+    } catch (e) {
+      console.warn('Failed to delete Telegram message:', e);
+      return false;
+    }
+  },
+
   async initConfig(): Promise<void> {
     try {
       const config = await this.getTelegramConfig();

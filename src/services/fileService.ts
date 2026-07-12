@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { TeleVaultFile, TeleVaultFolder } from '../types/file';
 import { storageService } from './storageService';
+import { telegramService } from './telegramService';
 
 export const fileService = {
   async saveFileMetadata(metadata: {
@@ -584,18 +585,33 @@ export const fileService = {
     await this.bulkUpdateOverlayMetadata(ids, { is_hidden: hide });
   },
 
-  async bulkDelete(ids: string[], hardDelete: boolean = false): Promise<void> {
-    if (hardDelete) {
-      const { error } = await supabase
+  async bulkDelete(ids: string[], hardDelete: boolean = true): Promise<void> {
+    try {
+      // 1. Fetch file info to retrieve telegram_message_ids
+      const { data: files, error: fetchErr } = await supabase
         .from('files')
-        .delete()
+        .select('id, telegram_message_id')
         .in('id', ids);
-      if (error) {
-        throw new Error(error.message || 'Failed to hard delete files.');
+
+      if (!fetchErr && files) {
+        for (const file of files) {
+          if (file.telegram_message_id) {
+            await telegramService.deleteTelegramMessage(Number(file.telegram_message_id)).catch(() => {});
+          }
+        }
       }
-    } else {
-      const now = new Date().toISOString();
-      await this.bulkUpdateOverlayMetadata(ids, { deleted_at: now });
+    } catch (e) {
+      console.warn('Failed to delete Telegram media during bulkDelete:', e);
+    }
+
+    // 2. Delete permanently from Supabase database
+    const { error } = await supabase
+      .from('files')
+      .delete()
+      .in('id', ids);
+
+    if (error) {
+      throw new Error(error.message || 'Failed to delete files from database.');
     }
   },
 

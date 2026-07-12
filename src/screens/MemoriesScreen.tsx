@@ -244,6 +244,20 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [isFocused, filterType, isUnlocked]);
 
+  // Listen to auth state changes to reload memories once the session completes restoration
+  useEffect(() => {
+    let active = true;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && active) {
+        loadMemories(false);
+      }
+    });
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
   // Realtime Supabase updates listener
   useEffect(() => {
     if (!isFocused) return;
