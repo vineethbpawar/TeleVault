@@ -613,7 +613,7 @@ export const fileService = {
       if (!fetchErr && files) {
         for (const file of files) {
           if (file.telegram_message_id) {
-            await telegramService.deleteTelegramMessage(Number(file.telegram_message_id)).catch(() => {});
+            telegramService.deleteTelegramMessage(Number(file.telegram_message_id)).catch(() => {});
           }
         }
       }
