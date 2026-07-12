@@ -225,8 +225,9 @@ export const previewCacheService = {
   async resolveFilePreviewInternal(
     file: {
       id: string;
-      file_name: string;
-      file_type: 'image' | 'video' | 'document' | 'unknown';
+      file_name?: string;
+      file_type?: 'image' | 'video' | 'document' | 'unknown';
+      media_type?: 'image' | 'video';
       mime_type?: string | null;
       local_uri?: string | null;
       local_thumbnail_uri?: string | null;
@@ -244,8 +245,9 @@ export const previewCacheService = {
     fallbackIcon: string;
     error?: string;
   }> {
-    const fileType = file.file_type || 'unknown';
+    const fileType = file.file_type || file.media_type || 'unknown';
     const fallbackIcon = fileType === 'image' ? 'image' : fileType === 'video' ? 'video' : 'document';
+    const fileName = file.file_name || 'file';
 
     // 1. Image resolution
     if (fileType === 'image') {
@@ -324,16 +326,16 @@ export const previewCacheService = {
           if (Platform.OS === 'web') {
             if (file.is_private) {
               const { encryptionService } = require('./encryptionService');
-              previewUri = await encryptionService.decryptFile(url, file.file_name, file.mime_type);
+              previewUri = await encryptionService.decryptFile(url, fileName, file.mime_type);
             } else {
               previewUri = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
             }
           } else {
             if (file.is_private) {
               const { encryptionService } = require('./encryptionService');
-              const tempEncPath = `${FileSystem.cacheDirectory}temp_enc_${file.id}_${file.file_name}`;
+              const tempEncPath = `${FileSystem.cacheDirectory}temp_enc_${file.id}_${fileName}`;
               await FileSystem.downloadAsync(url, tempEncPath);
-              previewUri = await encryptionService.decryptFile(tempEncPath, file.file_name, file.mime_type);
+              previewUri = await encryptionService.decryptFile(tempEncPath, fileName, file.mime_type);
               await FileSystem.deleteAsync(tempEncPath, { idempotent: true });
             } else {
               previewUri = url;
@@ -403,11 +405,11 @@ export const previewCacheService = {
               if (file.is_private) {
                 const { encryptionService } = require('./encryptionService');
                 if (Platform.OS === 'web') {
-                  playableUri = await encryptionService.decryptFile(url, file.file_name, file.mime_type);
+                  playableUri = await encryptionService.decryptFile(url, fileName, file.mime_type);
                 } else {
-                  const tempEncPath = `${FileSystem.cacheDirectory}temp_enc_${file.id}_${file.file_name}`;
+                  const tempEncPath = `${FileSystem.cacheDirectory}temp_enc_${file.id}_${fileName}`;
                   await FileSystem.downloadAsync(url, tempEncPath);
-                  playableUri = await encryptionService.decryptFile(tempEncPath, file.file_name, file.mime_type);
+                  playableUri = await encryptionService.decryptFile(tempEncPath, fileName, file.mime_type);
                   await FileSystem.deleteAsync(tempEncPath, { idempotent: true });
                 }
               } else {
@@ -489,43 +491,43 @@ export const previewCacheService = {
       }
 
       if (__DEV__) {
-        console.log(`[VIDEO_PREVIEW_DEV] Resolving: file_name=${file.file_name} file_id=${file.id} hasLocalThumb=${hasLocalThumb} hasCachedThumb=${hasCachedThumb} playableUriResolved=${!!playableUri}`);
+        console.log(`[VIDEO_PREVIEW_DEV] Resolving: file_name=${fileName} file_id=${file.id} hasLocalThumb=${hasLocalThumb} hasCachedThumb=${hasCachedThumb} playableUriResolved=${!!playableUri}`);
       }
 
-      // Generate dynamic thumbnail from video source in the background
+      // Generate dynamic thumbnail from video source synchronously
       if (!previewUri && playableUri) {
-        (async () => {
-          try {
-            if (__DEV__) {
-              console.log(`[VIDEO_PREVIEW_DEV] Starting background thumbnail generation for: ${file.file_name} from: ${playableUri}`);
+        try {
+          if (__DEV__) {
+            console.log(`[VIDEO_PREVIEW_DEV] Starting thumbnail generation for: ${fileName} from: ${playableUri}`);
+          }
+          if (Platform.OS === 'web') {
+            const thumbDataUrl = await getWebVideoThumbnail(playableUri!);
+            if (file.id) {
+              await cacheSetItem(`televault_vid_thumb_${file.id}`, thumbDataUrl);
             }
-            if (Platform.OS === 'web') {
-              const thumbDataUrl = await getWebVideoThumbnail(playableUri!);
+            previewUri = thumbDataUrl;
+          } else {
+            const thumb = await VideoThumbnails.getThumbnailAsync(playableUri!, { time: 500 });
+            if (thumb && thumb.uri) {
               if (file.id) {
-                await cacheSetItem(`televault_vid_thumb_${file.id}`, thumbDataUrl);
+                await cacheSetItem(`televault_vid_thumb_${file.id}`, thumb.uri);
+              }
+              previewUri = thumb.uri;
+              if (__DEV__) {
+                console.log(`[VIDEO_PREVIEW_DEV] Thumbnail generation SUCCESS: ${thumb.uri}`);
               }
             } else {
-              const thumb = await VideoThumbnails.getThumbnailAsync(playableUri!, { time: 500 });
-              if (thumb && thumb.uri) {
-                if (file.id) {
-                  await cacheSetItem(`televault_vid_thumb_${file.id}`, thumb.uri);
-                }
-                if (__DEV__) {
-                  console.log(`[VIDEO_PREVIEW_DEV] Background thumbnail generation SUCCESS: ${thumb.uri}`);
-                }
-              } else {
-                if (__DEV__) {
-                  console.log(`[VIDEO_PREVIEW_DEV] Background thumbnail generation FAILED: Empty response`);
-                }
+              if (__DEV__) {
+                console.log(`[VIDEO_PREVIEW_DEV] Thumbnail generation FAILED: Empty response`);
               }
             }
-          } catch (e: any) {
-            if (__DEV__) {
-              console.log(`[VIDEO_PREVIEW_DEV] Background thumbnail generation ERROR: name=${e.name} msg=${e.message}`);
-            }
-            console.warn('Background video thumbnail generation failed:', e);
           }
-        })();
+        } catch (e: any) {
+          if (__DEV__) {
+            console.log(`[VIDEO_PREVIEW_DEV] Thumbnail generation ERROR: name=${e.name} msg=${e.message}`);
+          }
+          console.warn('Video thumbnail generation failed:', e);
+        }
       }
 
       return {
@@ -594,16 +596,16 @@ export const previewCacheService = {
           if (Platform.OS === 'web') {
             if (file.is_private) {
               const { encryptionService } = require('./encryptionService');
-              previewUri = await encryptionService.decryptFile(url, file.file_name, file.mime_type);
+              previewUri = await encryptionService.decryptFile(url, fileName, file.mime_type);
             } else {
               previewUri = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
             }
           } else {
             if (file.is_private) {
               const { encryptionService } = require('./encryptionService');
-              const tempEncPath = `${FileSystem.cacheDirectory}temp_enc_${file.id}_${file.file_name}`;
+              const tempEncPath = `${FileSystem.cacheDirectory}temp_enc_${file.id}_${fileName}`;
               await FileSystem.downloadAsync(url, tempEncPath);
-              previewUri = await encryptionService.decryptFile(tempEncPath, file.file_name, file.mime_type);
+              previewUri = await encryptionService.decryptFile(tempEncPath, fileName, file.mime_type);
               await FileSystem.deleteAsync(tempEncPath, { idempotent: true });
             } else {
               previewUri = url;
@@ -629,8 +631,9 @@ export const previewCacheService = {
   async resolveFilePreview(
     file: {
       id: string;
-      file_name: string;
-      file_type: 'image' | 'video' | 'document' | 'unknown';
+      file_name?: string;
+      file_type?: 'image' | 'video' | 'document' | 'unknown';
+      media_type?: 'image' | 'video';
       mime_type?: string | null;
       local_uri?: string | null;
       local_thumbnail_uri?: string | null;

@@ -17,14 +17,10 @@ export const StoryBubble: React.FC<StoryBubbleProps> = React.memo(({ story, onPr
     let active = true;
     if (story.telegram_file_id) {
       previewCacheService
-        .resolvePreviewForFile({
-          id: story.id,
-          local_uri: story.overlay_metadata?.thumbnail_url,
-          telegram_file_id: story.telegram_file_id,
-        })
-        .then((resolved) => {
-          if (active && resolved) {
-            setImgUri(resolved);
+        .resolveFilePreview(story as any)
+        .then((res) => {
+          if (active && res.previewUri) {
+            setImgUri(res.previewUri);
           }
         });
     }

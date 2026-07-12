@@ -328,40 +328,9 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
         removeClippedSubviews={Platform.OS !== 'web'}
       />
 
-      {/* Top HUD (Progress and details) */}
+      {/* Top HUD (Details and close button) */}
       {!isHoldActive && !isMenuOpen && (
         <View style={styles.topHudContainer}>
-          {/* Snapchat story progress segments */}
-          <View style={styles.progressContainer}>
-            {files.map((_, idx) => {
-              const isPassed = idx < currentIndex;
-              const isActive = idx === currentIndex;
-              
-              const barWidth = isPassed 
-                ? '100%' 
-                : isActive 
-                  ? progressAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0%', '100%']
-                    })
-                  : '0%';
-
-              return (
-                <View key={idx} style={styles.progressBarBackground}>
-                  <Animated.View
-                    style={[
-                      styles.progressBarActive,
-                      {
-                        width: barWidth,
-                        backgroundColor: isActive ? '#FFFC00' : '#FFFFFF',
-                      }
-                    ]}
-                  />
-                </View>
-              );
-            })}
-          </View>
-
           {/* Time and Title Header */}
           <View style={styles.topBar}>
             <View style={styles.topBarLeft}>
@@ -459,28 +428,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     zIndex: 10,
   },
-  progressContainer: {
-    flexDirection: 'row',
-    height: 4,
-    marginTop: Platform.OS === 'ios' ? 44 : 20,
-    marginBottom: 10,
-  },
-  progressBarBackground: {
-    flex: 1,
-    height: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.35)',
-    marginHorizontal: 2,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressBarActive: {
-    height: '100%',
-  },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     height: 44,
+    marginTop: Platform.OS === 'ios' ? 44 : 20,
+    marginBottom: 10,
   },
   topBarLeft: {
     flexDirection: 'row',

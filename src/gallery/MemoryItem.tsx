@@ -21,14 +21,10 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
       let active = true;
 
       previewCacheService
-        .resolvePreviewForFile({
-          id: item.id,
-          local_uri: item.local_thumbnail_uri || item.overlay_metadata?.thumbnail_url,
-          telegram_file_id: item.telegram_file_id,
-        })
-        .then((resolved) => {
-          if (active && resolved) {
-            setImgUri(resolved);
+        .resolveFilePreview(item)
+        .then((res) => {
+          if (active && res.previewUri) {
+            setImgUri(res.previewUri);
           }
         });
 
@@ -73,10 +69,10 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
           </View>
         )}
 
-        {/* Uploading Placeholder Indicator */}
+        {/* Uploading Badge Indicator */}
         {!item.telegram_file_id && (
-          <View style={styles.uploadingOverlay}>
-            <ActivityIndicator size="small" color="#FFFC00" />
+          <View style={styles.uploadingBadge}>
+            <ActivityIndicator size="small" color="#FFFC00" style={{ transform: [{ scale: 0.8 }] }} />
           </View>
         )}
 
@@ -120,9 +116,13 @@ const styles = StyleSheet.create({
     padding: 4,
     borderRadius: 8,
   },
-  uploadingOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  uploadingBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    padding: 4,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },

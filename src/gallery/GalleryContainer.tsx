@@ -132,7 +132,8 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
   };
 
   const handlePressItem = (item: GalleryItem) => {
-    if (!item.telegram_file_id) {
+    const hasLocalMedia = !!(item.local_thumbnail_uri || item.overlay_metadata?.local_uri || item.overlay_metadata?.thumbnail_url);
+    if (!item.telegram_file_id && !hasLocalMedia) {
       showToast('Media is still uploading...');
       return;
     }
