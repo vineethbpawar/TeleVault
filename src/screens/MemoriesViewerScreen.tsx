@@ -14,6 +14,7 @@ import {
   Alert,
   Modal,
   Platform,
+  Pressable,
 } from 'react-native';
 import { X, Trash2, Lock, Star, MoreVertical, Send, Calendar, Type } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -32,7 +33,11 @@ const ViewerItem = React.memo<{
   file: any;
   isActive: boolean;
   paused: boolean;
-}>(({ file, isActive, paused }) => {
+  onTapLeft: () => void;
+  onTapRight: () => void;
+  onHoldStart: () => void;
+  onHoldEnd: () => void;
+}>(({ file, isActive, paused, onTapLeft, onTapRight, onHoldStart, onHoldEnd }) => {
   const [resolvedUri, setResolvedUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -74,7 +79,20 @@ const ViewerItem = React.memo<{
   const isVideo = file.file_type === 'video';
 
   return (
-    <View style={styles.itemContainer}>
+    <Pressable
+      style={styles.itemContainer}
+      onPress={(e) => {
+        const x = e.nativeEvent.pageX;
+        if (x < width * 0.3) {
+          onTapLeft();
+        } else {
+          onTapRight();
+        }
+      }}
+      onLongPress={onHoldStart}
+      onPressOut={onHoldEnd}
+      delayLongPress={250}
+    >
       {isVideo ? (
         <VideoPlayer
           source={resolvedUri}
@@ -88,6 +106,7 @@ const ViewerItem = React.memo<{
           showsHorizontalScrollIndicator={false}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ width, height, justifyContent: 'center', alignItems: 'center' }}
+          scrollEnabled={false}
         >
           <Image
             source={{ uri: resolvedUri }}
@@ -103,7 +122,7 @@ const ViewerItem = React.memo<{
           <Text style={styles.captionText}>{file.caption}</Text>
         </View>
       )}
-    </View>
+    </Pressable>
   );
 }, (prev, next) => {
   return prev.file.id === next.file.id &&
@@ -124,7 +143,34 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ route, navigation }) => 
   const overlayOpacity = useRef(new Animated.Value(1)).current;
   const flatListRef = useRef<FlatList>(null);
 
+  // Snapchat-style animated progress bar timing
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
   const activeFile = files[currentIndex];
+
+  useEffect(() => {
+    progressAnim.setValue(0);
+    if (isHoldActive || isMenuOpen || isDragging) {
+      progressAnim.stopAnimation();
+      return;
+    }
+
+    const duration = activeFile?.file_type === 'video' ? 10000 : 5000;
+
+    Animated.timing(progressAnim, {
+      toValue: 1,
+      duration: duration,
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (finished) {
+        goToNext();
+      }
+    });
+
+    return () => {
+      progressAnim.stopAnimation();
+    };
+  }, [currentIndex, isHoldActive, isMenuOpen, isDragging]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -170,16 +216,7 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ route, navigation }) => 
     })
   ).current;
 
-  // Horizontal tap navigation (Snapchat style)
-  const handleScreenPress = (evt: any) => {
-    const x = evt.nativeEvent.pageX;
-    const threshold = width * 0.3; // Left 30%
-    if (x < threshold) {
-      goToPrevious();
-    } else {
-      goToNext();
-    }
-  };
+
 
   const goToNext = () => {
     if (currentIndex < files.length - 1) {
@@ -277,17 +314,6 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ route, navigation }) => 
       ]}
       {...panResponder.panHandlers}
     >
-      {/* Tap Gesture Overlay for Left/Right Jumps */}
-      {!isMenuOpen && (
-        <TouchableOpacity
-          activeOpacity={1}
-          style={StyleSheet.absoluteFill}
-          onPress={handleScreenPress}
-          onLongPress={() => setIsHoldActive(true)}
-          onPressOut={() => setIsHoldActive(false)}
-        />
-      )}
-
       {/* Immersive Horizontal FlatList */}
       <FlatList
         ref={flatListRef}
@@ -320,6 +346,10 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ route, navigation }) => 
               file={item}
               isActive={isCurrent}
               paused={!isCurrent || isHoldActive || isDragging || isMenuOpen}
+              onTapLeft={goToPrevious}
+              onTapRight={goToNext}
+              onHoldStart={() => setIsHoldActive(true)}
+              onHoldEnd={() => setIsHoldActive(false)}
             />
           );
         }}
@@ -335,19 +365,33 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ route, navigation }) => 
         <View style={styles.topHudContainer}>
           {/* Progress Segment indicators */}
           <View style={styles.progressContainer}>
-            {files.map((_, idx) => (
-              <View key={idx} style={styles.progressBarBackground}>
-                <View
-                  style={[
-                    styles.progressBarActive,
-                    {
-                      width: idx < currentIndex ? '100%' : idx === currentIndex ? '100%' : '0%',
-                      backgroundColor: idx === currentIndex ? '#FFFC00' : '#FFFFFF',
-                    }
-                  ]}
-                />
-              </View>
-            ))}
+            {files.map((_, idx) => {
+              const isPassed = idx < currentIndex;
+              const isActive = idx === currentIndex;
+              
+              const barWidth = isPassed 
+                ? '100%' 
+                : isActive 
+                  ? progressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0%', '100%']
+                    })
+                  : '0%';
+
+              return (
+                <View key={idx} style={styles.progressBarBackground}>
+                  <Animated.View
+                    style={[
+                      styles.progressBarActive,
+                      {
+                        width: barWidth,
+                        backgroundColor: isActive ? '#FFFC00' : '#FFFFFF',
+                      }
+                    ]}
+                  />
+                </View>
+              );
+            })}
           </View>
 
           {/* Title / Action bar */}

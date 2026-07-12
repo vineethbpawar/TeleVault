@@ -936,7 +936,13 @@ export const telegramService = {
     const fileInfo = await this.getTelegramFileInfo(fileId, signal);
     const url = `https://api.telegram.org/file/bot${botToken}/${fileInfo.file_path}`;
     if (Platform.OS === 'web') {
-      return `https://corsproxy.io/?${url}`;
+      if (typeof window !== 'undefined' && window.location) {
+        const hostname = window.location.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.')) {
+          return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(url)}`;
+        }
+      }
+      return `/api/telegram-proxy?url=${encodeURIComponent(url)}`;
     }
     return url;
   },

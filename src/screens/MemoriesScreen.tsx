@@ -76,9 +76,9 @@ const MemoryGridItem = React.memo<{
       style={{ width: size, height: size, margin: 2, position: 'relative', borderRadius: 16, overflow: 'hidden', backgroundColor: '#1A1A1A' }}
     >
       {imgUri ? (
-        <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <Image source={{ uri: imgUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
       ) : (
-        <View style={[StyleSheet.absoluteFill, styles.fallbackContainer]}>
+        <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: '#1E1E1E' }}>
           {isVideo ? (
             <Video size={24} color="#8E8E93" />
           ) : (
