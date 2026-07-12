@@ -1,11 +1,9 @@
-import React, { useRef, useImperativeHandle, forwardRef } from 'react';
+import React, { useRef, useImperativeHandle, forwardRef, useState } from 'react';
 import { View, StyleSheet, Text, Platform } from 'react-native';
 import { CameraView } from 'expo-camera';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedProps, runOnJS, SharedValue } from 'react-native-reanimated';
+import Animated, { useSharedValue, runOnJS, SharedValue, useAnimatedReaction } from 'react-native-reanimated';
 import { CameraLensType, CaptureResult } from './types';
-
-const AnimatedCameraView = Animated.createAnimatedComponent(CameraView);
 
 interface CameraPreviewProps {
   facing: 'front' | 'back';
@@ -26,12 +24,14 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
   ({ facing, flash, lens, zoomShared, onReady, locationText }, ref) => {
     const cameraRef = useRef<CameraView | null>(null);
 
-    // Reanimated animated properties for zero JS thread delays
-    const animatedProps = useAnimatedProps(() => {
-      return {
-        zoom: zoomShared.value,
-      };
-    });
+    const [zoomScale, setZoomScale] = useState(0);
+
+    useAnimatedReaction(
+      () => zoomShared.value,
+      (val) => {
+        runOnJS(setZoomScale)(val);
+      }
+    );
 
     // Native Gesture Handler Setup (Pinch-to-zoom)
     const baseZoom = useSharedValue(0);
@@ -92,14 +92,14 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     return (
       <GestureDetector gesture={pinchGesture}>
         <View style={styles.container}>
-          <AnimatedCameraView
+          <CameraView
             ref={cameraRef as any}
             style={StyleSheet.absoluteFill}
             facing={facing}
             mode="video"
             enableTorch={flash === 'on'}
             onCameraReady={onReady}
-            animatedProps={animatedProps}
+            zoom={zoomScale}
             videoStabilizationMode="auto"
           />
 
