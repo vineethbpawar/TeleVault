@@ -1,6 +1,6 @@
 import * as Sharing from 'expo-sharing';
 import { telegramService } from './telegramService';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 
 export const fileOpenService = {
   /**
@@ -13,11 +13,6 @@ export const fileOpenService = {
     }
 
     try {
-      const isSharingAvailable = await Sharing.isAvailableAsync();
-      if (!isSharingAvailable) {
-        throw new Error('System sharing is not available on this device.');
-      }
-
       // Download file to cache
       let cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
       
@@ -25,6 +20,21 @@ export const fileOpenService = {
       if (file.is_private) {
         const { encryptionService } = require('./encryptionService');
         cachedUri = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type);
+      }
+
+      if (Platform.OS === 'web') {
+        const link = document.createElement('a');
+        link.href = cachedUri;
+        link.download = file.file_name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
+
+      const isSharingAvailable = await Sharing.isAvailableAsync();
+      if (!isSharingAvailable) {
+        throw new Error('System sharing is not available on this device.');
       }
       
       // Open in system viewer/sharing sheet

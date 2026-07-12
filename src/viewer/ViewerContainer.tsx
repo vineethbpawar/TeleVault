@@ -159,7 +159,8 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return Math.abs(gestureState.dy) > 15 && gestureState.dy > 0 && !isHoldActive && !isMenuOpen;
+        // Prevent wobble or tap cancellation on HUD buttons: require significant vertical swipe
+        return gestureState.dy > 35 && Math.abs(gestureState.dx) < 20 && !isHoldActive && !isMenuOpen;
       },
       onPanResponderMove: (evt, gestureState) => {
         if (gestureState.dy > 0) {

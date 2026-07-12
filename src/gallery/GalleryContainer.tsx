@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Search, Star, Lock, Grid, Trash2, Edit, CheckSquare, X } from 'lucide-react-native';
+import { Search, Star, Lock, Grid, Trash2, Edit, CheckSquare, X, Share2 } from 'lucide-react-native';
 
 import { MemoryGrid } from './MemoryGrid';
 import { GalleryItem, FilterType } from './types';
@@ -9,6 +9,7 @@ import { fileService } from '../services/fileService';
 import { supabase } from '../lib/supabase';
 import { showToast } from '../components/ToastBanner';
 import PinLockModal from '../components/PinLockModal';
+import { fileOpenService } from '../services/fileOpenService';
 
 interface GalleryContainerProps {
   navigation: any;
@@ -226,6 +227,64 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
   };
 
   // Bulk Operations
+  const handleBulkExport = async () => {
+    const ids = Array.from(selectedIds);
+    const selectedFiles = items.filter(f => ids.includes(f.id));
+    if (selectedFiles.length === 0) return;
+
+    if (Platform.OS === 'web') {
+      const confirmMsg = selectedFiles.length === 1 
+        ? 'Download this file to your device?' 
+        : `Download these ${selectedFiles.length} files to your device?`;
+      if (window.confirm(confirmMsg)) {
+        try {
+          setLoading(true);
+          for (const file of selectedFiles) {
+            await fileOpenService.openDocument(file).catch(err => {
+              console.warn('Failed to download file in loop:', err);
+            });
+          }
+          setSelectedIds(new Set());
+          setIsSelectionMode(false);
+          showToast(selectedFiles.length === 1 ? 'File downloaded.' : 'All files downloaded.');
+        } catch (err: any) {
+          Alert.alert('Download Failed', err.message || 'Failed to download files.');
+        } finally {
+          setLoading(false);
+        }
+      }
+      return;
+    }
+
+    const confirmMsg = selectedFiles.length === 1
+      ? 'Export/Share this file?'
+      : `Export/Share these ${selectedFiles.length} files sequentially?`;
+
+    Alert.alert('Export Snaps', confirmMsg, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Export',
+        onPress: async () => {
+          try {
+            setLoading(true);
+            for (const file of selectedFiles) {
+              await fileOpenService.openDocument(file).catch(err => {
+                console.warn('Failed to share file in loop:', err);
+              });
+            }
+            setSelectedIds(new Set());
+            setIsSelectionMode(false);
+            showToast('Files exported successfully.');
+          } catch (err: any) {
+            Alert.alert('Error', err.message || 'Export failed.');
+          } finally {
+            setLoading(false);
+          }
+        }
+      }
+    ]);
+  };
+
   const handleBulkTrash = async () => {
     const ids = Array.from(selectedIds);
     Alert.alert('Delete Snaps', `Are you sure you want to permanently delete these ${ids.length} snaps?`, [
@@ -351,12 +410,17 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
       {isSelectionMode && selectedIds.size > 0 && (
         <View style={[styles.bulkHud, { bottom: Platform.OS === 'web' ? 76 : 76 + insets.bottom }]}>
           <TouchableOpacity style={styles.bulkActionBtn} onPress={handleBulkHide}>
-            <Lock size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Lock size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
             <Text style={styles.bulkActionBtnText}>HIDE</Text>
           </TouchableOpacity>
  
+          <TouchableOpacity style={styles.bulkActionBtn} onPress={handleBulkExport}>
+            <Share2 size={16} color="#FFFC00" style={{ marginRight: 4 }} />
+            <Text style={[styles.bulkActionBtnText, { color: '#FFFC00' }]}>SHARE</Text>
+          </TouchableOpacity>
+ 
           <TouchableOpacity style={[styles.bulkActionBtn, styles.bulkActionDeleteBtn]} onPress={handleBulkTrash}>
-            <Trash2 size={18} color="#FF3B30" style={{ marginRight: 6 }} />
+            <Trash2 size={16} color="#FF3B30" style={{ marginRight: 4 }} />
             <Text style={[styles.bulkActionBtnText, { color: '#FF3B30' }]}>DELETE</Text>
           </TouchableOpacity>
         </View>

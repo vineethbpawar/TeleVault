@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, Platform, AppState, ScrollView, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Plus, FolderPlus, Upload, ArrowLeft, Folder, ChevronRight, MoreVertical, Search, ArrowUpDown, Lock, FileText, HardDrive, Star, Image as ImageIcon, Video, Trash2, Edit, CheckSquare, X } from 'lucide-react-native';
+import { Plus, FolderPlus, Upload, ArrowLeft, Folder, ChevronRight, MoreVertical, Search, ArrowUpDown, Lock, FileText, HardDrive, Star, Image as ImageIcon, Video, Trash2, Edit, CheckSquare, X, Share2 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -14,6 +14,7 @@ import FolderCard from '../components/FolderCard';
 import FileCard from '../components/FileCard';
 import PinLockModal from '../components/PinLockModal';
 import UploadProgress from '../components/UploadProgress';
+import { fileOpenService } from '../services/fileOpenService';
 
 export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFocused, isPrivateMode }) => {
   const insets = useSafeAreaInsets();
@@ -357,6 +358,68 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
     }
   };
 
+  const handleBulkExport = async () => {
+    const ids = Array.from(selectedIds);
+    // filter to only include files (folders cannot be shared/downloaded directly)
+    const selectedFiles = files.filter(f => ids.includes(f.id));
+    if (selectedFiles.length === 0) {
+      showToast('No files selected (folders cannot be exported).');
+      return;
+    }
+
+    if (Platform.OS === 'web') {
+      const confirmMsg = selectedFiles.length === 1 
+        ? 'Download this file to your device?' 
+        : `Download these ${selectedFiles.length} files to your device?`;
+      if (window.confirm(confirmMsg)) {
+        try {
+          setLoading(true);
+          for (const file of selectedFiles) {
+            await fileOpenService.openDocument(file as any).catch(err => {
+              console.warn('Failed to download file in loop:', err);
+            });
+          }
+          setSelectedIds(new Set());
+          setIsSelectionMode(false);
+          showToast(selectedFiles.length === 1 ? 'File downloaded.' : 'All files downloaded.');
+        } catch (err: any) {
+          Alert.alert('Download Failed', err.message || 'Failed to download files.');
+        } finally {
+          setLoading(false);
+        }
+      }
+      return;
+    }
+
+    const confirmMsg = selectedFiles.length === 1
+      ? 'Export/Share this file?'
+      : `Export/Share these ${selectedFiles.length} files sequentially?`;
+
+    Alert.alert('Export Files', confirmMsg, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Export',
+        onPress: async () => {
+          try {
+            setLoading(true);
+            for (const file of selectedFiles) {
+              await fileOpenService.openDocument(file as any).catch(err => {
+                console.warn('Failed to share file in loop:', err);
+              });
+            }
+            setSelectedIds(new Set());
+            setIsSelectionMode(false);
+            showToast('Files exported successfully.');
+          } catch (err: any) {
+            Alert.alert('Error', err.message || 'Export failed.');
+          } finally {
+            setLoading(false);
+          }
+        }
+      }
+    ]);
+  };
+
   const handleBulkDelete = async () => {
     const ids = Array.from(selectedIds);
     Alert.alert('Confirm Delete', `Permanently delete these ${ids.length} items?`, [
@@ -547,12 +610,17 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
       {isSelectionMode && selectedIds.size > 0 && (
         <View style={[styles.bulkHud, { bottom: Platform.OS === 'web' ? 76 : 76 + insets.bottom }]}>
           <TouchableOpacity style={styles.bulkActionBtn} onPress={handleTriggerBulkMove}>
-            <Folder size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Folder size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
             <Text style={styles.bulkActionBtnText}>MOVE</Text>
           </TouchableOpacity>
  
+          <TouchableOpacity style={styles.bulkActionBtn} onPress={handleBulkExport}>
+            <Share2 size={16} color="#FFFC00" style={{ marginRight: 4 }} />
+            <Text style={[styles.bulkActionBtnText, { color: '#FFFC00' }]}>SHARE</Text>
+          </TouchableOpacity>
+ 
           <TouchableOpacity style={[styles.bulkActionBtn, styles.bulkActionDeleteBtn]} onPress={handleBulkDelete}>
-            <Trash2 size={18} color="#FF3B30" style={{ marginRight: 6 }} />
+            <Trash2 size={16} color="#FF3B30" style={{ marginRight: 4 }} />
             <Text style={[styles.bulkActionBtnText, { color: '#FF3B30' }]}>DELETE</Text>
           </TouchableOpacity>
         </View>
