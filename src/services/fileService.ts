@@ -599,7 +599,14 @@ export const fileService = {
   },
 
   async bulkHide(ids: string[], hide: boolean): Promise<void> {
-    await this.bulkUpdateOverlayMetadata(ids, { is_hidden: hide });
+    const { error } = await supabase
+      .from('files')
+      .update({ is_private: hide })
+      .in('id', ids);
+
+    if (error) {
+      throw new Error(error.message || 'Failed to update private status.');
+    }
   },
 
   async bulkDelete(ids: string[], hardDelete: boolean = true): Promise<void> {

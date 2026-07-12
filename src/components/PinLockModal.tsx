@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Modal, SafeAreaView, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Modal, SafeAreaView, Alert, TextInput, ActivityIndicator } from 'react-native';
 import { Delete, X, Lock, Fingerprint } from 'lucide-react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { securityService } from '../services/securityService';
+import { supabase } from '../lib/supabase';
 
 interface PinLockModalProps {
   visible: boolean;
@@ -19,6 +20,7 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
   mode = 'verify',
   undismissable = false,
 }) => {
+  const [localMode, setLocalMode] = useState(mode);
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [step, setStep] = useState<'enter' | 'confirm'>('enter');
@@ -26,6 +28,12 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutSec, setLockoutSec] = useState(0);
+
+  // Recovery states
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [accountPassword, setAccountPassword] = useState('');
+  const [verifyError, setVerifyError] = useState('');
+  const [verifying, setVerifying] = useState(false);
 
   // Lockout countdown timer
   useEffect(() => {
@@ -61,6 +69,7 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
       setPin('');
       setConfirmPin('');
       setStep('enter');
+      setLocalMode(mode);
       if (lockoutSec <= 0) {
         setError('');
       }
@@ -72,15 +81,15 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
         }, 500);
       }
     }
-  }, [visible, biometricsAvailable, lockoutSec]);
+  }, [visible, biometricsAvailable, lockoutSec, mode]);
 
   const triggerBiometrics = async () => {
     if (lockoutSec > 0) return;
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     const isEnrolled = await LocalAuthentication.isEnrolledAsync();
     const isEnabled = await securityService.isBiometricsEnabled();
-
-    if (hasHardware && isEnrolled && isEnabled && mode === 'verify') {
+ 
+    if (hasHardware && isEnrolled && isEnabled && localMode === 'verify') {
       try {
         const result = await LocalAuthentication.authenticateAsync({
           promptMessage: 'Unlock TeleVault',
@@ -96,12 +105,98 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
     }
   };
 
+  const handleForgotPasscode = () => {
+    Alert.alert(
+      'Reset Private Vault?',
+      'If you reset your passcode, you can set a new 4-digit PIN. However, to protect your privacy, all snaps currently saved in your Private Vault will be permanently deleted from the database.\n\nDo you want to proceed?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Reset Vault', style: 'destructive', onPress: () => setShowForgotModal(true) }
+      ]
+    );
+  };
+
+  const handleVerifyPassword = async () => {
+    if (!accountPassword) {
+      setVerifyError('Please enter your password.');
+      return;
+    }
+    setVerifying(true);
+    setVerifyError('');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !user.email) {
+        throw new Error('No active user session found.');
+      }
+
+      // Verify account password by trying to log in
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: accountPassword,
+      });
+
+      if (signInErr) {
+        setVerifyError('Incorrect password. Please try again.');
+        setVerifying(false);
+        return;
+      }
+
+      // 1. Delete all user's private files
+      const { error: deleteErr } = await supabase
+        .from('files')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('is_private', true);
+
+      if (deleteErr) {
+        console.warn('Failed to delete files during recovery reset:', deleteErr);
+      }
+
+      // 2. Also delete private files in large_files table if they exist
+      try {
+        await supabase
+          .from('large_files')
+          .delete()
+          .eq('owner_id', user.id);
+      } catch (err) {
+        console.warn('Failed to delete large_files:', err);
+      }
+
+      // 3. Clear/disable local PIN
+      await securityService.disablePin();
+
+      setShowForgotModal(false);
+      setAccountPassword('');
+      
+      Alert.alert(
+        'Vault Reset Successful',
+        'Your Private Vault has been reset and all previous private snaps were deleted. You can now configure a new PIN.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setPin('');
+              setConfirmPin('');
+              setStep('enter');
+              setError('');
+              setLocalMode('create');
+            }
+          }
+        ]
+      );
+    } catch (err: any) {
+      setVerifyError(err.message || 'An error occurred. Please try again.');
+    } finally {
+      setVerifying(false);
+    }
+  };
+ 
   const handleKeyPress = (num: string) => {
     if (lockoutSec > 0) return;
     setError('');
     const currentInput = step === 'enter' ? pin : confirmPin;
     if (currentInput.length >= 4) return;
-
+ 
     const newInput = currentInput + num;
     if (step === 'enter') {
       setPin(newInput);
@@ -109,13 +204,13 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
       setConfirmPin(newInput);
     }
   };
-
+ 
   const handleBackspace = () => {
     if (lockoutSec > 0) return;
     setError('');
     const currentInput = step === 'enter' ? pin : confirmPin;
     if (currentInput.length === 0) return;
-
+ 
     const newInput = currentInput.slice(0, -1);
     if (step === 'enter') {
       setPin(newInput);
@@ -123,12 +218,12 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
       setConfirmPin(newInput);
     }
   };
-
+ 
   // Monitor input length to auto-trigger verification
   useEffect(() => {
     const checkPin = async () => {
       if (lockoutSec > 0) return;
-      if (mode === 'verify') {
+      if (localMode === 'verify') {
         if (pin.length === 4) {
           const isValid = await securityService.verifyPin(pin);
           if (isValid) {
@@ -164,25 +259,25 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
         }
       }
     };
-
+ 
     checkPin();
-  }, [pin, confirmPin, lockoutSec]);
-
+  }, [pin, confirmPin, lockoutSec, localMode]);
+ 
   const getHeading = () => {
     if (lockoutSec > 0) {
       return 'Temporarily Locked';
     }
-    if (mode === 'verify') {
+    if (localMode === 'verify') {
       return 'Enter PIN';
     }
     return step === 'enter' ? 'Create PIN' : 'Confirm PIN';
   };
-
+ 
   const getSubheading = () => {
     if (lockoutSec > 0) {
       return `Try again in ${lockoutSec} seconds`;
     }
-    if (mode === 'verify') {
+    if (localMode === 'verify') {
       return 'Please enter your 4-digit security PIN';
     }
     return step === 'enter'
@@ -259,7 +354,7 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
           </View>
           <View style={styles.keypadRow}>
             {/* Left Button (Biometrics or Cancel) */}
-            {biometricsAvailable && mode === 'verify' ? (
+            {biometricsAvailable && localMode === 'verify' ? (
               <TouchableOpacity
                 style={styles.keypadButton}
                 onPress={triggerBiometrics}
@@ -293,6 +388,65 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Forgot Passcode Link */}
+        {localMode === 'verify' && (
+          <TouchableOpacity 
+            style={styles.forgotBtn} 
+            onPress={handleForgotPasscode}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.forgotBtnText}>Forgot Passcode?</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Password Verification Modal */}
+        <Modal visible={showForgotModal} animationType="slide" transparent>
+          <View style={styles.forgotOverlay}>
+            <View style={styles.forgotContent}>
+              <Text style={styles.forgotTitle}>Reset Passcode</Text>
+              <Text style={styles.forgotSubtitle}>
+                Enter your TeleVault account password to reset your vault PIN. Note: to protect your privacy, all snaps in your Private Vault will be permanently deleted.
+              </Text>
+              <TextInput
+                secureTextEntry
+                style={styles.passwordInput}
+                placeholder="Account Password"
+                placeholderTextColor="#8e92af"
+                value={accountPassword}
+                onChangeText={(txt) => {
+                  setAccountPassword(txt);
+                  setVerifyError('');
+                }}
+              />
+              {verifyError ? <Text style={styles.forgotError}>{verifyError}</Text> : null}
+              <View style={styles.forgotActions}>
+                <TouchableOpacity 
+                  style={[styles.actionBtn, styles.cancelBtn]} 
+                  onPress={() => {
+                    setShowForgotModal(false);
+                    setAccountPassword('');
+                    setVerifyError('');
+                  }}
+                  disabled={verifying}
+                >
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.actionBtn, styles.confirmBtn]} 
+                  onPress={handleVerifyPassword}
+                  disabled={verifying}
+                >
+                  {verifying ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.confirmBtnText}>Reset PIN</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </Modal>
   );
@@ -371,7 +525,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   keypadContainer: {
-    paddingBottom: 40,
+    paddingBottom: 20,
     paddingHorizontal: 20,
   },
   keypadRow: {
@@ -397,6 +551,98 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#8e92af',
+  },
+  forgotBtn: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  forgotBtnText: {
+    color: '#FFFC00',
+    fontSize: 14,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  forgotOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  forgotContent: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: '#0F1123',
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+  },
+  forgotTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  forgotSubtitle: {
+    color: '#8e92af',
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  passwordInput: {
+    width: '100%',
+    height: 48,
+    backgroundColor: '#1b1d30',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    color: '#FFFFFF',
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    marginBottom: 12,
+  },
+  forgotError: {
+    color: '#FF3B30',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  forgotActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  actionBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    marginRight: 8,
+  },
+  cancelBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  confirmBtn: {
+    backgroundColor: '#FF3B30',
+    marginLeft: 8,
+  },
+  confirmBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
 
