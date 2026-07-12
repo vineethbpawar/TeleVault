@@ -545,12 +545,12 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
 
       {/* Bulk Operations Bottom HUD */}
       {isSelectionMode && selectedIds.size > 0 && (
-        <View style={[styles.bulkHud, { paddingBottom: insets.bottom + 12 }]}>
+        <View style={[styles.bulkHud, { bottom: Platform.OS === 'web' ? 76 : 76 + insets.bottom }]}>
           <TouchableOpacity style={styles.bulkActionBtn} onPress={handleTriggerBulkMove}>
             <Folder size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
             <Text style={styles.bulkActionBtnText}>MOVE</Text>
           </TouchableOpacity>
-
+ 
           <TouchableOpacity style={[styles.bulkActionBtn, styles.bulkActionDeleteBtn]} onPress={handleBulkDelete}>
             <Trash2 size={18} color="#FF3B30" style={{ marginRight: 6 }} />
             <Text style={[styles.bulkActionBtnText, { color: '#FF3B30' }]}>DELETE</Text>
@@ -798,18 +798,22 @@ const styles = StyleSheet.create({
   },
   bulkHud: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(15, 17, 35, 0.95)',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    left: 16,
+    right: 16,
+    backgroundColor: 'rgba(25, 28, 50, 0.98)',
+    borderRadius: 24,
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 100,
   },
   bulkActionBtn: {
     flexDirection: 'row',
