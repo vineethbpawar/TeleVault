@@ -26,6 +26,9 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
     
+    const startPinchDistRef = useRef(0);
+    const startZoomRef = useRef(0);
+
     const [zoomScale, setZoomScale] = useState(1);
 
     useAnimatedReaction(
@@ -247,6 +250,37 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
       }
     }));
 
+    const handleTouchStart = (e: any) => {
+      const touches = e.nativeEvent?.touches || e.touches;
+      if (touches && touches.length === 2) {
+        const dist = Math.hypot(
+          touches[0].clientX - touches[1].clientX,
+          touches[0].clientY - touches[1].clientY
+        );
+        startPinchDistRef.current = dist;
+        startZoomRef.current = zoomShared ? zoomShared.value : 0;
+      }
+    };
+
+    const handleTouchMove = (e: any) => {
+      const touches = e.nativeEvent?.touches || e.touches;
+      if (touches && touches.length === 2 && startPinchDistRef.current > 0) {
+        const dist = Math.hypot(
+          touches[0].clientX - touches[1].clientX,
+          touches[0].clientY - touches[1].clientY
+        );
+        const factor = dist / startPinchDistRef.current;
+        const newZoom = Math.max(0, Math.min(1, startZoomRef.current + (factor - 1) * 0.5));
+        if (zoomShared) {
+          zoomShared.value = newZoom;
+        }
+      }
+    };
+
+    const handleTouchEnd = () => {
+      startPinchDistRef.current = 0;
+    };
+
     if (errorMsg) {
       return (
         <View style={[styles.container, styles.center]}>
@@ -256,15 +290,17 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     }
 
     const transformStyle = {
-      transform: [
-        { scale: zoomScale },
-        facing === 'front' ? { scaleX: -1 } : { scaleX: 1 }
-      ] as any,
+      transform: `scale(${zoomScale}) scaleX(${facing === 'front' ? -1 : 1})`,
       filter: getLensCssFilter(lens)
     };
 
     return (
-      <View style={styles.container}>
+      <View 
+        style={styles.container}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         <video
           ref={videoRef}
           autoPlay
