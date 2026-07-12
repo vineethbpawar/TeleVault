@@ -15,11 +15,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0B0E1B"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.televault",
@@ -45,7 +40,15 @@
     "plugins": [
       "expo-background-task",
       "expo-sharing",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0B0E1B"
+        }
+      ]
     ],
     "extra": {
       "eas": {
