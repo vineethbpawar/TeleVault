@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
-import { Star, Video, Image as ImageIcon } from 'lucide-react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Image } from 'react-native';
+import { Star, Video, Image as ImageIcon, CloudUpload } from 'lucide-react-native';
 import { GalleryItem } from './types';
 import { previewCacheService } from '../services/previewCacheService';
 
@@ -76,7 +76,7 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
         {/* Uploading Badge Indicator */}
         {!item.telegram_file_id && (
           <View style={styles.uploadingBadge}>
-            <ActivityIndicator size="small" color="#FFFC00" style={{ transform: [{ scale: 0.8 }] }} />
+            <CloudUpload size={10} color="#FFFC00" />
           </View>
         )}
 
