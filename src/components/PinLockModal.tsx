@@ -88,22 +88,29 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
 
   // Reset state and trigger biometrics when modal opens
   useEffect(() => {
-    if (visible) {
-      setPin('');
-      setConfirmPin('');
-      setStep('enter');
-      setLocalMode(mode);
-      if (lockoutSec <= 0) {
-        setError('');
-      }
+    const checkPinAndInit = async () => {
+      if (visible) {
+        setPin('');
+        setConfirmPin('');
+        setStep('enter');
+        if (lockoutSec <= 0) {
+          setError('');
+        }
 
-      if (mode === 'verify' && lockoutSec <= 0) {
-        // Auto trigger biometrics
-        setTimeout(() => {
-          triggerBiometrics();
-        }, 500);
+        const hasPin = await securityService.hasPin();
+        const activeMode = hasPin ? mode : 'create';
+        setLocalMode(activeMode);
+
+        if (activeMode === 'verify' && lockoutSec <= 0) {
+          // Auto trigger biometrics
+          setTimeout(() => {
+            triggerBiometrics();
+          }, 500);
+        }
       }
-    }
+    };
+
+    checkPinAndInit();
   }, [visible, biometricsAvailable, lockoutSec, mode]);
 
   const triggerBiometrics = async () => {
