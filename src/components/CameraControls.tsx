@@ -177,6 +177,9 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
             {...({
               onMouseDown: (e: any) => {
                 console.log('[RECORD_TRACE] MouseDown');
+                if (e && typeof e.preventDefault === 'function') {
+                  e.preventDefault();
+                }
                 startRecordingFlowWeb(e.clientY);
               },
               onMouseMove: (e: any) => {
@@ -188,6 +191,9 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
               },
               onTouchStart: (e: any) => {
                 console.log('[RECORD_TRACE] TouchStart');
+                if (e && typeof e.preventDefault === 'function') {
+                  e.preventDefault();
+                }
                 const touch = e.touches[0] || e.changedTouches[0];
                 if (touch) startRecordingFlowWeb(touch.clientY);
               },
@@ -249,6 +255,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     zIndex: 10,
+    userSelect: 'none',
   },
 
   destinationToggleContainer: {

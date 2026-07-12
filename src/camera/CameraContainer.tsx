@@ -375,7 +375,7 @@ export const CameraContainer: React.FC<CameraContainerProps> = ({ navigation, ro
       )}
 
       {/* High Performance Zoom Pill */}
-      <ZoomPill zoomShared={zoomShared} bottom={64 + insets.bottom + 155} />
+      <ZoomPill zoomShared={zoomShared} bottom={64 + insets.bottom + 185} />
 
       {/* Capture trigger buttons */}
       <CameraControls
@@ -395,6 +395,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
+    userSelect: 'none',
   },
   center: {
     justifyContent: 'center',
@@ -448,95 +449,93 @@ const styles = StyleSheet.create({
     zIndex: 15,
   },
   circleBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  circleBtnActive: {
+    backgroundColor: '#FFFC00',
+    borderColor: '#FFFC00',
+  },
+  destinationBadge: {
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  circleBtnActive: {
-    backgroundColor: '#FFFFFF',
-  },
-  destinationBadge: {
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#FFFC00',
-  },
   destinationBadgeText: {
     color: '#FFFC00',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1,
   },
   toolsPanel: {
     position: 'absolute',
+    left: 20,
     right: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    borderRadius: 20,
-    padding: 12,
-    width: 240,
-    zIndex: 20,
+    backgroundColor: 'rgba(15, 17, 35, 0.95)',
+    borderRadius: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    zIndex: 25,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   toolsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
   toolsRowGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
     justifyContent: 'space-between',
   },
   toolsText: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
   },
   destToggleWrapper: {
     flexDirection: 'row',
-    backgroundColor: '#1E1E1E',
-    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderRadius: 16,
     padding: 2,
   },
   destBtn: {
     paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    borderRadius: 14,
   },
   destBtnActive: {
     backgroundColor: '#FFFC00',
   },
   destBtnText: {
     color: '#8E8E93',
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 9,
+    fontWeight: '800',
   },
   destBtnTextActive: {
     color: '#000000',
   },
   countdownOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 30,
+    zIndex: 50,
   },
   countdownText: {
     color: '#FFFC00',
-    fontSize: 110,
+    fontSize: 100,
     fontWeight: '900',
   },
   durationCounter: {
@@ -544,9 +543,9 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     borderRadius: 15,
     zIndex: 15,
   },
@@ -605,7 +604,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 12,
     borderRadius: 12,
-    zIndex: 10,
+    zIndex: 20,
   },
   zoomPillText: {
     color: '#FFFFFF',

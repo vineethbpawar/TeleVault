@@ -237,7 +237,8 @@ export const previewCacheService = {
       overlay_metadata?: any;
     },
     forceRefresh = false,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onThumbnailGenerated?: (uri: string) => void
   ): Promise<{
     type: 'image' | 'video' | 'document' | 'unknown';
     previewUri?: string;
@@ -494,40 +495,46 @@ export const previewCacheService = {
         console.log(`[VIDEO_PREVIEW_DEV] Resolving: file_name=${fileName} file_id=${file.id} hasLocalThumb=${hasLocalThumb} hasCachedThumb=${hasCachedThumb} playableUriResolved=${!!playableUri}`);
       }
 
-      // Generate dynamic thumbnail from video source synchronously
+      // Generate dynamic thumbnail from video source in the background
       if (!previewUri && playableUri) {
-        try {
-          if (__DEV__) {
-            console.log(`[VIDEO_PREVIEW_DEV] Starting thumbnail generation for: ${fileName} from: ${playableUri}`);
-          }
-          if (Platform.OS === 'web') {
-            const thumbDataUrl = await getWebVideoThumbnail(playableUri!);
-            if (file.id) {
-              await cacheSetItem(`televault_vid_thumb_${file.id}`, thumbDataUrl);
+        (async () => {
+          try {
+            if (__DEV__) {
+              console.log(`[VIDEO_PREVIEW_DEV] Starting background thumbnail generation for: ${fileName} from: ${playableUri}`);
             }
-            previewUri = thumbDataUrl;
-          } else {
-            const thumb = await VideoThumbnails.getThumbnailAsync(playableUri!, { time: 500 });
-            if (thumb && thumb.uri) {
+            let generatedUri: string | undefined;
+            if (Platform.OS === 'web') {
+              const thumbDataUrl = await getWebVideoThumbnail(playableUri!);
               if (file.id) {
-                await cacheSetItem(`televault_vid_thumb_${file.id}`, thumb.uri);
+                await cacheSetItem(`televault_vid_thumb_${file.id}`, thumbDataUrl);
               }
-              previewUri = thumb.uri;
-              if (__DEV__) {
-                console.log(`[VIDEO_PREVIEW_DEV] Thumbnail generation SUCCESS: ${thumb.uri}`);
-              }
+              generatedUri = thumbDataUrl;
             } else {
-              if (__DEV__) {
-                console.log(`[VIDEO_PREVIEW_DEV] Thumbnail generation FAILED: Empty response`);
+              const thumb = await VideoThumbnails.getThumbnailAsync(playableUri!, { time: 500 });
+              if (thumb && thumb.uri) {
+                if (file.id) {
+                  await cacheSetItem(`televault_vid_thumb_${file.id}`, thumb.uri);
+                }
+                generatedUri = thumb.uri;
+                if (__DEV__) {
+                  console.log(`[VIDEO_PREVIEW_DEV] Thumbnail generation SUCCESS: ${thumb.uri}`);
+                }
+              } else {
+                if (__DEV__) {
+                  console.log(`[VIDEO_PREVIEW_DEV] Thumbnail generation FAILED: Empty response`);
+                }
               }
             }
+            if (generatedUri && onThumbnailGenerated) {
+              onThumbnailGenerated(generatedUri);
+            }
+          } catch (e: any) {
+            if (__DEV__) {
+              console.log(`[VIDEO_PREVIEW_DEV] Thumbnail generation ERROR: name=${e.name} msg=${e.message}`);
+            }
+            console.warn('Video thumbnail generation failed:', e);
           }
-        } catch (e: any) {
-          if (__DEV__) {
-            console.log(`[VIDEO_PREVIEW_DEV] Thumbnail generation ERROR: name=${e.name} msg=${e.message}`);
-          }
-          console.warn('Video thumbnail generation failed:', e);
-        }
+        })();
       }
 
       return {
@@ -643,7 +650,8 @@ export const previewCacheService = {
       overlay_metadata?: any;
     },
     forceRefresh = false,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onThumbnailGenerated?: (uri: string) => void
   ): Promise<{
     type: 'image' | 'video' | 'document' | 'unknown';
     previewUri?: string;
@@ -651,7 +659,7 @@ export const previewCacheService = {
     fallbackIcon: string;
     error?: string;
   }> {
-    return this.resolveFilePreviewInternal(file, forceRefresh, signal);
+    return this.resolveFilePreviewInternal(file, forceRefresh, signal, onThumbnailGenerated);
   },
 
   async forceRepairPreview(fileId: string, file: any): Promise<{ previewUri?: string; playableUri?: string } | null> {

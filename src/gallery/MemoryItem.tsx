@@ -21,7 +21,11 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
       let active = true;
 
       previewCacheService
-        .resolveFilePreview(item)
+        .resolveFilePreview(item, false, undefined, (generatedUri) => {
+          if (active) {
+            setImgUri(generatedUri);
+          }
+        })
         .then((res) => {
           if (active && res.previewUri) {
             setImgUri(res.previewUri);

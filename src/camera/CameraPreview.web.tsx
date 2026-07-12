@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
-import { SharedValue } from 'react-native-reanimated';
+import { View, StyleSheet, Text, Platform } from 'react-native';
+import { SharedValue, useAnimatedReaction, runOnJS } from 'react-native-reanimated';
 import { CameraLensType, CaptureResult } from './types';
 
 interface CameraPreviewProps {
@@ -26,6 +26,16 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
     
+    const [zoomScale, setZoomScale] = useState(1);
+
+    useAnimatedReaction(
+      () => zoomShared ? zoomShared.value : 0,
+      (val) => {
+        const scale = 1 + val * 7;
+        runOnJS(setZoomScale)(scale);
+      }
+    );
+
     // FPS performance optimization counters
     const frameCountRef = useRef(0);
     const lastFpsLogRef = useRef(performance.now());
@@ -245,8 +255,6 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
       );
     }
 
-    const zoomVal = zoomShared ? zoomShared.value : 0;
-    const zoomScale = 1 + zoomVal * 7;
     const transformStyle = {
       transform: [
         { scale: zoomScale },
@@ -297,6 +305,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     overflow: 'hidden',
     position: 'relative',
+    userSelect: 'none',
   },
   center: {
     justifyContent: 'center',
