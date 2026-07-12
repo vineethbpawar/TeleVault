@@ -70,10 +70,14 @@ export const previewCacheService = {
       }
 
       if (Platform.OS === 'web') {
-        if (url && url.startsWith('blob:')) {
-          // Revoke/evict transient blob URLs that don't persist across page reloads
+        if (url && (url.startsWith('blob:') || url.startsWith('file://') || url.startsWith('ph://') || url.startsWith('assets-library://'))) {
+          // Revoke/evict transient blob URLs or native files that don't belong on Web
           await cacheRemoveItem(CACHE_PREFIX + fileId);
           return null;
+        }
+        if (url && url.startsWith('webblob:')) {
+          const resolved = await resolveWebBlobUrl(url);
+          return resolved;
         }
       } else {
         if (url && url.startsWith('file://')) {
@@ -463,8 +467,16 @@ export const previewCacheService = {
           const cachedThumb = await cacheGetItem(`televault_vid_thumb_${file.id}`);
           if (cachedThumb) {
             if (Platform.OS === 'web') {
-              previewUri = cachedThumb;
-              hasCachedThumb = true;
+              if (cachedThumb.startsWith('file://') || cachedThumb.startsWith('ph://') || cachedThumb.startsWith('assets-library://')) {
+                // Ignore native paths in web cache
+              } else {
+                let resolvedThumb = cachedThumb;
+                if (resolvedThumb.startsWith('webblob:')) {
+                  resolvedThumb = await resolveWebBlobUrl(resolvedThumb);
+                }
+                previewUri = resolvedThumb;
+                hasCachedThumb = true;
+              }
             } else {
               const info = await FileSystem.getInfoAsync(cachedThumb);
               if (info.exists) {
