@@ -247,6 +247,21 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   };
 
   const handleMenuDelete = async () => {
+    if (Platform.OS === 'web') {
+      const confirmDelete = window.confirm('Are you sure you want to permanently delete this snap?');
+      if (confirmDelete) {
+        try {
+          await fileService.bulkDelete([activeFile.id], true);
+          showToast('Snap deleted.');
+          navigation.goBack();
+        } catch (err: any) {
+          console.error('[Delete] Failed to delete snap:', err);
+          Alert.alert('Delete Failed', err.message || 'Failed to delete snap. Please try again.');
+        }
+      }
+      return;
+    }
+
     Alert.alert('Delete Snap', 'Are you sure you want to permanently delete this snap?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -257,7 +272,10 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
             await fileService.bulkDelete([activeFile.id], true);
             showToast('Snap deleted.');
             navigation.goBack();
-          } catch (_) {}
+          } catch (err: any) {
+            console.error('[Delete] Failed to delete snap:', err);
+            Alert.alert('Delete Failed', err.message || 'Failed to delete snap. Please try again.');
+          }
         }
       }
     ]);

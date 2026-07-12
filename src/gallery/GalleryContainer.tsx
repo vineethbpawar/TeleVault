@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, Star, Lock, Grid, Trash2, Edit, CheckSquare, X } from 'lucide-react-native';
 
@@ -191,6 +191,21 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
 
   const handleDeleteItem = async (item: GalleryItem) => {
     setActiveMenuFile(null);
+    if (Platform.OS === 'web') {
+      const confirmDelete = window.confirm('Are you sure you want to permanently delete this snap?');
+      if (confirmDelete) {
+        try {
+          await fileService.bulkDelete([item.id], true);
+          await loadMemories(false);
+          showToast('Snap permanently deleted.');
+        } catch (err: any) {
+          console.error('[Delete] Failed to delete snap:', err);
+          Alert.alert('Delete Failed', err.message || 'Failed to delete snap. Please try again.');
+        }
+      }
+      return;
+    }
+
     Alert.alert('Delete Snap', 'Are you sure you want to permanently delete this snap?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -201,7 +216,10 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
             await fileService.bulkDelete([item.id], true);
             await loadMemories(false);
             showToast('Snap permanently deleted.');
-          } catch (_) {}
+          } catch (err: any) {
+            console.error('[Delete] Failed to delete snap:', err);
+            Alert.alert('Delete Failed', err.message || 'Failed to delete snap. Please try again.');
+          }
         },
       },
     ]);
