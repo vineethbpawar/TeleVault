@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Modal, SafeAreaView, Alert, TextInput, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Modal, SafeAreaView, Alert, TextInput, ActivityIndicator, Platform } from 'react-native';
 import { Delete, X, Lock, Fingerprint } from 'lucide-react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { securityService } from '../services/securityService';
@@ -12,6 +12,29 @@ interface PinLockModalProps {
   mode?: 'verify' | 'create';
   undismissable?: boolean;
 }
+
+const showAlert = (
+  title: string,
+  message: string,
+  buttons?: { text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }[]
+) => {
+  if (Platform.OS === 'web') {
+    if (buttons && buttons.length > 1) {
+      const confirmBtn = buttons.find(b => b.style !== 'cancel') || buttons[buttons.length - 1];
+      const confirmed = window.confirm(`${title}\n\n${message}`);
+      if (confirmed && confirmBtn && confirmBtn.onPress) {
+        confirmBtn.onPress();
+      }
+    } else {
+      window.alert(`${title}\n\n${message}`);
+      if (buttons && buttons[0] && buttons[0].onPress) {
+        buttons[0].onPress();
+      }
+    }
+    return;
+  }
+  Alert.alert(title, message, buttons);
+};
 
 export const PinLockModal: React.FC<PinLockModalProps> = ({
   visible,
@@ -106,7 +129,7 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
   };
 
   const handleForgotPasscode = () => {
-    Alert.alert(
+    showAlert(
       'Reset Private Vault?',
       'If you reset your passcode, you can set a new 4-digit PIN. However, to protect your privacy, all snaps currently saved in your Private Vault will be permanently deleted from the database.\n\nDo you want to proceed?',
       [
@@ -168,7 +191,7 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
       setShowForgotModal(false);
       setAccountPassword('');
       
-      Alert.alert(
+      showAlert(
         'Vault Reset Successful',
         'Your Private Vault has been reset and all previous private snaps were deleted. You can now configure a new PIN.',
         [
@@ -248,7 +271,7 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
         } else if (step === 'confirm' && confirmPin.length === 4) {
           if (pin === confirmPin) {
             await securityService.createPin(pin);
-            Alert.alert('PIN Created', 'Your security PIN has been set successfully.');
+            showAlert('PIN Created', 'Your security PIN has been set successfully.');
             onSuccess();
           } else {
             setError('PINs do not match. Restarting.');

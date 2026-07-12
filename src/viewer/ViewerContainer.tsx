@@ -116,6 +116,29 @@ interface ViewerContainerProps {
   navigation: any;
 }
 
+const showAlert = (
+  title: string,
+  message: string,
+  buttons?: { text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }[]
+) => {
+  if (Platform.OS === 'web') {
+    if (buttons && buttons.length > 1) {
+      const confirmBtn = buttons.find(b => b.style !== 'cancel') || buttons[buttons.length - 1];
+      const confirmed = window.confirm(`${title}\n\n${message}`);
+      if (confirmed && confirmBtn && confirmBtn.onPress) {
+        confirmBtn.onPress();
+      }
+    } else {
+      window.alert(`${title}\n\n${message}`);
+      if (buttons && buttons[0] && buttons[0].onPress) {
+        buttons[0].onPress();
+      }
+    }
+    return;
+  }
+  Alert.alert(title, message, buttons);
+};
+
 export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initialIndex, navigation }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isHoldActive, setIsHoldActive] = useState(false);
@@ -233,7 +256,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
       activeFile.is_favorite = updated.is_favorite;
       showToast(updated.is_favorite ? 'Added to favorites.' : 'Removed from favorites.');
     } catch (_) {
-      Alert.alert('Error', 'Failed to toggle favorite.');
+      showAlert('Error', 'Failed to toggle favorite.');
     }
   };
 
@@ -243,27 +266,12 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
       showToast('Moved to Private Vault.');
       navigation.goBack();
     } catch (_) {
-      Alert.alert('Error', 'Failed to hide snap.');
+      showAlert('Error', 'Failed to hide snap.');
     }
   };
 
   const handleMenuDelete = async () => {
-    if (Platform.OS === 'web') {
-      const confirmDelete = window.confirm('Are you sure you want to permanently delete this snap?');
-      if (confirmDelete) {
-        try {
-          await fileService.bulkDelete([activeFile.id], true);
-          showToast('Snap deleted.');
-          navigation.goBack();
-        } catch (err: any) {
-          console.error('[Delete] Failed to delete snap:', err);
-          Alert.alert('Delete Failed', err.message || 'Failed to delete snap. Please try again.');
-        }
-      }
-      return;
-    }
-
-    Alert.alert('Delete Snap', 'Are you sure you want to permanently delete this snap?', [
+    showAlert('Delete Snap', 'Are you sure you want to permanently delete this snap?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -275,7 +283,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
             navigation.goBack();
           } catch (err: any) {
             console.error('[Delete] Failed to delete snap:', err);
-            Alert.alert('Delete Failed', err.message || 'Failed to delete snap. Please try again.');
+            showAlert('Delete Failed', err.message || 'Failed to delete snap. Please try again.');
           }
         }
       }

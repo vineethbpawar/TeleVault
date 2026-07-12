@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { StyleSheet, View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, Platform, AppState, ScrollView, RefreshControl } from 'react-native';
+import { StyleSheet, View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Modal, Platform, AppState, ScrollView, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Plus, FolderPlus, Upload, ArrowLeft, Folder, ChevronRight, MoreVertical, Search, ArrowUpDown, Lock, FileText, HardDrive, Star, Image as ImageIcon, Video, Trash2, Edit, CheckSquare, X, Share2 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -15,6 +15,32 @@ import FileCard from '../components/FileCard';
 import PinLockModal from '../components/PinLockModal';
 import UploadProgress from '../components/UploadProgress';
 import { fileOpenService } from '../services/fileOpenService';
+
+const Alert = {
+  alert: (
+    title: string,
+    message?: string,
+    buttons?: { text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }[]
+  ) => {
+    if (Platform.OS === 'web') {
+      if (buttons && buttons.length > 1) {
+        const confirmBtn = buttons.find(b => b.style !== 'cancel') || buttons[buttons.length - 1];
+        const confirmed = window.confirm(`${title}\n\n${message || ''}`);
+        if (confirmed && confirmBtn && confirmBtn.onPress) {
+          confirmBtn.onPress();
+        }
+      } else {
+        window.alert(`${title}\n\n${message || ''}`);
+        if (buttons && buttons[0] && buttons[0].onPress) {
+          buttons[0].onPress();
+        }
+      }
+      return;
+    }
+    const RNAlert = require('react-native').Alert;
+    RNAlert.alert(title, message, buttons);
+  }
+};
 
 export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFocused, isPrivateMode }) => {
   const insets = useSafeAreaInsets();
@@ -367,30 +393,6 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
       return;
     }
 
-    if (Platform.OS === 'web') {
-      const confirmMsg = selectedFiles.length === 1 
-        ? 'Download this file to your device?' 
-        : `Download these ${selectedFiles.length} files to your device?`;
-      if (window.confirm(confirmMsg)) {
-        try {
-          setLoading(true);
-          for (const file of selectedFiles) {
-            await fileOpenService.openDocument(file as any).catch(err => {
-              console.warn('Failed to download file in loop:', err);
-            });
-          }
-          setSelectedIds(new Set());
-          setIsSelectionMode(false);
-          showToast(selectedFiles.length === 1 ? 'File downloaded.' : 'All files downloaded.');
-        } catch (err: any) {
-          Alert.alert('Download Failed', err.message || 'Failed to download files.');
-        } finally {
-          setLoading(false);
-        }
-      }
-      return;
-    }
-
     const confirmMsg = selectedFiles.length === 1
       ? 'Export/Share this file?'
       : `Export/Share these ${selectedFiles.length} files sequentially?`;
@@ -409,7 +411,7 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
             }
             setSelectedIds(new Set());
             setIsSelectionMode(false);
-            showToast('Files exported successfully.');
+            showToast(Platform.OS === 'web' ? 'Files downloaded.' : 'Files exported successfully.');
           } catch (err: any) {
             Alert.alert('Error', err.message || 'Export failed.');
           } finally {

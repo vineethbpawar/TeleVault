@@ -16,6 +16,29 @@ interface GalleryContainerProps {
   isFocused: boolean;
 }
 
+const showAlert = (
+  title: string,
+  message: string,
+  buttons?: { text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }[]
+) => {
+  if (Platform.OS === 'web') {
+    if (buttons && buttons.length > 1) {
+      const confirmBtn = buttons.find(b => b.style !== 'cancel') || buttons[buttons.length - 1];
+      const confirmed = window.confirm(`${title}\n\n${message}`);
+      if (confirmed && confirmBtn && confirmBtn.onPress) {
+        confirmBtn.onPress();
+      }
+    } else {
+      window.alert(`${title}\n\n${message}`);
+      if (buttons && buttons[0] && buttons[0].onPress) {
+        buttons[0].onPress();
+      }
+    }
+    return;
+  }
+  Alert.alert(title, message, buttons);
+};
+
 export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, isFocused }) => {
   const insets = useSafeAreaInsets();
   
@@ -175,7 +198,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
       await loadMemories(false);
       showToast(updated.is_favorite ? 'Added to favorites.' : 'Removed from favorites.');
     } catch (_) {
-      Alert.alert('Error', 'Failed to toggle favorite.');
+      showAlert('Error', 'Failed to toggle favorite.');
     }
   };
 
@@ -186,28 +209,13 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
       await loadMemories(false);
       showToast('Moved to Private Vault.');
     } catch (_) {
-      Alert.alert('Error', 'Failed to move snap to vault.');
+      showAlert('Error', 'Failed to move snap to vault.');
     }
   };
 
   const handleDeleteItem = async (item: GalleryItem) => {
     setActiveMenuFile(null);
-    if (Platform.OS === 'web') {
-      const confirmDelete = window.confirm('Are you sure you want to permanently delete this snap?');
-      if (confirmDelete) {
-        try {
-          await fileService.bulkDelete([item.id], true);
-          await loadMemories(false);
-          showToast('Snap permanently deleted.');
-        } catch (err: any) {
-          console.error('[Delete] Failed to delete snap:', err);
-          Alert.alert('Delete Failed', err.message || 'Failed to delete snap. Please try again.');
-        }
-      }
-      return;
-    }
-
-    Alert.alert('Delete Snap', 'Are you sure you want to permanently delete this snap?', [
+    showAlert('Delete Snap', 'Are you sure you want to permanently delete this snap?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -219,7 +227,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
             showToast('Snap permanently deleted.');
           } catch (err: any) {
             console.error('[Delete] Failed to delete snap:', err);
-            Alert.alert('Delete Failed', err.message || 'Failed to delete snap. Please try again.');
+            showAlert('Delete Failed', err.message || 'Failed to delete snap. Please try again.');
           }
         },
       },
@@ -232,35 +240,11 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
     const selectedFiles = items.filter(f => ids.includes(f.id));
     if (selectedFiles.length === 0) return;
 
-    if (Platform.OS === 'web') {
-      const confirmMsg = selectedFiles.length === 1 
-        ? 'Download this file to your device?' 
-        : `Download these ${selectedFiles.length} files to your device?`;
-      if (window.confirm(confirmMsg)) {
-        try {
-          setLoading(true);
-          for (const file of selectedFiles) {
-            await fileOpenService.openDocument(file).catch(err => {
-              console.warn('Failed to download file in loop:', err);
-            });
-          }
-          setSelectedIds(new Set());
-          setIsSelectionMode(false);
-          showToast(selectedFiles.length === 1 ? 'File downloaded.' : 'All files downloaded.');
-        } catch (err: any) {
-          Alert.alert('Download Failed', err.message || 'Failed to download files.');
-        } finally {
-          setLoading(false);
-        }
-      }
-      return;
-    }
-
     const confirmMsg = selectedFiles.length === 1
       ? 'Export/Share this file?'
       : `Export/Share these ${selectedFiles.length} files sequentially?`;
 
-    Alert.alert('Export Snaps', confirmMsg, [
+    showAlert('Export Snaps', confirmMsg, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Export',
@@ -274,9 +258,9 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
             }
             setSelectedIds(new Set());
             setIsSelectionMode(false);
-            showToast('Files exported successfully.');
+            showToast(Platform.OS === 'web' ? 'Files downloaded.' : 'Files exported successfully.');
           } catch (err: any) {
-            Alert.alert('Error', err.message || 'Export failed.');
+            showAlert('Error', err.message || 'Export failed.');
           } finally {
             setLoading(false);
           }
@@ -287,7 +271,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
 
   const handleBulkTrash = async () => {
     const ids = Array.from(selectedIds);
-    Alert.alert('Delete Snaps', `Are you sure you want to permanently delete these ${ids.length} snaps?`, [
+    showAlert('Delete Snaps', `Are you sure you want to permanently delete these ${ids.length} snaps?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -301,7 +285,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
             await loadMemories(false);
             showToast('Snaps permanently deleted.');
           } catch (err: any) {
-            Alert.alert('Error', err.message || 'Bulk delete failed.');
+            showAlert('Error', err.message || 'Bulk delete failed.');
           } finally {
             setLoading(false);
           }
@@ -320,7 +304,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
       await loadMemories(false);
       showToast('Snaps moved to Private Vault.');
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Bulk hide failed.');
+      showAlert('Error', err.message || 'Bulk hide failed.');
     } finally {
       setLoading(false);
     }
@@ -334,7 +318,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
       await loadMemories(false);
       showToast('Caption updated.');
     } catch (_) {
-      Alert.alert('Error', 'Failed to update caption.');
+      showAlert('Error', 'Failed to update caption.');
     }
   };
 
