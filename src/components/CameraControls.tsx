@@ -61,7 +61,7 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
 
   const handleTouchMove = (e: any) => {
     const currentY = e.nativeEvent.pageY;
-    if (isRecording || isRecordingStartedRef.current) {
+    if (isRecording || isRecordingStartedRef.current || longPressTimeoutRef.current !== null) {
       const dy = initialTouchY.current - currentY; // positive when dragging up
       const sensitivity = 500; // Snapchat sensitivity
       const newZoom = Math.max(0, Math.min(1, startZoomRef.current + (dy / sensitivity)));
@@ -128,7 +128,7 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
 
   const moveRecordingFlowWeb = (clientY: number) => {
     const currentY = clientY;
-    if (isRecording || isRecordingStartedRef.current) {
+    if (isRecording || isRecordingStartedRef.current || longPressTimeoutRef.current !== null) {
       const dy = initialTouchY.current - currentY;
       const sensitivity = 500;
       const newZoom = Math.max(0, Math.min(1, startZoomRef.current + (dy / sensitivity)));
@@ -183,6 +183,9 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
                 startRecordingFlowWeb(e.clientY);
               },
               onMouseMove: (e: any) => {
+                if (e && typeof e.preventDefault === 'function') {
+                  e.preventDefault();
+                }
                 moveRecordingFlowWeb(e.clientY);
               },
               onMouseUp: (e: any) => {
@@ -198,6 +201,9 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
                 if (touch) startRecordingFlowWeb(touch.clientY);
               },
               onTouchMove: (e: any) => {
+                if (e && typeof e.preventDefault === 'function') {
+                  e.preventDefault();
+                }
                 const touch = e.touches[0] || e.changedTouches[0];
                 if (touch) moveRecordingFlowWeb(touch.clientY);
               },

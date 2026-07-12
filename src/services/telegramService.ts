@@ -282,7 +282,13 @@ export const telegramService = {
   getTelegramApiUrl(endpoint: string, botToken: string): string {
     const rawUrl = `https://api.telegram.org/bot${botToken}/${endpoint}`;
     if (Platform.OS === 'web') {
-      return `https://corsproxy.io/?${rawUrl}`;
+      if (typeof window !== 'undefined' && window.location) {
+        const hostname = window.location.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.')) {
+          return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(rawUrl)}`;
+        }
+      }
+      return `/api/telegram-proxy?url=${encodeURIComponent(rawUrl)}`;
     }
     return rawUrl;
   },
