@@ -4,13 +4,14 @@ import { StyleSheet, Text, Animated, View } from 'react-native';
 interface ToastOptions {
   message: string;
   duration?: number;
+  position?: 'top' | 'middle' | 'bottom';
 }
 
 let showToastCallback: ((options: ToastOptions) => void) | null = null;
 
-export const showToast = (message: string, duration = 3000) => {
+export const showToast = (message: string, duration = 3000, position: 'top' | 'middle' | 'bottom' = 'middle') => {
   if (showToastCallback) {
-    showToastCallback({ message, duration });
+    showToastCallback({ message, duration, position });
   } else {
     console.log('Toast fallback:', message);
   }
@@ -19,6 +20,7 @@ export const showToast = (message: string, duration = 3000) => {
 export const ToastBanner: React.FC = () => {
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState('');
+  const [position, setPosition] = useState<'top' | 'middle' | 'bottom'>('middle');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const timeoutRef = useRef<any>(null);
 
@@ -30,6 +32,7 @@ export const ToastBanner: React.FC = () => {
       }
       
       setMessage(options.message);
+      setPosition(options.position || 'middle');
       setVisible(true);
       
       Animated.timing(fadeAnim, {
@@ -61,8 +64,20 @@ export const ToastBanner: React.FC = () => {
 
   if (!visible) return null;
 
+  const getPositionStyle = () => {
+    switch (position) {
+      case 'top':
+        return { top: 120, bottom: undefined };
+      case 'middle':
+        return { top: '50%', bottom: undefined, transform: [{ translateY: -24 }] };
+      case 'bottom':
+      default:
+        return { bottom: 120, top: undefined };
+    }
+  };
+
   return (
-    <Animated.View style={[styles.container, { opacity: fadeAnim }]} pointerEvents="none">
+    <Animated.View style={[styles.container, getPositionStyle() as any, { opacity: fadeAnim }]} pointerEvents="none">
       <View style={styles.toast}>
         <Text style={styles.text}>{message}</Text>
       </View>
@@ -73,7 +88,6 @@ export const ToastBanner: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 120, // Sit nicely above tabs
     left: 20,
     right: 20,
     alignItems: 'center',
