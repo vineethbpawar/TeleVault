@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, Dimensions, PanResponder, Animated, Platform, ActivityIndicator, Alert, Pressable } from 'react-native';
-import { X, Trash2, Lock, Star, Send, Calendar } from 'lucide-react-native';
+import { X, Trash2, Lock, Star, Send, Calendar, Info } from 'lucide-react-native';
+import { Modal } from 'react-native';
 
 import { ImageViewer } from './ImageViewer';
 import { VideoPlayer } from './VideoPlayer';
@@ -96,6 +97,49 @@ const ViewerItem = React.memo<{
         <ImageViewer source={resolvedUri} />
       )}
 
+      {/* Dynamic Lens Overlays */}
+      {(() => {
+        const lens = file.overlay_metadata?.lens || 'none';
+        if (lens === 'none' || lens === 'original') return null;
+
+        const createdDate = file.created_at ? new Date(file.created_at) : new Date();
+        const timeString = createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const dateString = createdDate.toLocaleDateString();
+
+        return (
+          <View style={styles.liveOverlayContainer} pointerEvents="none">
+            {/* Color Tints */}
+            {lens === 'warm' && <View style={styles.warmOverlay} />}
+            {lens === 'cool' && <View style={styles.coolOverlay} />}
+            {lens === 'bw' && <View style={styles.bwOverlay} />}
+            {lens === 'soft' && <View style={styles.softOverlay} />}
+            {lens === 'night' && <View style={styles.nightOverlay} />}
+            
+            {/* Stamp / Text Overlays */}
+            {lens === 'time' && (
+              <View style={styles.textOverlayWrapper}>
+                <Text style={styles.liveOverlayStampText}>{timeString}</Text>
+              </View>
+            )}
+            {lens === 'date' && (
+              <View style={styles.textOverlayWrapper}>
+                <Text style={styles.liveOverlayStampText}>{dateString}</Text>
+              </View>
+            )}
+            {lens === 'vault' && (
+              <View style={styles.stampOverlayWrapper}>
+                <Text style={styles.stampOverlayText}>TELEVAULT SECURE</Text>
+              </View>
+            )}
+            {lens === 'private' && (
+              <View style={styles.stampOverlayWrapper}>
+                <Text style={[styles.stampOverlayText, { borderColor: '#FF453A', color: '#FF453A' }]}>PRIVATE LOCK</Text>
+              </View>
+            )}
+          </View>
+        );
+      })()}
+
       {/* Caption Overlay */}
       {file.caption && (
         <View style={styles.captionContainer}>
@@ -144,6 +188,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   const [isHoldActive, setIsHoldActive] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
 
   // Swipe-down-to-dismiss gesture setup
   const translateY = useRef(new Animated.Value(0)).current;
@@ -373,9 +418,14 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
                 {currentIndex + 1} of {files.length}
               </Text>
             </View>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.hudBtn}>
-              <X size={24} color="#FFFFFF" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity onPress={() => setShowInfoModal(true)} style={[styles.hudBtn, { marginRight: 10 }]}>
+                <Info size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.hudBtn}>
+                <X size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       )}
@@ -405,6 +455,74 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
           </View>
         </View>
       )}
+      {/* Media Details / Info Modal */}
+      <Modal
+        visible={showInfoModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowInfoModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.infoModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowInfoModal(false)}
+        >
+          <View style={styles.infoModalContent}>
+            <Text style={styles.infoModalTitle}>Snap Details</Text>
+            
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Filename</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>{activeFile.file_name}</Text>
+            </View>
+            
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Type</Text>
+              <Text style={styles.infoValue}>{activeFile.file_type === 'video' ? '🎬 Video' : '📸 Image'}</Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Lens Filter</Text>
+              <Text style={[styles.infoValue, { textTransform: 'capitalize' }]}>
+                {activeFile.overlay_metadata?.lens || 'Original'}
+              </Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Created At</Text>
+              <Text style={styles.infoValue}>
+                {new Date(activeFile.created_at).toLocaleString([], {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>File Size</Text>
+              <Text style={styles.infoValue}>
+                {activeFile.file_size ? `${(activeFile.file_size / (1024 * 1024)).toFixed(2)} MB` : 'Unknown'}
+              </Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Destination</Text>
+              <Text style={styles.infoValue}>
+                {activeFile.is_private ? '🔒 Private Drive' : activeFile.is_drive_file ? '☁️ Cloud Drive' : '📱 memories'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.infoCloseBtn}
+              onPress={() => setShowInfoModal(false)}
+            >
+              <Text style={styles.infoCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </Animated.View>
   );
 };
@@ -528,6 +646,116 @@ const styles = StyleSheet.create({
   actionIconsGroup: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  liveOverlayContainer: {
+    ...StyleSheet.absoluteFill,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 5,
+  },
+  warmOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(255, 160, 0, 0.12)',
+  },
+  coolOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 120, 255, 0.12)',
+  },
+  bwOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+  },
+  softOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  nightOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(10, 15, 45, 0.35)',
+  },
+  textOverlayWrapper: {
+    position: 'absolute',
+    bottom: 240,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  liveOverlayStampText: {
+    color: '#FFFC00',
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  stampOverlayWrapper: {
+    position: 'absolute',
+    top: 100,
+    right: 20,
+    transform: [{ rotate: '-12deg' }],
+  },
+  stampOverlayText: {
+    color: '#FFFC00',
+    fontSize: 11,
+    fontWeight: '900',
+    borderWidth: 1.5,
+    borderColor: '#FFFC00',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  infoModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  infoModalContent: {
+    backgroundColor: '#1E1E1E',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    borderWidth: 1.5,
+    borderColor: '#FFFC00',
+  },
+  infoModalTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 20,
+    textAlign: 'center',
+    letterSpacing: 1,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  infoLabel: {
+    color: '#8E8E93',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  infoValue: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    maxWidth: '65%',
+  },
+  infoCloseBtn: {
+    backgroundColor: '#FFFC00',
+    borderRadius: 24,
+    paddingVertical: 12,
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  infoCloseBtnText: {
+    color: '#000000',
+    fontSize: 15,
+    fontWeight: '800',
   },
 });
 export default ViewerContainer;

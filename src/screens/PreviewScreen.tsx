@@ -328,6 +328,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     rotation,
     blur: blurActive,
     thumbnailUri: thumbUri || null,
+    lens: defaultLens || 'none',
   });
 
   const handleQueueUpload = async (destination: 'memories' | 'drive' | 'private_drive') => {
