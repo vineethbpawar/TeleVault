@@ -83,8 +83,8 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
           const constraints: MediaStreamConstraints = {
             video: {
               facingMode: facing === 'front' ? 'user' : 'environment',
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
               frameRate: { ideal: 60 }
             },
             audio: true
@@ -216,7 +216,7 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
           }
         }
 
-        const dataUri = canvas.toDataURL('image/jpeg', 0.9);
+        const dataUri = canvas.toDataURL('image/jpeg', 1.0);
         return {
           uri: dataUri,
           type: 'image',

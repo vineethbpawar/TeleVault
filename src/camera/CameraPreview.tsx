@@ -51,7 +51,7 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
       takePicture: async (): Promise<CaptureResult> => {
         if (!cameraRef.current) throw new Error('Camera is not initialized');
         const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.85,
+          quality: 1.0,
           skipProcessing: false
         });
         if (!photo || !photo.uri) throw new Error('Capture failed');
@@ -100,6 +100,7 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
             enableTorch={flash === 'on'}
             onCameraReady={onReady}
             zoom={zoomScale}
+            videoQuality="2160p"
             videoStabilizationMode="auto"
           />
 
