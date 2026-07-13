@@ -1,6 +1,7 @@
 import React, { useRef, useImperativeHandle, forwardRef, useState } from 'react';
 import { View, StyleSheet, Text, Platform } from 'react-native';
 import { CameraView } from 'expo-camera';
+import * as FileSystem from 'expo-file-system/legacy';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, runOnJS, SharedValue, useAnimatedReaction } from 'react-native-reanimated';
 import { CameraLensType, CaptureResult } from './types';
@@ -50,6 +51,18 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     useImperativeHandle(ref, () => ({
       takePicture: async (): Promise<CaptureResult> => {
         if (!cameraRef.current) throw new Error('Camera is not initialized');
+        if (Platform.OS === 'android') {
+          try {
+            const dir = FileSystem.cacheDirectory + 'Camera/';
+            const dirInfo = await FileSystem.getInfoAsync(dir);
+            if (!dirInfo.exists) {
+              await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+              console.log('[CameraPreview] Created Camera cache directory on Android.');
+            }
+          } catch (err) {
+            console.warn('[CameraPreview] Failed to verify/create Camera cache directory:', err);
+          }
+        }
         const photo = await cameraRef.current.takePictureAsync({
           quality: 1.0,
           skipProcessing: false
@@ -64,6 +77,18 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
 
       startRecording: async () => {
         if (!cameraRef.current) throw new Error('Camera is not initialized');
+        if (Platform.OS === 'android') {
+          try {
+            const dir = FileSystem.cacheDirectory + 'Camera/';
+            const dirInfo = await FileSystem.getInfoAsync(dir);
+            if (!dirInfo.exists) {
+              await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+              console.log('[CameraPreview] Created Camera cache directory for video on Android.');
+            }
+          } catch (err) {
+            console.warn('[CameraPreview] Failed to verify/create Camera cache directory for video:', err);
+          }
+        }
         await cameraRef.current.recordAsync({
           maxDuration: 60,
         });

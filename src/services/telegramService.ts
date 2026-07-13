@@ -528,84 +528,83 @@ export const telegramService = {
       throw new Error('Telegram configuration is missing. Please set your Bot Token in Settings.');
     }
 
-    let fileSizeInMB = 0;
-    if (Platform.OS === 'web') {
-      try {
-        if (localUri.startsWith('webblob:')) {
-          const { getWebBlob } = require('./webBlobStore');
-          const key = localUri.split(':')[1];
-          const blob = await getWebBlob(key);
-          fileSizeInMB = (blob?.size || 0) / (1024 * 1024);
-        } else if (localUri.startsWith('data:')) {
-          const arr = localUri.split(',');
-          const bstr = atob(arr[1]);
-          fileSizeInMB = bstr.length / (1024 * 1024);
-        } else {
-          const res = await fetch(localUri);
-          const blob = await res.blob();
-          fileSizeInMB = blob.size / (1024 * 1024);
+    let uploadUri = localUri;
+    let tempCopiedFile: string | null = null;
+
+    if (Platform.OS !== 'web') {
+      const ext = fileType === 'video' ? 'mp4' : fileType === 'image' ? 'jpg' : 'bin';
+      if (!localUri.toLowerCase().endsWith(`.${ext}`)) {
+        try {
+          const tempPath = `${FileSystem.cacheDirectory}upload_temp_${Date.now()}.${ext}`;
+          await FileSystem.copyAsync({ from: localUri, to: tempPath });
+          uploadUri = tempPath;
+          tempCopiedFile = tempPath;
+          console.log(`[Upload] Copied file to temp path with proper extension: ${tempPath}`);
+        } catch (err) {
+          console.warn('[Upload] Failed to copy file to temp path:', err);
         }
-      } catch (err) {
-        console.warn('Web file size check failed:', err);
       }
-    } else {
-      const fileInfo = await FileSystem.getInfoAsync(localUri);
-      if (!fileInfo.exists) {
-        throw new Error('File does not exist locally.');
-      }
-      fileSizeInMB = fileInfo.size / (1024 * 1024);
     }
 
-    if (fileSizeInMB > 50) {
-      throw new Error('File exceeds 50 MB limit.');
-    }
-
-    const fileSizeInBytes = Math.round(fileSizeInMB * 1024 * 1024);
-    const targetChannelId = await this.selectTargetChannel(fileSizeInBytes).catch(() => channelId);
-
-    if (!targetChannelId) {
-      throw new Error('Telegram channel ID is missing.');
-    }
-
-    let endpoint = 'sendDocument';
-    let fieldName = 'document';
-
-    if (fileType === 'image') {
-      endpoint = 'sendPhoto';
-      fieldName = 'photo';
-    } else if (fileType === 'video') {
-      endpoint = 'sendVideo';
-      fieldName = 'video';
-    }
-
-    let finalChannelId = targetChannelId;
-    let uploadResult;
     try {
-      const url = this.getTelegramApiUrl(endpoint, botToken);
-      
-      uploadResult = await uploadFileHelper(
-        url,
-        localUri,
-        fieldName,
-        {
-          chat_id: finalChannelId,
-          caption: fileName,
-        },
-        onProgress,
-        signal,
-        itemId
-      );
-    } catch (uploadError: any) {
-      console.warn(`[Failover] Upload to channel ${finalChannelId} failed. Trying failover...`, uploadError);
-      await this.markChannelStatus(finalChannelId, 'unhealthy');
-      
-      const fallback = await this.selectTargetChannel(fileSizeInBytes).catch(() => null);
-      if (fallback && fallback !== finalChannelId) {
-        finalChannelId = fallback;
+      let fileSizeInMB = 0;
+      if (Platform.OS === 'web') {
+        try {
+          if (uploadUri.startsWith('webblob:')) {
+            const { getWebBlob } = require('./webBlobStore');
+            const key = uploadUri.split(':')[1];
+            const blob = await getWebBlob(key);
+            fileSizeInMB = (blob?.size || 0) / (1024 * 1024);
+          } else if (uploadUri.startsWith('data:')) {
+            const arr = uploadUri.split(',');
+            const bstr = atob(arr[1]);
+            fileSizeInMB = bstr.length / (1024 * 1024);
+          } else {
+            const res = await fetch(uploadUri);
+            const blob = await res.blob();
+            fileSizeInMB = blob.size / (1024 * 1024);
+          }
+        } catch (err) {
+          console.warn('Web file size check failed:', err);
+        }
+      } else {
+        const fileInfo = await FileSystem.getInfoAsync(uploadUri);
+        if (!fileInfo.exists) {
+          throw new Error('File does not exist locally.');
+        }
+        fileSizeInMB = fileInfo.size / (1024 * 1024);
+      }
+
+      if (fileSizeInMB > 50) {
+        throw new Error('File exceeds 50 MB limit.');
+      }
+
+      const fileSizeInBytes = Math.round(fileSizeInMB * 1024 * 1024);
+      const targetChannelId = await this.selectTargetChannel(fileSizeInBytes).catch(() => channelId);
+
+      if (!targetChannelId) {
+        throw new Error('Telegram channel ID is missing.');
+      }
+
+      let endpoint = 'sendDocument';
+      let fieldName = 'document';
+
+      if (fileType === 'image') {
+        endpoint = 'sendPhoto';
+        fieldName = 'photo';
+      } else if (fileType === 'video') {
+        endpoint = 'sendVideo';
+        fieldName = 'video';
+      }
+
+      let finalChannelId = targetChannelId;
+      let uploadResult;
+      try {
         const url = this.getTelegramApiUrl(endpoint, botToken);
+        
         uploadResult = await uploadFileHelper(
           url,
-          localUri,
+          uploadUri,
           fieldName,
           {
             chat_id: finalChannelId,
@@ -615,60 +614,87 @@ export const telegramService = {
           signal,
           itemId
         );
-      } else {
-        throw uploadError;
-      }
-    }
-
-    if (uploadResult.status < 200 || uploadResult.status >= 300) {
-      let errorMsg = `HTTP Error ${uploadResult.status}`;
-      try {
-        const bodyJson = JSON.parse(uploadResult.body);
-        if (bodyJson.description) {
-          errorMsg = bodyJson.description;
+      } catch (uploadError: any) {
+        console.warn(`[Failover] Upload to channel ${finalChannelId} failed. Trying failover...`, uploadError);
+        await this.markChannelStatus(finalChannelId, 'unhealthy');
+        
+        const fallback = await this.selectTargetChannel(fileSizeInBytes).catch(() => null);
+        if (fallback && fallback !== finalChannelId) {
+          finalChannelId = fallback;
+          const url = this.getTelegramApiUrl(endpoint, botToken);
+          uploadResult = await uploadFileHelper(
+            url,
+            uploadUri,
+            fieldName,
+            {
+              chat_id: finalChannelId,
+              caption: fileName,
+            },
+            onProgress,
+            signal,
+            itemId
+          );
+        } else {
+          throw uploadError;
         }
-      } catch (_) {}
-      throw new Error(errorMsg);
-    }
+      }
 
-    const responseData = JSON.parse(uploadResult.body);
-    if (!responseData.ok) {
-      throw new Error(responseData.description || 'Telegram upload API returned error.');
-    }
+      if (uploadResult.status < 200 || uploadResult.status >= 300) {
+        let errorMsg = `HTTP Error ${uploadResult.status}`;
+        try {
+          const bodyJson = JSON.parse(uploadResult.body);
+          if (bodyJson.description) {
+            errorMsg = bodyJson.description;
+          }
+        } catch (_) {}
+        throw new Error(errorMsg);
+      }
 
-    const result = responseData.result;
-    const telegramMessageId = String(result.message_id);
-    let telegramFileId = '';
-    let telegramFileUniqueId = '';
+      const responseData = JSON.parse(uploadResult.body);
+      if (!responseData.ok) {
+        throw new Error(responseData.description || 'Telegram upload API returned error.');
+      }
 
-    if (fileType === 'image' && result.photo) {
-      const photoArr = result.photo;
-      const largestPhoto = photoArr[photoArr.length - 1];
-      telegramFileId = largestPhoto.file_id;
-      telegramFileUniqueId = largestPhoto.file_unique_id;
-    } else if (fileType === 'video' && result.video) {
-      telegramFileId = result.video.file_id;
-      telegramFileUniqueId = result.video.file_unique_id;
-    } else if (result.document) {
-      telegramFileId = result.document.file_id;
-      telegramFileUniqueId = result.document.file_unique_id;
-    } else {
-      const key = Object.keys(result).find(
-        (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
-      );
-      if (key) {
-        telegramFileId = result[key].file_id;
-        telegramFileUniqueId = result[key].file_unique_id;
+      const result = responseData.result;
+      const telegramMessageId = String(result.message_id);
+      let telegramFileId = '';
+      let telegramFileUniqueId = '';
+
+      if (fileType === 'image' && result.photo) {
+        const photoArr = result.photo;
+        const largestPhoto = photoArr[photoArr.length - 1];
+        telegramFileId = largestPhoto.file_id;
+        telegramFileUniqueId = largestPhoto.file_unique_id;
+      } else if (fileType === 'video' && result.video) {
+        telegramFileId = result.video.file_id;
+        telegramFileUniqueId = result.video.file_unique_id;
+      } else if (result.document) {
+        telegramFileId = result.document.file_id;
+        telegramFileUniqueId = result.document.file_unique_id;
       } else {
-        throw new Error('Telegram response did not return a valid file ID.');
+        const key = Object.keys(result).find(
+          (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
+        );
+        if (key) {
+          telegramFileId = result[key].file_id;
+          telegramFileUniqueId = result[key].file_unique_id;
+        } else {
+          throw new Error('Telegram response did not return a valid file ID.');
+        }
+      }
+
+      return {
+        telegramMessageId,
+        telegramFileId,
+        telegramFileUniqueId,
+      };
+    } finally {
+      if (tempCopiedFile) {
+        FileSystem.deleteAsync(tempCopiedFile, { idempotent: true }).catch((err) => {
+          console.warn('[Upload] Failed to delete temp upload file:', err);
+        });
       }
     }
-
-    return {
-      telegramMessageId,
-      telegramFileId,
-      telegramFileUniqueId,
-    };
   },
 
   async sendChatLogToTelegram(data: {
