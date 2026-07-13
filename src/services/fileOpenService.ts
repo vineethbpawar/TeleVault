@@ -23,12 +23,43 @@ export const fileOpenService = {
       }
 
       if (Platform.OS === 'web') {
-        const link = document.createElement('a');
-        link.href = cachedUri;
-        link.download = file.file_name;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        try {
+          const response = await fetch(cachedUri);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch media file: ${response.statusText}`);
+          }
+          const mediaBlob = await response.blob();
+          
+          let mimeType = file.mime_type;
+          if (!mimeType) {
+            const ext = file.file_name.split('.').pop()?.toLowerCase();
+            if (ext === 'mp4' || ext === 'mov') mimeType = 'video/mp4';
+            else if (ext === 'png') mimeType = 'image/png';
+            else if (ext === 'gif') mimeType = 'image/gif';
+            else mimeType = 'image/jpeg';
+          }
+
+          const fileObj = new File([mediaBlob], file.file_name, { type: mimeType });
+          const blobUrl = window.URL.createObjectURL(fileObj);
+
+          const downloadAnchor = document.createElement('a');
+          downloadAnchor.href = blobUrl;
+          downloadAnchor.download = file.file_name;
+          document.body.appendChild(downloadAnchor);
+          downloadAnchor.click();
+
+          document.body.removeChild(downloadAnchor);
+          window.URL.revokeObjectURL(blobUrl);
+        } catch (err: any) {
+          console.error('PWA Download Engine Failure:', err);
+          // Fallback to direct download link on failure
+          const link = document.createElement('a');
+          link.href = cachedUri;
+          link.download = file.file_name;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
         return;
       }
 
