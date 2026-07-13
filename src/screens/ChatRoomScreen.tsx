@@ -441,12 +441,13 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
 
   // Main chat initialization & Realtime Subscription
   useEffect(() => {
+    let active = true;
     let activeId = conversationId;
 
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
         console.log('[AppState] App returned to foreground, reconnecting chat subscription...');
-        if (activeId) {
+        if (activeId && active) {
           subscribeToChat(activeId);
         }
       }
@@ -456,40 +457,51 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     const appStateSub = AppState.addEventListener('change', handleAppStateChange);
 
     const initChat = async () => {
-      if (!activeId) {
-        try {
+      try {
+        // 1. Get user session first
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || !active) return;
+        
+        setCurrentUserId(user.id);
+
+        // 2. Resolve conversation ID if not present
+        if (!activeId) {
           console.log('[DEBUG_CHAT] No active conversation ID, fetching/creating for otherUserId:', otherUserId);
           const conv = await chatService.getOrCreateConversation(otherUserId);
+          if (!active) return;
           activeId = conv.id;
           console.log('[DEBUG_CHAT] Resolved conversation ID:', activeId);
           setConversationId(conv.id);
-        } catch (error) {
-          console.error('[DEBUG_CHAT] Conversation creation failed:', error);
-          setLoading(false);
-          return;
         }
-      }
 
-      try {
+        // 3. Fetch messages
         console.log('[DEBUG_CHAT] Fetching messages from database for conversation:', activeId);
         const data = await chatService.getMessages(activeId);
-        console.log('[DEBUG_CHAT] Fetched messages count:', data.length, 'data:', data);
+        if (!active) return;
+        console.log('[DEBUG_CHAT] Fetched messages count:', data.length);
         setMessages(data);
+        
+        // 4. Load offline queue and mark as read
         await loadOfflineQueue(activeId);
+        if (!active) return;
         await chatService.markMessagesRead(activeId);
-      } catch (error) {
-        console.error('[DEBUG_CHAT] Fetch messages failed:', error);
-      } finally {
-        setLoading(false);
-      }
 
-      console.log('[DEBUG_CHAT] Subscribing to realtime channel for conversation:', activeId);
-      subscribeToChat(activeId);
+        // 5. Subscribe to realtime Postgres updates
+        console.log('[DEBUG_CHAT] Subscribing to realtime channel for conversation:', activeId);
+        subscribeToChat(activeId);
+      } catch (error) {
+        console.error('[DEBUG_CHAT] Chat room initialization failed:', error);
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
     };
 
     initChat();
 
     return () => {
+      active = false;
       appStateSub.remove();
       if (activeChannelRef.current) {
         supabase.removeChannel(activeChannelRef.current);
@@ -502,7 +514,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
       }
       stopPolling();
     };
-  }, [conversationId, currentUserId, otherUserId]);
+  }, [conversationId, otherUserId]);
 
   // Send message flow with optimistic UI
   const handleSend = async (text: string) => {
