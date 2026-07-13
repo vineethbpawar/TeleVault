@@ -458,27 +458,32 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     const initChat = async () => {
       if (!activeId) {
         try {
+          console.log('[DEBUG_CHAT] No active conversation ID, fetching/creating for otherUserId:', otherUserId);
           const conv = await chatService.getOrCreateConversation(otherUserId);
           activeId = conv.id;
+          console.log('[DEBUG_CHAT] Resolved conversation ID:', activeId);
           setConversationId(conv.id);
         } catch (error) {
-          console.error('Conversation creation failed:', error);
+          console.error('[DEBUG_CHAT] Conversation creation failed:', error);
           setLoading(false);
           return;
         }
       }
 
       try {
+        console.log('[DEBUG_CHAT] Fetching messages from database for conversation:', activeId);
         const data = await chatService.getMessages(activeId);
+        console.log('[DEBUG_CHAT] Fetched messages count:', data.length, 'data:', data);
         setMessages(data);
         await loadOfflineQueue(activeId);
         await chatService.markMessagesRead(activeId);
       } catch (error) {
-        console.error('Fetch messages failed:', error);
+        console.error('[DEBUG_CHAT] Fetch messages failed:', error);
       } finally {
         setLoading(false);
       }
 
+      console.log('[DEBUG_CHAT] Subscribing to realtime channel for conversation:', activeId);
       subscribeToChat(activeId);
     };
 
