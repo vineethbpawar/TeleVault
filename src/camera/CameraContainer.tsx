@@ -373,9 +373,18 @@ export const CameraContainer: React.FC<CameraContainerProps> = ({ navigation, ro
         </View>
       )}
 
+      {/* Centered Active Lens Label */}
+      {!isRecording && (
+        <View style={[styles.activeLensLabelContainer, { bottom: 64 + insets.bottom + 165 }]}>
+          <Text style={styles.activeLensLabelText}>
+            {LENSES.find((l) => l.type === selectedLens)?.label.toUpperCase()}
+          </Text>
+        </View>
+      )}
+
       {/* Snapchat-style horizontal Lenses drawer */}
       {!isRecording && (
-        <View style={[styles.lensesWrapper, { bottom: 64 + insets.bottom + 90 }]}>
+        <View style={[styles.lensesWrapper, { bottom: 64 + insets.bottom + 105 }]}>
           <Animated.ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -391,9 +400,6 @@ export const CameraContainer: React.FC<CameraContainerProps> = ({ navigation, ro
                 }}
               >
                 <Text style={styles.lensIcon}>{lens.icon}</Text>
-                <Text style={[styles.lensLabel, selectedLens === lens.type && styles.lensLabelActive]}>
-                  {lens.label}
-                </Text>
               </TouchableOpacity>
             ))}
           </Animated.ScrollView>
@@ -401,7 +407,7 @@ export const CameraContainer: React.FC<CameraContainerProps> = ({ navigation, ro
       )}
 
       {/* High Performance Zoom Pill */}
-      <ZoomPill zoomShared={zoomShared} bottom={64 + insets.bottom + 185} />
+      <ZoomPill zoomShared={zoomShared} bottom={64 + insets.bottom + 195} />
 
       {/* Capture trigger buttons */}
       <CameraControls
@@ -598,30 +604,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   lensItem: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    width: 48,
+    height: 48,
     borderRadius: 24,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    marginHorizontal: 6,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   lensItemActive: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    borderColor: '#FFFC00',
+    transform: [{ scale: 1.12 }] as any,
   },
   lensIcon: {
-    fontSize: 22,
-    marginBottom: 4,
+    fontSize: 20,
+    textAlign: 'center',
   },
-  lensLabel: {
-    color: '#8E8E93',
-    fontSize: 11,
-    fontWeight: '700',
+  activeLensLabelContainer: {
+    position: 'absolute',
+    alignSelf: 'center',
+    zIndex: 10,
   },
-  lensLabelActive: {
-    color: '#000000',
+  activeLensLabelText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   zoomPill: {
     position: 'absolute',
