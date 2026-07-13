@@ -28,6 +28,8 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     
     const startPinchDistRef = useRef(0);
     const startZoomRef = useRef(0);
+    const recordingCanvasLoopRef = useRef<number | null>(null);
+    const canvasStreamRef = useRef<MediaStream | null>(null);
 
     const [zoomScale, setZoomScale] = useState(1);
 
@@ -206,6 +208,59 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
         if (!stream) throw new Error('Camera stream is not active');
         recordedChunksRef.current = [];
 
+        // Create recording canvas dynamically
+        const canvas = document.createElement('canvas');
+        canvas.width = videoRef.current?.videoWidth || 1280;
+        canvas.height = videoRef.current?.videoHeight || 720;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Failed to create canvas context');
+
+        // Draw loop with mirroring, zoom, and filters
+        let isRecordingActive = true;
+        const renderFrame = () => {
+          if (!isRecordingActive || !videoRef.current) return;
+
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          ctx.save();
+          if (facing === 'front') {
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+          }
+
+          // Apply zoom crop bounds
+          const zoomVal = zoomShared ? zoomShared.value : 0;
+          const scale = 1 + zoomVal * 7; // range [1.0x, 8.0x]
+          const sWidth = canvas.width / scale;
+          const sHeight = canvas.height / scale;
+          const sx = (canvas.width - sWidth) / 2;
+          const sy = (canvas.height - sHeight) / 2;
+
+          ctx.drawImage(videoRef.current, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+          ctx.restore();
+
+          // Apply lens CSS filter style if supported on canvas
+          const cssFilter = getLensCssFilter(lens);
+          if (cssFilter !== 'none' && 'filter' in ctx) {
+            (ctx as any).filter = cssFilter;
+            ctx.drawImage(canvas, 0, 0);
+            (ctx as any).filter = 'none';
+          }
+
+          recordingCanvasLoopRef.current = requestAnimationFrame(renderFrame);
+        };
+
+        requestAnimationFrame(renderFrame);
+
+        // Capture canvas stream at 30 FPS
+        const canvasStream = (canvas as any).captureStream(30);
+        canvasStreamRef.current = canvasStream;
+
+        // Merge original audio tracks
+        stream.getAudioTracks().forEach(track => {
+          canvasStream.addTrack(track);
+        });
+
         let options = { mimeType: 'video/webm;codecs=vp9,opus' };
         if (!MediaRecorder.isTypeSupported(options.mimeType)) {
           options = { mimeType: 'video/webm;codecs=vp8,opus' };
@@ -214,7 +269,7 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
           options = { mimeType: 'video/webm' };
         }
 
-        const recorder = new MediaRecorder(stream, options);
+        const recorder = new MediaRecorder(canvasStream, options);
         mediaRecorderRef.current = recorder;
 
         recorder.ondataavailable = (e) => {
@@ -235,6 +290,18 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
           }
 
           recorder.onstop = () => {
+            // Cancel canvas draw loop
+            if (recordingCanvasLoopRef.current !== null) {
+              cancelAnimationFrame(recordingCanvasLoopRef.current);
+              recordingCanvasLoopRef.current = null;
+            }
+
+            // Stop all canvas tracks
+            if (canvasStreamRef.current) {
+              canvasStreamRef.current.getTracks().forEach(t => t.stop());
+              canvasStreamRef.current = null;
+            }
+
             const blobType = recorder.mimeType || 'video/webm';
             const videoBlob = new Blob(recordedChunksRef.current, { type: blobType });
             const fileUri = URL.createObjectURL(videoBlob);
