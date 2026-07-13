@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Alert, ScrollView, RefreshControl, Image } from 'react-native';
-import { Search, Plus, MessageSquare, Camera, Users, UserCheck, Star, Clock, User, Bell, ChevronRight, Check } from 'lucide-react-native';
+import { Search, Plus, MessageSquare, Camera, Users, UserCheck, Star, Clock, User, Bell, ChevronRight, Check, Square, Play } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChatListContainerProps, ChatConversation, ChatGroup, ChatStory, ChatRequest, ChatTabType } from './types';
@@ -30,12 +30,66 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
   // Statistics
   const [myProfile, setMyProfile] = useState<any>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  const getRandomColor = (username: string) => {
+    if (!username) return '#8E8E93';
+    let hash = 0;
+    for (let i = 0; i < username.length; i++) {
+      hash = username.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const colors = ['#FF2D55', '#5856D6', '#007AFF', '#4CD964', '#FF9500', '#FF3B30', '#A352FC'];
+    const index = Math.abs(hash) % colors.length;
+    return colors[index];
+  };
+
+  const renderStatusIcon = (item: ChatConversation) => {
+    const lastMsg = (item as any).last_message;
+    if (!lastMsg || !currentUserId) return null;
+
+    const isMe = lastMsg.sender_id === currentUserId;
+    const isRead = lastMsg.status === 'read';
+    const isSnap = lastMsg.message_type === 'snap';
+    const isVideo = isSnap && (item.last_message_preview?.includes('video') || item.last_message_preview?.includes('🎥') || item.last_message_preview?.toLowerCase().includes('video'));
+
+    // Determine color: Snap Video (Purple), Snap Photo (Red), Chat (Blue)
+    let color = '#00B2FF'; // Blue default for chat
+    if (isSnap) {
+      color = isVideo ? '#A352FC' : '#FF3B30';
+    }
+
+    const iconSize = 13;
+
+    if (isMe) {
+      return (
+        <View style={styles.statusIconInline}>
+          <Play 
+            size={iconSize} 
+            color={color} 
+            fill={isRead ? 'transparent' : color} 
+          />
+        </View>
+      );
+    } else {
+      return (
+        <View style={styles.statusIconInline}>
+          <Square 
+            size={iconSize} 
+            color={color} 
+            fill={isRead ? 'transparent' : color} 
+          />
+        </View>
+      );
+    }
+  };
 
   const loadAllData = useCallback(async (showSpinner = true) => {
     if (showSpinner && conversations.length === 0) setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      setCurrentUserId(user.id);
 
       // Load my profile details
       const { data: profile } = await supabase
@@ -289,17 +343,23 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
             // 1. Direct Messages tab
             if (activeTab === 'unread') {
               const hasUnread = item.unread_count > 0;
+              const avatarBg = getRandomColor(item.other_user?.username || '');
               return (
                 <TouchableOpacity style={styles.feedRow} onPress={() => handleOpenDM(item)}>
                   <View style={styles.rowLeft}>
-                    <View style={styles.avatarWrapper}>
-                      <User size={24} color="#8E8E93" />
+                    <View style={[styles.avatarWrapper, { backgroundColor: avatarBg }]}>
+                      <Text style={styles.avatarLetter}>
+                        {(item.other_user?.username || '?').substring(0, 1).toUpperCase()}
+                      </Text>
                     </View>
                     <View style={styles.detailsWrapper}>
                       <Text style={styles.titleText}>{item.other_user?.username}</Text>
-                      <Text style={[styles.subtitleText, hasUnread && styles.subtitleTextUnread]} numberOfLines={1}>
-                        {item.last_message_preview || 'Tap to chat'}
-                      </Text>
+                      <View style={styles.statusRow}>
+                        {renderStatusIcon(item)}
+                        <Text style={[styles.subtitleText, hasUnread && styles.subtitleTextUnread]} numberOfLines={1}>
+                          {item.last_message_preview || 'Tap to chat'}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                   <View style={styles.rowRight}>
@@ -572,6 +632,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#34C759',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  statusIconInline: {
+    marginRight: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarLetter: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
   },
 });
 export default ChatListContainer;

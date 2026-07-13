@@ -78,9 +78,18 @@ export const chatService = {
     }
 
     if (existing) {
+      const { data: lastMsg } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('conversation_id', existing.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
       return {
         ...existing,
         other_user: otherProfile || undefined,
+        last_message: lastMsg || null,
       } as Conversation;
     }
 
@@ -104,6 +113,7 @@ export const chatService = {
     return {
       ...inserted,
       other_user: otherProfile || undefined,
+      last_message: null,
     } as Conversation;
   },
 
@@ -130,7 +140,7 @@ export const chatService = {
     for (const conv of (data || [])) {
       const otherUserId = conv.participant_a === user.id ? conv.participant_b : conv.participant_a;
       
-      const [profileRes, countRes] = await Promise.all([
+      const [profileRes, countRes, lastMsgRes] = await Promise.all([
         supabase
           .from('profiles')
           .select('*')
@@ -141,13 +151,21 @@ export const chatService = {
           .select('*', { count: 'exact', head: true })
           .eq('conversation_id', conv.id)
           .eq('receiver_id', user.id)
-          .neq('status', 'read')
+          .neq('status', 'read'),
+        supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('conversation_id', conv.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
       ]);
 
       conversations.push({
         ...conv,
         other_user: profileRes.data || undefined,
         unread_count: countRes.count || 0,
+        last_message: lastMsgRes.data || null,
       });
     }
 
@@ -169,7 +187,12 @@ export const chatService = {
       throw new Error(error.message || 'Failed to fetch messages.');
     }
 
-    return (data || []) as ChatMessage[];
+    const messages = (data || []).map((msg: any) => ({
+      ...msg,
+      snap: msg.snaps || null,
+    }));
+
+    return messages as ChatMessage[];
   },
 
   /**
