@@ -14,6 +14,8 @@ import {
   Keyboard,
   AppState,
   AppStateStatus,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -23,6 +25,9 @@ import { snapService } from '../services/snapService';
 import { ChatMessage } from '../types/chat';
 import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fileService } from '../services/fileService';
+import { previewCacheService } from '../services/previewCacheService';
+import { showToast } from '../components/ToastBanner';
 
 // Reusable Components
 import ChatBubble from '../components/ChatBubble';
@@ -32,6 +37,8 @@ import ConversationHeader from '../components/ConversationHeader';
 import TypingIndicator from '../components/TypingIndicator';
 import ReactionBar from '../components/ReactionBar';
 import MediaViewer from '../components/MediaViewer';
+
+const { width } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<AppStackParamList, 'ChatRoom'>;
 
@@ -74,6 +81,11 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
   const [mediaType, setMediaType] = useState<'image' | 'video' | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
+  
+  // Media Picker states for sending saved snaps from Memories
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [memoriesList, setMemoriesList] = useState<any[]>([]);
+  const [mediaPickerLoading, setMediaPickerLoading] = useState(false);
   const pollingIntervalRef = useRef<any>(null);
   const offlineQueue = useRef<ChatMessage[]>([]);
 
@@ -516,6 +528,54 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     };
   }, [conversationId, otherUserId]);
 
+  const loadMemoriesForPicker = async () => {
+    setMediaPickerLoading(true);
+    setShowMediaPicker(true);
+    try {
+      const list = await fileService.fetchMemories();
+      setMemoriesList(list);
+    } catch (err) {
+      console.error('Failed to load memories for picker:', err);
+    } finally {
+      setMediaPickerLoading(false);
+    }
+  };
+
+  const handlePickMedia = async (file: any) => {
+    try {
+      setLoading(true);
+      
+      // 1. Resolve preview path
+      const res = await previewCacheService.resolveFilePreview(file);
+      const uri = res.playableUri || res.previewUri || file.local_thumbnail_uri;
+      if (!uri) throw new Error('Could not resolve media path.');
+
+      // 2. Send snap directly
+      await snapService.sendDirectSnap(
+        otherUserId,
+        uri,
+        file.file_type === 'video' ? 'video' : 'image',
+        null,
+        file.overlay_metadata || [],
+        conversationId || null
+      );
+
+      showToast('Snap sent successfully!');
+      setShowMediaPicker(false);
+      
+      // 3. Reload messages list
+      if (conversationId) {
+        const updated = await chatService.getMessages(conversationId);
+        setMessages(updated);
+      }
+    } catch (err: any) {
+      console.error('[PICK_SEND] Failed to send memory snap:', err);
+      Alert.alert('Send Failed', err.message || 'Failed to send snap.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Send message flow with optimistic UI
   const handleSend = async (text: string) => {
     if (!conversationId || !currentUserId) return;
@@ -785,7 +845,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
           <MessageComposer
             onSend={handleSend}
             onCameraPress={handleSnapPress}
-            onGalleryPress={handleSnapPress}
+            onGalleryPress={loadMemoriesForPicker}
             onTyping={broadcastTyping}
             replyToMessage={replyToMessage}
             onClearReply={() => setReplyToMessage(null)}
@@ -847,6 +907,68 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         mediaType={mediaType}
         onClose={() => setMediaViewerVisible(false)}
       />
+
+      {/* Memories Media Picker Modal */}
+      <Modal
+        visible={showMediaPicker}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowMediaPicker(false)}
+      >
+        <SafeAreaView style={styles.pickerModalContainer}>
+          <View style={styles.pickerHeader}>
+            <Text style={styles.pickerTitle}>Send Snap from Memories</Text>
+            <TouchableOpacity onPress={() => setShowMediaPicker(false)} style={styles.pickerCloseBtn}>
+              <Text style={{ color: '#FFFC00', fontWeight: '800', fontSize: 15 }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+
+          {mediaPickerLoading ? (
+            <View style={styles.pickerCenter}>
+              <ActivityIndicator size="large" color="#FFFC00" />
+            </View>
+          ) : memoriesList.length === 0 ? (
+            <View style={styles.pickerCenter}>
+              <Text style={{ color: '#8E8E93', fontSize: 14 }}>No snaps saved in Memories yet.</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={memoriesList}
+              numColumns={3}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ padding: 4 }}
+              renderItem={({ item }) => {
+                const isVideo = item.file_type === 'video';
+                return (
+                  <TouchableOpacity
+                    style={styles.pickerMediaCell}
+                    onPress={() => {
+                      Alert.alert(
+                        'Send Snap',
+                        `Send this snap to @${otherUsername}?`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Send', onPress: () => handlePickMedia(item) }
+                        ]
+                      );
+                    }}
+                  >
+                    <Image
+                      source={{ uri: item.local_thumbnail_uri || item.local_uri || '' }}
+                      style={styles.pickerMediaThumb}
+                    />
+                    {isVideo && (
+                      <View style={styles.pickerPlayBadge}>
+                        <Text style={{ fontSize: 10, color: '#FFFFFF' }}>▶</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -942,6 +1064,56 @@ const styles = StyleSheet.create({
     color: '#FF3B30',
     fontSize: 14.5,
     fontWeight: '700',
+  },
+  pickerModalContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E1E1E',
+  },
+  pickerTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  pickerCloseBtn: {
+    padding: 6,
+  },
+  pickerCenter: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickerMediaCell: {
+    width: (width - 16) / 3,
+    height: 150,
+    margin: 2,
+    position: 'relative',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  pickerMediaThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  pickerPlayBadge: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 
