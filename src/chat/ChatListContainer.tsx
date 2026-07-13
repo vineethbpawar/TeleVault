@@ -141,6 +141,7 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
   // Navigations
   const handleOpenDM = (conv: ChatConversation) => {
     navigation.navigate('ChatRoom', {
+      conversationId: conv.id,
       friendId: conv.other_user?.id,
       friendUsername: conv.other_user?.username,
     });
