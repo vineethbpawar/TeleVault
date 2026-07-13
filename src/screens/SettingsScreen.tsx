@@ -351,6 +351,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       setPendingDisable(false);
       showToast('App security lock disabled.');
     } else {
+      await securityService.setAppLockEnabled(true);
       showToast('App security lock enabled.');
     }
     await loadSettingsData();

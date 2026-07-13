@@ -22,7 +22,6 @@ export const securityService = {
 
   async createPin(pin: string): Promise<void> {
     await storageService.setItem(APP_PIN_KEY, pin);
-    await storageService.setItem(APP_LOCK_ENABLED_KEY, 'true'); // Default to true when newly created
   },
 
   async verifyPin(pin: string): Promise<boolean> {
