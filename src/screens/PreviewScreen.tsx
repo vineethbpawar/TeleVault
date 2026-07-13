@@ -528,22 +528,18 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
           getPackagedMetadata(),
           conversationId || null
         );
-        Alert.alert('Success', `Snap sent to @${sendToUsername}!`, [
-          { 
-            text: 'OK', 
-            onPress: () => {
-              if (fromChatCamera) {
-                navigation.navigate('ChatRoom', {
-                  friendId: sendToUserId,
-                  friendUsername: sendToUsername,
-                  conversationId: conversationId || undefined
-                } as any);
-              } else {
-                navigation.goBack();
-              }
-            } 
-          },
-        ]);
+        if (fromChatCamera) {
+          showToast('Snap sent!');
+          navigation.navigate('ChatRoom', {
+            friendId: sendToUserId,
+            friendUsername: sendToUsername,
+            conversationId: conversationId || undefined
+          } as any);
+        } else {
+          Alert.alert('Success', `Snap sent to @${sendToUsername}!`, [
+            { text: 'OK', onPress: () => navigation.goBack() },
+          ]);
+        }
       } catch (err: any) {
         Alert.alert('Error', err.message || 'Failed to send snap.');
       } finally {
