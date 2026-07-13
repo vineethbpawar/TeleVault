@@ -90,7 +90,6 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const [selectedDestination, setSelectedDestination] = useState<'memories' | 'drive' | 'private_drive' | 'story' | 'snap' | 'download'>(getDefaultDest());
   const [destinationPickerVisible, setDestinationPickerVisible] = useState(false);
-  const [saveModalVisible, setSaveModalVisible] = useState(false);
 
   const [selectedFilter, setSelectedFilter] = useState(FILTERS[0]);
   const [overlays, setOverlays] = useState<MediaOverlayItem[]>([]);
@@ -495,6 +494,25 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const getPublicUrlForWeb = async (mediaUri: string, mediaType: 'image' | 'video'): Promise<string> => {
+    if (mediaUri.startsWith('http')) {
+      return mediaUri;
+    }
+    
+    const filename = mediaType === 'video' ? `televault_${Date.now()}.mp4` : `televault_${Date.now()}.jpeg`;
+    const mimeType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+    
+    const uploadRes = await telegramService.uploadToTelegram(
+      mediaUri,
+      mediaType === 'video' ? 'video' : 'image',
+      filename,
+      mimeType
+    );
+    
+    const downloadUrl = await telegramService.getTelegramFileDownloadUrl(uploadRes.telegramFileId);
+    return downloadUrl;
+  };
+
   const handleSaveToSelectedDestination = async () => {
     if (selectedDestination === 'memories') {
       await handleQueueUpload('memories');
@@ -508,7 +526,16 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
       await handleSendSnap();
     } else if (selectedDestination === 'download') {
       if (Platform.OS === 'web') {
-        setSaveModalVisible(true);
+        setSendLoading(true);
+        try {
+          const downloadUrl = await getPublicUrlForWeb(uri, type === 'video' ? 'video' : 'image');
+          window.open(downloadUrl, '_blank');
+          showToast('Download opened in new tab!');
+        } catch (err: any) {
+          Alert.alert('Download Failed', err.message || 'Could not prepare download link.');
+        } finally {
+          setSendLoading(false);
+        }
       } else {
         Alert.alert(
           'Media Saved',
@@ -1050,49 +1077,6 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
                 </TouchableOpacity>
               ))}
             </View>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Save Modal for Web PWA (iOS/Android Safari/Chrome long-press) */}
-      <Modal
-        visible={saveModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setSaveModalVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.webSaveModalOverlay}
-          activeOpacity={1}
-          onPress={() => setSaveModalVisible(false)}
-        >
-          <View style={styles.webSaveModalContent}>
-            <Text style={styles.webSaveModalTitle}>Save to Device Gallery</Text>
-            <Text style={styles.webSaveModalDesc}>
-              Press and hold the media below, then select {"\n"}
-              <Text style={{ fontWeight: 'bold', color: '#FFFC00' }}>"Add to Photos"</Text> or <Text style={{ fontWeight: 'bold', color: '#FFFC00' }}>"Save Video"</Text>.
-            </Text>
-
-            {type === 'video' ? (
-              <video
-                src={uri}
-                style={{ width: '100%', height: 280, borderRadius: 12, backgroundColor: '#000000', marginBottom: 20 }}
-                controls
-                playsInline
-              />
-            ) : (
-              <img
-                src={uri}
-                style={{ width: '100%', height: 280, objectFit: 'contain', borderRadius: 12, backgroundColor: '#000000', marginBottom: 20 }}
-              />
-            )}
-
-            <TouchableOpacity
-              style={styles.webSaveModalCloseBtn}
-              onPress={() => setSaveModalVisible(false)}
-            >
-              <Text style={styles.webSaveModalCloseBtnText}>Done</Text>
-            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>

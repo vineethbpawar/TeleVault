@@ -39,7 +39,6 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
   const [friends, setFriends] = useState<UserProfile[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saveModalVisible, setSaveModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sending, setSending] = useState(false);
   const [progressText, setProgressText] = useState('');
@@ -83,10 +82,39 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const getPublicUrlForWeb = async (uri: string, type: 'image' | 'video'): Promise<string> => {
+    if (uri.startsWith('http')) {
+      return uri;
+    }
+    
+    const filename = type === 'video' ? `televault_${Date.now()}.mp4` : `televault_${Date.now()}.jpeg`;
+    const mimeType = type === 'video' ? 'video/mp4' : 'image/jpeg';
+    
+    const uploadRes = await telegramService.uploadToTelegram(
+      uri,
+      type === 'video' ? 'video' : 'image',
+      filename,
+      mimeType
+    );
+    
+    const downloadUrl = await telegramService.getTelegramFileDownloadUrl(uploadRes.telegramFileId);
+    return downloadUrl;
+  };
+
   const handleSaveToGallery = async () => {
     try {
       if (Platform.OS === 'web') {
-        setSaveModalVisible(true);
+        setSending(true);
+        setProgressText('Preparing secure download...');
+        try {
+          const downloadUrl = await getPublicUrlForWeb(mediaUri, mediaType);
+          window.open(downloadUrl, '_blank');
+          showToast('Download opened in new tab!');
+        } catch (err: any) {
+          Alert.alert('Download Failed', err.message || 'Could not prepare download link.');
+        } finally {
+          setSending(false);
+        }
       } else {
         const MediaLibrary = require('expo-media-library');
         const { status } = await MediaLibrary.requestPermissionsAsync();
@@ -106,29 +134,25 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleShareToOtherApps = async () => {
     try {
       if (Platform.OS === 'web') {
-        if (navigator.share) {
-          const filename = mediaType === 'video' ? `televault_${Date.now()}.mp4` : `televault_${Date.now()}.jpeg`;
-          const mimeType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
-          
-          const res = await fetch(mediaUri);
-          const blob = await res.blob();
-          const file = new File([blob], filename, { type: mimeType });
-
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: 'TeleVault Media',
-              text: 'Check out this media from TeleVault!',
-            });
-          } else {
-            await navigator.share({
-              title: 'TeleVault Media',
-              text: 'Check out this media from TeleVault!',
-              url: mediaUri,
-            });
-          }
-        } else {
+        if (!navigator.share) {
           Alert.alert('Share Unsupported', 'Your browser does not support the web sharing API.');
+          return;
+        }
+        setSending(true);
+        setProgressText('Preparing share link...');
+        try {
+          const downloadUrl = await getPublicUrlForWeb(mediaUri, mediaType);
+          await navigator.share({
+            title: 'TeleVault Media',
+            text: 'Check out this media from TeleVault!',
+            url: downloadUrl,
+          });
+        } catch (err: any) {
+          if (err.name !== 'AbortError') {
+            Alert.alert('Share Failed', err.message || 'Could not share media.');
+          }
+        } finally {
+          setSending(false);
         }
       } else {
         const isAvailable = await Sharing.isAvailableAsync();
@@ -140,7 +164,6 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
       }
     } catch (err: any) {
       console.error('Failed to share:', err);
-      // Share cancelled is normal and shouldn't throw error alert if user just dismissed it
       if (err.message && !err.message.includes('dismissed') && !err.message.includes('cancel')) {
         Alert.alert('Share Failed', err.message || 'Could not share media.');
       }
@@ -562,49 +585,6 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
           )}
         </View>
       )}
-
-      {/* Save Modal for Web PWA (iOS/Android Safari/Chrome long-press) */}
-      <Modal
-        visible={saveModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setSaveModalVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setSaveModalVisible(false)}
-        >
-          <View style={styles.saveModalContent}>
-            <Text style={styles.saveModalTitle}>Save to Device Gallery</Text>
-            <Text style={styles.saveModalDesc}>
-              Press and hold the media below, then select {"\n"}
-              <Text style={{ fontWeight: 'bold', color: '#FFFC00' }}>"Add to Photos"</Text> or <Text style={{ fontWeight: 'bold', color: '#FFFC00' }}>"Save Video"</Text>.
-            </Text>
-
-            {mediaType === 'video' ? (
-              <video
-                src={mediaUri}
-                style={{ width: '100%', height: 280, borderRadius: 12, backgroundColor: '#000000', marginBottom: 20 }}
-                controls
-                playsInline
-              />
-            ) : (
-              <img
-                src={mediaUri}
-                style={{ width: '100%', height: 280, objectFit: 'contain', borderRadius: 12, backgroundColor: '#000000', marginBottom: 20 }}
-              />
-            )}
-
-            <TouchableOpacity
-              style={styles.saveModalCloseBtn}
-              onPress={() => setSaveModalVisible(false)}
-            >
-              <Text style={styles.saveModalCloseBtnText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 };
