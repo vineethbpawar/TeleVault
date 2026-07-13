@@ -7,7 +7,19 @@ const LOCK_PRIVATE_DRIVE_ENABLED_KEY = 'lock_private_drive_enabled';
 const BIOMETRICS_ENABLED_KEY = 'biometrics_enabled';
 const CHAT_LOCK_ENABLED_KEY = 'chat_lock_enabled'; // Placeholder
 
+let tempIgnoreLock = false;
+
 export const securityService = {
+  setTemporaryIgnoreLock(ignore: boolean): void {
+    tempIgnoreLock = ignore;
+  },
+
+  shouldIgnoreLock(): boolean {
+    const val = tempIgnoreLock;
+    tempIgnoreLock = false; // Reset on check
+    return val;
+  },
+
   async createPin(pin: string): Promise<void> {
     await storageService.setItem(APP_PIN_KEY, pin);
     await storageService.setItem(APP_LOCK_ENABLED_KEY, 'true'); // Default to true when newly created

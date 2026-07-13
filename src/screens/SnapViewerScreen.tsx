@@ -14,6 +14,7 @@ import { X, Play, Video, MessageSquare } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
 import { snapService } from '../services/snapService';
+import { securityService } from '../services/securityService';
 
 import VideoPlayer from '../components/VideoPlayer';
 
@@ -46,6 +47,7 @@ export const SnapViewerScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handlePlayVideo = () => {
     if (currentMediaUrl) {
+      securityService.setTemporaryIgnoreLock(true);
       Linking.openURL(currentMediaUrl);
     } else {
       Alert.alert('Unavailable', 'Video link not resolved yet.');

@@ -88,10 +88,16 @@ export const AppNavigator: React.FC = () => {
       if (nextAppState === 'background') {
         backgroundTime = Date.now();
       } else if (nextAppState === 'active') {
+        const ignoreLock = securityService.shouldIgnoreLock();
+        if (ignoreLock) {
+          backgroundTime = 0;
+          return;
+        }
+
         const appLockActive = await securityService.isAppLockEnabled();
         if (appLockActive && backgroundTime > 0) {
           const elapsed = (Date.now() - backgroundTime) / 1000;
-          if (elapsed > 15) {
+          if (elapsed > 120) {
             setAppLocked(true);
           }
         }
