@@ -113,6 +113,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [biometricsEnabled, setBiometricsEnabled] = useState(false);
   const [chatLockEnabled, setChatLockEnabled] = useState(false);
   const [deviceSupportsBiometrics, setDeviceSupportsBiometrics] = useState(false);
+  const [appLockEnabled, setAppLockEnabled] = useState(false);
 
   // Snap States
   const [defaultSnapViewOnce, setDefaultSnapViewOnce] = useState(true);
@@ -199,6 +200,9 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     // 3. Get PIN security status
     const pinExists = await securityService.hasPin();
     setHasPin(pinExists);
+
+    const appLockActive = await securityService.isAppLockEnabled();
+    setAppLockEnabled(appLockActive);
 
     if (pinExists) {
       const driveEnabled = await securityService.isDriveLockEnabled();
@@ -324,9 +328,15 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleTogglePinLock = async (value: boolean) => {
     if (value) {
-      setPinModalMode('create');
-      setPinModalVisible(true);
-      setPendingDisable(false);
+      if (hasPin) {
+        await securityService.setAppLockEnabled(true);
+        showToast('App security lock enabled.');
+        await loadSettingsData();
+      } else {
+        setPinModalMode('create');
+        setPinModalVisible(true);
+        setPendingDisable(false);
+      }
     } else {
       setPinModalMode('verify');
       setPinModalVisible(true);
@@ -337,9 +347,11 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const handlePinSuccess = async () => {
     setPinModalVisible(false);
     if (pendingDisable) {
-      await securityService.disablePin();
+      await securityService.setAppLockEnabled(false);
       setPendingDisable(false);
-      showToast('PIN security lock disabled.');
+      showToast('App security lock disabled.');
+    } else {
+      showToast('App security lock enabled.');
     }
     await loadSettingsData();
   };
@@ -859,10 +871,10 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 </View>
               </View>
               <Switch
-                value={hasPin}
+                value={appLockEnabled}
                 onValueChange={handleTogglePinLock}
                 trackColor={{ false: '#2C2C2E', true: '#FFFC00' }}
-                thumbColor={hasPin ? '#000000' : '#8E8E93'}
+                thumbColor={appLockEnabled ? '#000000' : '#8E8E93'}
               />
             </View>
 

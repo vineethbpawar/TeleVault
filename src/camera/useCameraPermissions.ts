@@ -5,9 +5,15 @@ import { useCameraPermissions as useExpoCameraPermissions, useMicrophonePermissi
 export function useCameraPermissions() {
   const [cameraPermission, requestCameraPermission] = useExpoCameraPermissions();
   const [micPermission, requestMicPermission] = useExpoMicrophonePermissions();
-  const [webPermissions, setWebPermissions] = useState<{ camera: boolean | null; microphone: boolean | null }>({
-    camera: null,
-    microphone: null,
+  const [webPermissions, setWebPermissions] = useState<{ camera: boolean | null; microphone: boolean | null }>(() => {
+    if (Platform.OS === 'web') {
+      const persisted = localStorage.getItem('web_camera_permissions_granted') === 'true';
+      return {
+        camera: persisted ? true : null,
+        microphone: persisted ? true : null,
+      };
+    }
+    return { camera: null, microphone: null };
   });
 
   useEffect(() => {
@@ -18,21 +24,42 @@ export function useCameraPermissions() {
           navigator.permissions.query({ name: 'camera' as any }).catch(() => null),
           navigator.permissions.query({ name: 'microphone' as any }).catch(() => null),
         ]).then(([camStatus, micStatus]) => {
+          const camGranted = camStatus ? camStatus.state === 'granted' : null;
+          const micGranted = micStatus ? micStatus.state === 'granted' : null;
+
+          const persisted = localStorage.getItem('web_camera_permissions_granted') === 'true';
           setWebPermissions({
-            camera: camStatus ? camStatus.state === 'granted' : null,
-            microphone: micStatus ? micStatus.state === 'granted' : null,
+            camera: camGranted !== null ? camGranted : (persisted ? true : null),
+            microphone: micGranted !== null ? micGranted : (persisted ? true : null),
           });
 
           if (camStatus) {
             camStatus.onchange = () => {
-              setWebPermissions(prev => ({ ...prev, camera: camStatus.state === 'granted' }));
+              const granted = camStatus.state === 'granted';
+              setWebPermissions(prev => ({ ...prev, camera: granted }));
+              if (granted) localStorage.setItem('web_camera_permissions_granted', 'true');
             };
           }
           if (micStatus) {
             micStatus.onchange = () => {
-              setWebPermissions(prev => ({ ...prev, microphone: micStatus.state === 'granted' }));
+              const granted = micStatus.state === 'granted';
+              setWebPermissions(prev => ({ ...prev, microphone: granted }));
+              if (granted) localStorage.setItem('web_camera_permissions_granted', 'true');
             };
           }
+        }).catch(() => {
+          const persisted = localStorage.getItem('web_camera_permissions_granted') === 'true';
+          setWebPermissions({
+            camera: persisted ? true : null,
+            microphone: persisted ? true : null,
+          });
+        });
+      } else {
+        // Fallback for browsers that don't support query (like iOS Safari)
+        const persisted = localStorage.getItem('web_camera_permissions_granted') === 'true';
+        setWebPermissions({
+          camera: persisted ? true : null,
+          microphone: persisted ? true : null,
         });
       }
     }
@@ -52,10 +79,12 @@ export function useCameraPermissions() {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         stream.getTracks().forEach(t => t.stop());
         setWebPermissions({ camera: true, microphone: true });
+        localStorage.setItem('web_camera_permissions_granted', 'true');
         return true;
       } catch (err) {
         console.warn('Web media permission request failed:', err);
         setWebPermissions({ camera: false, microphone: false });
+        localStorage.setItem('web_camera_permissions_granted', 'false');
         return false;
       }
     } else {

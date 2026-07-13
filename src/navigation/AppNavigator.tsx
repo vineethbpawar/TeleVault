@@ -73,8 +73,8 @@ export const AppNavigator: React.FC = () => {
 
   useEffect(() => {
     const checkInitialLock = async () => {
-      const pinExists = await securityService.hasPin();
-      if (pinExists) {
+      const appLockActive = await securityService.isAppLockEnabled();
+      if (appLockActive) {
         setAppLocked(true);
       }
     };
@@ -88,8 +88,8 @@ export const AppNavigator: React.FC = () => {
       if (nextAppState === 'background') {
         backgroundTime = Date.now();
       } else if (nextAppState === 'active') {
-        const pinExists = await securityService.hasPin();
-        if (pinExists && backgroundTime > 0) {
+        const appLockActive = await securityService.isAppLockEnabled();
+        if (appLockActive && backgroundTime > 0) {
           const elapsed = (Date.now() - backgroundTime) / 1000;
           if (elapsed > 15) {
             setAppLocked(true);

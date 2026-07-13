@@ -1,6 +1,7 @@
 import { storageService } from './storageService';
 
 const APP_PIN_KEY = 'app_pin';
+const APP_LOCK_ENABLED_KEY = 'app_lock_enabled';
 const LOCK_DRIVE_ENABLED_KEY = 'lock_drive_enabled';
 const LOCK_PRIVATE_DRIVE_ENABLED_KEY = 'lock_private_drive_enabled';
 const BIOMETRICS_ENABLED_KEY = 'biometrics_enabled';
@@ -9,6 +10,7 @@ const CHAT_LOCK_ENABLED_KEY = 'chat_lock_enabled'; // Placeholder
 export const securityService = {
   async createPin(pin: string): Promise<void> {
     await storageService.setItem(APP_PIN_KEY, pin);
+    await storageService.setItem(APP_LOCK_ENABLED_KEY, 'true'); // Default to true when newly created
   },
 
   async verifyPin(pin: string): Promise<boolean> {
@@ -27,10 +29,20 @@ export const securityService = {
 
   async disablePin(): Promise<void> {
     await storageService.removeItem(APP_PIN_KEY);
+    await storageService.setItem(APP_LOCK_ENABLED_KEY, 'false');
     await storageService.setItem(LOCK_DRIVE_ENABLED_KEY, 'false');
     await storageService.setItem(LOCK_PRIVATE_DRIVE_ENABLED_KEY, 'false');
     await storageService.setItem(BIOMETRICS_ENABLED_KEY, 'false');
     await storageService.setItem(CHAT_LOCK_ENABLED_KEY, 'false');
+  },
+
+  async isAppLockEnabled(): Promise<boolean> {
+    const enabled = await storageService.getItem(APP_LOCK_ENABLED_KEY);
+    return enabled === 'true';
+  },
+
+  async setAppLockEnabled(enabled: boolean): Promise<void> {
+    await storageService.setItem(APP_LOCK_ENABLED_KEY, enabled ? 'true' : 'false');
   },
 
   async isDriveLockEnabled(): Promise<boolean> {
