@@ -154,42 +154,62 @@ export const chatService = {
           .neq('status', 'read'),
         supabase
           .from('chat_messages')
-          .select('*')
+          .select('*, snaps:snap_id(*)')
           .eq('conversation_id', conv.id)
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle()
       ]);
 
+      const lastMsg = lastMsgRes.data ? {
+        ...lastMsgRes.data,
+        snap: Array.isArray((lastMsgRes.data as any).snaps) 
+          ? (lastMsgRes.data as any).snaps[0] 
+          : ((lastMsgRes.data as any).snaps || null)
+      } : null;
+
       conversations.push({
         ...conv,
         other_user: profileRes.data || undefined,
         unread_count: countRes.count || 0,
-        last_message: lastMsgRes.data || null,
+        last_message: lastMsg,
       });
     }
 
     return conversations;
   },
 
-  /**
-   * Get messages for a specific conversation, including snap metadata if applicable.
-   */
   async getMessages(conversationId: string): Promise<ChatMessage[]> {
-    const { data, error } = await supabase
+    const { data: messagesData, error: messagesError } = await supabase
       .from('chat_messages')
-      .select('*, snaps:snap_id(*)')
+      .select('*')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true });
 
-    if (error) {
-      console.error('Get Messages Error:', error);
-      throw new Error(error.message || 'Failed to fetch messages.');
+    if (messagesError) {
+      console.error('Get Messages Error:', messagesError);
+      throw new Error(messagesError.message || 'Failed to fetch messages.');
     }
 
-    const messages = (data || []).map((msg: any) => ({
+    if (!messagesData || messagesData.length === 0) return [];
+
+    const snapIds = messagesData.map(m => m.snap_id).filter(Boolean);
+    const snapsMap: Record<string, any> = {};
+    if (snapIds.length > 0) {
+      const { data: snapsData, error: snapsError } = await supabase
+        .from('snaps')
+        .select('*')
+        .in('id', snapIds);
+      if (!snapsError && snapsData) {
+        snapsData.forEach(snap => {
+          snapsMap[snap.id] = snap;
+        });
+      }
+    }
+
+    const messages = messagesData.map((msg: any) => ({
       ...msg,
-      snap: msg.snaps || null,
+      snap: snapsMap[msg.snap_id] || null,
     }));
 
     return messages as ChatMessage[];

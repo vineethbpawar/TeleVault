@@ -50,7 +50,7 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
     const isMe = lastMsg.sender_id === currentUserId;
     const isRead = lastMsg.status === 'read';
     const isSnap = lastMsg.message_type === 'snap';
-    const isVideo = isSnap && (item.last_message_preview?.includes('video') || item.last_message_preview?.includes('🎥') || item.last_message_preview?.toLowerCase().includes('video'));
+    const isVideo = isSnap && (lastMsg.snap?.media_type === 'video' || item.last_message_preview?.includes('video') || item.last_message_preview?.includes('🎥') || item.last_message_preview?.toLowerCase().includes('video'));
 
     // Determine color: Snap Video (Purple), Snap Photo (Red), Chat (Blue)
     let color = '#00B2FF'; // Blue default for chat

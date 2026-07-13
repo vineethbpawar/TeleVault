@@ -239,9 +239,9 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
       });
 
       console.log(`[Realtime] Syncing missed messages since ${lastTimestamp}`);
-      const { data, error } = await supabase
+      const { data: msgsData, error } = await supabase
         .from('chat_messages')
-        .select('*, snaps:snap_id(*)')
+        .select('*')
         .eq('conversation_id', convId)
         .gt('created_at', lastTimestamp)
         .order('created_at', { ascending: true });
@@ -251,8 +251,28 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         return;
       }
 
-      if (data && data.length > 0) {
-        console.log(`[Realtime] Found ${data.length} missed messages. Merging...`);
+      if (msgsData && msgsData.length > 0) {
+        console.log(`[Realtime] Found ${msgsData.length} missed messages. Merging...`);
+        
+        const snapIds = msgsData.map((m: any) => m.snap_id).filter(Boolean);
+        const snapsMap: Record<string, any> = {};
+        if (snapIds.length > 0) {
+          const { data: snapsData } = await supabase
+            .from('snaps')
+            .select('*')
+            .in('id', snapIds);
+          if (snapsData) {
+            snapsData.forEach((s) => {
+              snapsMap[s.id] = s;
+            });
+          }
+        }
+
+        const data = msgsData.map((m: any) => ({
+          ...m,
+          snap: snapsMap[m.snap_id] || null,
+        }));
+
         setMessages((prev) => {
           const merged = [...prev];
           data.forEach((msg: ChatMessage) => {
@@ -311,6 +331,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         event: 'INSERT',
         schema: 'public',
         table: 'chat_messages',
+        filter: `conversation_id=eq.${convId}`,
       },
       async (payload: any) => {
         const newMsg = payload.new as ChatMessage;
@@ -360,6 +381,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         event: 'UPDATE',
         schema: 'public',
         table: 'chat_messages',
+        filter: `conversation_id=eq.${convId}`,
       },
       (payload: any) => {
         const updatedMsg = payload.new as ChatMessage;
@@ -378,6 +400,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         event: 'UPDATE',
         schema: 'public',
         table: 'snaps',
+        filter: `conversation_id=eq.${convId}`,
       },
       (payload: any) => {
         const updatedSnap = payload.new as any;
@@ -515,6 +538,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     return () => {
       active = false;
       appStateSub.remove();
+      stopPolling();
       if (activeChannelRef.current) {
         supabase.removeChannel(activeChannelRef.current);
       }

@@ -189,18 +189,50 @@ export const groupService = {
    * Get messages for a group.
    */
   async getGroupMessages(groupId: string): Promise<GroupMessage[]> {
-    const { data, error } = await supabase
+    const { data: msgsData, error: msgsError } = await supabase
       .from('group_messages')
-      .select('*, sender:profiles(*), snaps:snap_id(*)')
+      .select('*')
       .eq('group_id', groupId)
       .order('created_at', { ascending: true });
 
-    if (error) {
-      console.error('Get Group Messages Error:', error);
-      throw new Error(error.message || 'Failed to fetch messages.');
+    if (msgsError) {
+      console.error('Get Group Messages Error:', msgsError);
+      throw new Error(msgsError.message || 'Failed to fetch messages.');
     }
 
-    return (data || []) as GroupMessage[];
+    if (!msgsData || msgsData.length === 0) return [];
+
+    const senderIds = Array.from(new Set(msgsData.map(m => m.sender_id).filter(Boolean)));
+    const snapIds = Array.from(new Set(msgsData.map(m => m.snap_id).filter(Boolean)));
+
+    const [profilesRes, snapsRes] = await Promise.all([
+      senderIds.length > 0
+        ? supabase.from('profiles').select('*').in('id', senderIds)
+        : Promise.resolve({ data: [] }),
+      snapIds.length > 0
+        ? supabase.from('snaps').select('*').in('id', snapIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const profilesMap: Record<string, any> = {};
+    if (profilesRes.data) {
+      profilesRes.data.forEach(p => {
+        profilesMap[p.id] = p;
+      });
+    }
+
+    const snapsMap: Record<string, any> = {};
+    if (snapsRes.data) {
+      snapsRes.data.forEach(s => {
+        snapsMap[s.id] = s;
+      });
+    }
+
+    return msgsData.map(m => ({
+      ...m,
+      sender: profilesMap[m.sender_id] || null,
+      snap: snapsMap[m.snap_id] || null,
+    })) as GroupMessage[];
   },
 
   /**
