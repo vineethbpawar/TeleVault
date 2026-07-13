@@ -653,8 +653,9 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleOpenSnap = async (snap: any) => {
     if (!snap) return;
     const isReceiver = snap.receiver_id === currentUserId;
+    const isSavedInChat = snap.view_once === false;
 
-    if (isReceiver && snap.is_viewed) {
+    if (isReceiver && snap.is_viewed && !isSavedInChat) {
       Alert.alert('Opened', 'This view-once snap has already been viewed.');
       return;
     }
@@ -729,6 +730,41 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     setLongPressedMessage(null);
   };
 
+  const handleToggleSaveSnap = async (msg: ChatMessage) => {
+    setLongPressedMessage(null);
+    if (!msg.snap_id || !msg.snap) return;
+
+    const currentSaveState = msg.snap.view_once === false; // true if currently saved
+    const newViewOnce = currentSaveState; // if saved (view_once=false), toggle to view_once=true (unsave)
+
+    try {
+      const { data: updatedSnap, error } = await supabase
+        .from('snaps')
+        .update({ view_once: newViewOnce })
+        .eq('id', msg.snap_id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      showToast(newViewOnce ? 'Snap unsaved from chat.' : 'Snap saved in chat.');
+
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.snap_id === msg.snap_id) {
+            return {
+              ...m,
+              snap: updatedSnap,
+            };
+          }
+          return m;
+        })
+      );
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to update snap save state.');
+    }
+  };
+
   // Pre-process messages to insert date headers and calculate grouping
   const getProcessedMessagesList = () => {
     const list: any[] = [];
@@ -790,6 +826,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
           snap={item.snap || { id: item.snap_id, media_type: 'image', is_viewed: item.status === 'read' }}
           isMe={isMe}
           onOpen={() => handleOpenSnap(item.snap)}
+          onLongPress={() => setLongPressedMessage(item)}
           senderName={otherUsername}
         />
       );
@@ -902,12 +939,25 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
                     <Text style={styles.optionText}>Reply</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.optionBtn}
-                    onPress={() => handleCopyMessage(longPressedMessage.message_text || '')}
-                  >
-                    <Text style={styles.optionText}>Copy Text</Text>
-                  </TouchableOpacity>
+                  {longPressedMessage.message_type === 'snap' ? (
+                    <TouchableOpacity
+                      style={styles.optionBtn}
+                      onPress={() => handleToggleSaveSnap(longPressedMessage)}
+                    >
+                      <Text style={styles.optionText}>
+                        {longPressedMessage.snap?.view_once === false
+                          ? 'Unsave from Chat'
+                          : 'Save in Chat'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.optionBtn}
+                      onPress={() => handleCopyMessage(longPressedMessage.message_text || '')}
+                    >
+                      <Text style={styles.optionText}>Copy Text</Text>
+                    </TouchableOpacity>
+                  )}
 
                   <TouchableOpacity
                     style={[styles.optionBtn, styles.deleteOptionBtn]}

@@ -8,9 +8,11 @@ interface SnapBubbleProps {
     media_type: 'image' | 'video';
     is_viewed: boolean;
     expires_at?: string;
+    view_once?: boolean;
   };
   isMe: boolean;
   onOpen: () => void;
+  onLongPress?: () => void;
   senderName: string;
 }
 
@@ -18,13 +20,19 @@ export const SnapBubble: React.FC<SnapBubbleProps> = ({
   snap,
   isMe,
   onOpen,
+  onLongPress,
   senderName,
 }) => {
   const isVideo = snap.media_type === 'video';
-  const isViewed = snap.is_viewed;
+  const isSavedInChat = snap.view_once === false;
+  const isViewed = snap.is_viewed && !isSavedInChat;
 
   // Red for photo snaps, purple for video snaps (matching Snapchat aesthetic)
   const snapColor = isVideo ? '#A352FC' : '#FF3B30';
+
+  const subtitleText = isSavedInChat 
+    ? 'Saved in Chat'
+    : (isViewed ? 'Opened' : isMe ? 'Delivered' : 'Tap to View');
 
   return (
     <View style={[styles.container, isMe ? styles.myRow : styles.otherRow]}>
@@ -38,8 +46,9 @@ export const SnapBubble: React.FC<SnapBubbleProps> = ({
         <TouchableOpacity
           style={styles.content}
           onPress={onOpen}
+          onLongPress={onLongPress}
           activeOpacity={0.8}
-          disabled={isMe || isViewed}
+          disabled={!isSavedInChat && (isMe || isViewed)}
         >
           {isViewed ? (
             <View style={styles.iconWrapper}>
@@ -62,7 +71,7 @@ export const SnapBubble: React.FC<SnapBubbleProps> = ({
                 : `Received a ${isVideo ? 'Video' : 'Photo'} Snap`}
             </Text>
             <Text style={styles.subtitle}>
-              {isViewed ? 'Opened' : isMe ? 'Delivered' : 'Tap to View'}
+              {subtitleText}
             </Text>
           </View>
 

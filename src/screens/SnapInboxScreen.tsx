@@ -95,7 +95,7 @@ export const SnapInboxScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleOpenSnap = async (snap: Snap) => {
-    if (snap.is_viewed) {
+    if (snap.is_viewed && snap.view_once !== false) {
       Alert.alert('Opened', 'This view-once snap has already been viewed.');
       return;
     }
