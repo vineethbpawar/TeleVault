@@ -36,7 +36,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   backgroundUpload: true,
   defaultSnapViewOnce: true,
   saveSentSnapsToMemories: true,
-  uploadMode: 'Stable',
+  uploadMode: 'Fast',
 };
 
 export const settingsService = {

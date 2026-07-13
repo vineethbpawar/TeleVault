@@ -75,7 +75,7 @@ export async function fetchWithRetry(url: string, options: RequestInit = {}, max
           return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(u)}`;
         }
       }
-      return `/api/telegram-proxy?url=${encodeURIComponent(u)}`;
+      return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(u)}`;
     },
     (u: string) => `https://corsproxy.io/?${u}`,
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
@@ -288,7 +288,7 @@ export const telegramService = {
           return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(rawUrl)}`;
         }
       }
-      return `/api/telegram-proxy?url=${encodeURIComponent(rawUrl)}`;
+      return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(rawUrl)}`;
     }
     return rawUrl;
   },
@@ -948,7 +948,7 @@ export const telegramService = {
           return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(url)}`;
         }
       }
-      return `/api/telegram-proxy?url=${encodeURIComponent(url)}`;
+      return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(url)}`;
     }
     return url;
   },

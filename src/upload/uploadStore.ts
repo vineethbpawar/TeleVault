@@ -146,12 +146,12 @@ export const uploadStore = {
       const queue = await this.getUploadQueue();
       let changed = false;
       const recovered = queue.map(item => {
-        if (item.status === 'uploading') {
+        if (item.status === 'uploading' || item.status === 'failed') {
           changed = true;
           return {
             ...item,
             status: 'pending' as const,
-            stage: 'Recovered',
+            stage: 'Retrying',
             progress: 0,
           };
         }
