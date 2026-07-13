@@ -105,7 +105,10 @@ const ViewerItem = React.memo<{
         const createdDate = file.created_at ? new Date(file.created_at) : new Date();
         const timeString = createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const dateString = createdDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-        const locText = file.locationText || file.overlay_metadata?.locationText || '📍 Saved Location';
+        
+        let locRaw = file.locationText || file.overlay_metadata?.locationText || 'Saved Location';
+        // Clean up any double or single 📍 icons that might have been stored in old metadata
+        const locText = locRaw.replace(/^📍\s*/g, '').replace(/^📍\s*/g, '').trim();
 
         return (
           <View style={styles.liveOverlayContainer} pointerEvents="none">
@@ -126,12 +129,12 @@ const ViewerItem = React.memo<{
             )}
             {lens === 'location' && (
               <View style={styles.textOverlayWrapper}>
-                <Text style={styles.liveOverlayStampText}>{locText}</Text>
+                <Text style={styles.liveOverlayStampText}>📍 {locText}</Text>
               </View>
             )}
             {lens === 'date_location' && (
               <View style={styles.textOverlayWrapper}>
-                <Text style={styles.liveOverlayStampText}>{locText}{'\n'}📅 {dateString}</Text>
+                <Text style={styles.liveOverlayStampText}>📍 {locText}{'\n'}📅 {dateString}</Text>
               </View>
             )}
           </View>

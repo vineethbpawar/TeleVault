@@ -124,13 +124,13 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
           )}
           {lens === 'location' && locationText && (
             <View style={styles.stampOverlay} pointerEvents="none">
-              <Text style={styles.stampText}>{locationText}</Text>
+              <Text style={styles.stampText}>📍 {locationText}</Text>
             </View>
           )}
           {lens === 'date_location' && locationText && (
             <View style={styles.stampOverlay} pointerEvents="none">
               <Text style={styles.stampText}>
-                {locationText}{'\n'}📅 {new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                📍 {locationText}{'\n'}📅 {new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
               </Text>
             </View>
           )}

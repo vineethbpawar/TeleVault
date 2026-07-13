@@ -567,7 +567,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     const now = new Date();
     const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateString = now.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-    const locText = locationText || '📍 Current Location';
+    const locText = locationText || 'Current Location';
 
     return (
       <View style={styles.liveOverlayContainer} pointerEvents="none">
@@ -589,12 +589,12 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         )}
         {defaultLens === 'location' && (
           <View style={styles.textOverlayWrapper}>
-            <Text style={styles.liveOverlayStampText}>{locText}</Text>
+            <Text style={styles.liveOverlayStampText}>📍 {locText}</Text>
           </View>
         )}
         {defaultLens === 'date_location' && (
           <View style={styles.textOverlayWrapper}>
-            <Text style={styles.liveOverlayStampText}>{locText}{'\n'}📅 {dateString}</Text>
+            <Text style={styles.liveOverlayStampText}>📍 {locText}{'\n'}📅 {dateString}</Text>
           </View>
         )}
       </View>

@@ -59,7 +59,7 @@ export const locationService = {
           const locationText = parts.length > 0 ? parts.join(', ') : '';
           if (locationText) {
             return {
-              text: `📍 ${locationText}`,
+              text: locationText,
               latitude,
               longitude,
             };
@@ -123,7 +123,7 @@ export const locationService = {
             if (locationText) {
               console.log('[DEBUG_LOCATION] Nominatim resolved address:', locationText);
               return {
-                text: `📍 ${locationText}`,
+                text: locationText,
                 latitude,
                 longitude,
               };

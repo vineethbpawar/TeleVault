@@ -11,7 +11,7 @@ export function useCamera() {
   const [defaultDestination, setDefaultDestination] = useState<UploadDestination>('memories');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
-  const [locationText, setLocationText] = useState('📍 Fetching Location...');
+  const [locationText, setLocationText] = useState('Fetching Location...');
 
   const zoomShared = useSharedValue(0);
 
@@ -22,11 +22,11 @@ export function useCamera() {
       locationService.getCityLocation()
         .then((loc) => {
           if (active && loc?.text) {
-            setLocationText(`📍 ${loc.text}`);
+            setLocationText(loc.text);
           }
         })
         .catch(() => {
-          if (active) setLocationText('📍 Location Unavailable');
+          if (active) setLocationText('Location Unavailable');
         });
       return () => {
         active = false;
