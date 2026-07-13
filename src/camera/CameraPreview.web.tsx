@@ -413,17 +413,31 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
         {/* Date/Time overlays */}
         {lens === 'time' && (
           <View style={styles.stampOverlay} pointerEvents="none">
-            <Text style={styles.stampText}>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+            <Text style={styles.stampText}>🕒 {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
           </View>
         )}
         {lens === 'date' && (
           <View style={styles.stampOverlay} pointerEvents="none">
-            <Text style={styles.stampText}>{new Date().toLocaleDateString()}</Text>
+            <Text style={styles.stampText}>📅 {new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</Text>
+          </View>
+        )}
+        {lens === 'time_date' && (
+          <View style={styles.stampOverlay} pointerEvents="none">
+            <Text style={styles.stampText}>
+              ⏰ {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{'\n'}📅 {new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+            </Text>
           </View>
         )}
         {lens === 'location' && locationText && (
           <View style={styles.stampOverlay} pointerEvents="none">
             <Text style={styles.stampText}>{locationText}</Text>
+          </View>
+        )}
+        {lens === 'date_location' && locationText && (
+          <View style={styles.stampOverlay} pointerEvents="none">
+            <Text style={styles.stampText}>
+              {locationText}{'\n'}📅 {new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+            </Text>
           </View>
         )}
       </View>
@@ -452,17 +466,21 @@ const styles = StyleSheet.create({
   },
   stampOverlay: {
     position: 'absolute',
-    bottom: 120,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    bottom: 150,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   stampText: {
-    color: '#FFFFFF',
-    fontSize: 18,
+    color: '#FFFC00',
+    fontSize: 15,
     fontWeight: '800',
+    textAlign: 'right',
+    lineHeight: 20,
   }
 });
 export default CameraPreview;

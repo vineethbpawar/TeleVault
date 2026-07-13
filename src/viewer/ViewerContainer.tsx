@@ -651,8 +651,8 @@ const styles = StyleSheet.create({
   },
   textOverlayWrapper: {
     position: 'absolute',
-    top: 90,
-    left: 20,
+    bottom: 120,
+    right: 20,
     backgroundColor: 'rgba(0,0,0,0.65)',
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -669,7 +669,7 @@ const styles = StyleSheet.create({
     color: '#FFFC00',
     fontSize: 15,
     fontWeight: '800',
-    textAlign: 'left',
+    textAlign: 'right',
     lineHeight: 20,
   },
   stampOverlayWrapper: {

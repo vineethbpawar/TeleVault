@@ -21,18 +21,45 @@ export const locationService = {
         const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
         if (geocode && geocode.length > 0) {
           const address = geocode[0];
-          const city = address.city || address.district || address.subregion || '';
-          const region = address.region || address.country || '';
+          console.log('[DEBUG_LOCATION] Reverse geocode result:', address);
           
-          if (city && region) {
+          const parts: string[] = [];
+          
+          // 1. Name of building, mall, or landmark
+          if (address.name && address.name !== address.streetNumber && address.name !== address.street) {
+            parts.push(address.name);
+          }
+          
+          // 2. Street name
+          if (address.street) {
+            let streetStr = address.street;
+            if (address.streetNumber) {
+              streetStr = `${address.streetNumber} ${streetStr}`;
+            }
+            parts.push(streetStr);
+          }
+          
+          // 3. District / Neighborhood / Village
+          if (address.district) {
+            parts.push(address.district);
+          }
+          
+          // 4. City
+          if (address.city) {
+            parts.push(address.city);
+          } else if (address.subregion) {
+            parts.push(address.subregion);
+          }
+          
+          // 5. Region/Country fallback if too short
+          if (parts.length < 2 && address.region) {
+            parts.push(address.region);
+          }
+
+          const locationText = parts.length > 0 ? parts.join(', ') : '';
+          if (locationText) {
             return {
-              text: `${city}, ${region}`,
-              latitude,
-              longitude,
-            };
-          } else if (city || region) {
-            return {
-              text: city || region,
+              text: `📍 ${locationText}`,
               latitude,
               longitude,
             };
