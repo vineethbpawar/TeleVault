@@ -124,11 +124,26 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
     try {
       if (Platform.OS === 'web') {
         if (navigator.share) {
-          await navigator.share({
-            title: 'TeleVault Media',
-            text: 'Check out this media from TeleVault!',
-            url: mediaUri,
-          });
+          const filename = mediaType === 'video' ? `televault_${Date.now()}.mp4` : `televault_${Date.now()}.jpeg`;
+          const mimeType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+          
+          const res = await fetch(mediaUri);
+          const blob = await res.blob();
+          const file = new File([blob], filename, { type: mimeType });
+
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'TeleVault Media',
+              text: 'Check out this media from TeleVault!',
+            });
+          } else {
+            await navigator.share({
+              title: 'TeleVault Media',
+              text: 'Check out this media from TeleVault!',
+              url: mediaUri,
+            });
+          }
         } else {
           Alert.alert('Share Unsupported', 'Your browser does not support the web sharing API.');
         }
