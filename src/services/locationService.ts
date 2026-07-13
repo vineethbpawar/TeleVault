@@ -66,7 +66,72 @@ export const locationService = {
           }
         }
       } catch (geocodeError) {
-        console.warn('Reverse geocoding failed, falling back to coordinates:', geocodeError);
+        console.warn('Expo reverse geocoding failed, trying web fallback:', geocodeError);
+      }
+
+      // Fallback: Web-based OpenStreetMap Nominatim reverse geocoding (no auth required)
+      try {
+        console.log('[DEBUG_LOCATION] Fetching address from Nominatim for lat/lon:', latitude, longitude);
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+          {
+            headers: {
+              'User-Agent': 'TeleVaultApp/2.0',
+              'Accept-Language': 'en'
+            }
+          }
+        );
+        if (response.ok) {
+          const json = await response.json();
+          if (json && json.address) {
+            const addr = json.address;
+            const parts: string[] = [];
+
+            // 1. Landmark / Mall / Building / Shop
+            const landmark = addr.amenity || addr.mall || addr.shop || addr.tourism || addr.building || addr.leisure || addr.historic;
+            if (landmark) {
+              parts.push(landmark);
+            }
+
+            // 2. Street
+            if (addr.road) {
+              let roadStr = addr.road;
+              if (addr.house_number) {
+                roadStr = `${addr.house_number} ${roadStr}`;
+              }
+              parts.push(roadStr);
+            }
+
+            // 3. District / Neighborhood / Village
+            const neighborhood = addr.suburb || addr.village || addr.neighbourhood || addr.hamlet || addr.quarter;
+            if (neighborhood) {
+              parts.push(neighborhood);
+            }
+
+            // 4. City / Town
+            const city = addr.city || addr.town || addr.municipality || addr.city_district;
+            if (city) {
+              parts.push(city);
+            }
+
+            // 5. State / Region fallback
+            if (parts.length < 2 && addr.state) {
+              parts.push(addr.state);
+            }
+
+            const locationText = parts.length > 0 ? parts.join(', ') : '';
+            if (locationText) {
+              console.log('[DEBUG_LOCATION] Nominatim resolved address:', locationText);
+              return {
+                text: `📍 ${locationText}`,
+                latitude,
+                longitude,
+              };
+            }
+          }
+        }
+      } catch (nominatimError) {
+        console.warn('Nominatim geocoding failed:', nominatimError);
       }
 
       // Fallback to coordinates
