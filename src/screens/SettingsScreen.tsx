@@ -8,13 +8,38 @@ import {
   ScrollView,
   Switch,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Platform,
   Linking,
 } from 'react-native';
 import AppInput from '../components/AppInput';
 import AppButton from '../components/AppButton';
+
+const Alert = {
+  alert: (
+    title: string,
+    message?: string,
+    buttons?: { text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }[]
+  ) => {
+    if (Platform.OS === 'web') {
+      if (buttons && buttons.length > 1) {
+        const confirmBtn = buttons.find(b => b.style !== 'cancel') || buttons[buttons.length - 1];
+        const confirmed = window.confirm(`${title}\n\n${message || ''}`);
+        if (confirmed && confirmBtn && confirmBtn.onPress) {
+          confirmBtn.onPress();
+        }
+      } else {
+        window.alert(`${title}\n\n${message || ''}`);
+        if (buttons && buttons[0] && buttons[0].onPress) {
+          buttons[0].onPress();
+        }
+      }
+      return;
+    }
+    const RNAlert = require('react-native').Alert;
+    RNAlert.alert(title, message, buttons);
+  }
+};
 import {
   User,
   Send,
