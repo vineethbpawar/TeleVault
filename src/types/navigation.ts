@@ -84,6 +84,10 @@ export type AppStackParamList = {
     fileName?: string;
     fileType?: 'image' | 'video';
     telegramFileId?: string | null;
+    sendToUserId?: string | null;
+    sendToUsername?: string | null;
+    conversationId?: string | null;
+    saveDirectlyTo?: 'memories' | 'drive' | 'private_drive' | 'story' | 'snap' | 'download' | null;
   };
   MemoriesViewer: {
     files: TeleVaultFile[];

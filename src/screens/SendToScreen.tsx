@@ -40,7 +40,11 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
     fileId,
     fileName,
     fileType,
-    telegramFileId
+    telegramFileId,
+    sendToUserId,
+    sendToUsername,
+    conversationId,
+    saveDirectlyTo,
   } = route.params;
   
   const insets = useSafeAreaInsets();
@@ -73,11 +77,13 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
   }, [telegramFileId, mediaUri]);
 
   // Selections
-  const [selectedStory, setSelectedStory] = useState(false);
-  const [selectedMemories, setSelectedMemories] = useState(false);
-  const [selectedDrive, setSelectedDrive] = useState(false);
-  const [selectedPrivateDrive, setSelectedPrivateDrive] = useState(false);
-  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+  const [selectedStory, setSelectedStory] = useState(saveDirectlyTo === 'story');
+  const [selectedMemories, setSelectedMemories] = useState(saveDirectlyTo === 'memories');
+  const [selectedDrive, setSelectedDrive] = useState(saveDirectlyTo === 'drive');
+  const [selectedPrivateDrive, setSelectedPrivateDrive] = useState(saveDirectlyTo === 'private_drive');
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(
+    new Set(sendToUserId ? [sendToUserId] : [])
+  );
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {

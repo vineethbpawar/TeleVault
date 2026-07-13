@@ -513,78 +513,28 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     return downloadUrl;
   };
 
-  const handleSaveToSelectedDestination = async () => {
-    if (selectedDestination === 'memories') {
-      await handleQueueUpload('memories');
-    } else if (selectedDestination === 'drive') {
-      await handleQueueUpload('drive');
-    } else if (selectedDestination === 'private_drive') {
-      await handleQueueUpload('private_drive');
-    } else if (selectedDestination === 'story') {
-      await handleAddToStory();
-    } else if (selectedDestination === 'snap') {
-      await handleSendSnap();
-    } else if (selectedDestination === 'download') {
-      if (Platform.OS === 'web') {
-        setSendLoading(true);
-        try {
-          const downloadUrl = await getPublicUrlForWeb(uri, type === 'video' ? 'video' : 'image');
-          window.open(downloadUrl, '_blank');
-          showToast('Download opened in new tab!');
-        } catch (err: any) {
-          Alert.alert('Download Failed', err.message || 'Could not prepare download link.');
-        } finally {
-          setSendLoading(false);
-        }
-      } else {
-        Alert.alert(
-          'Media Saved',
-          'This action simulated a download/save to your device gallery successfully.',
-          [{ text: 'OK' }]
-        );
-      }
-    }
+  const handleSaveToSelectedDestination = () => {
+    navigation.navigate('SendTo', {
+      mediaUri: uri,
+      mediaType: type === 'video' ? 'video' : 'image',
+      metadata: getPackagedMetadata(),
+      saveDirectlyTo: selectedDestination,
+      sendToUserId: sendToUserId || null,
+      sendToUsername: sendToUsername || null,
+      conversationId: conversationId || null,
+    });
   };
 
-  const handleSendSnap = async () => {
-    if (fileSize !== null && fileSize > 50 * 1024 * 1024) return;
-
-    if (sendToUserId) {
-      setSendLoading(true);
-      try {
-        await snapService.sendDirectSnap(
-          sendToUserId,
-          uri,
-          type === 'video' ? 'video' : 'image',
-          null, // caption
-          getPackagedMetadata(),
-          conversationId || null
-        );
-        if (fromChatCamera) {
-          showToast('Snap sent!');
-          navigation.navigate('ChatRoom', {
-            friendId: sendToUserId,
-            friendUsername: sendToUsername,
-            conversationId: conversationId || undefined
-          } as any);
-        } else {
-          Alert.alert('Success', `Snap sent to @${sendToUsername}!`, [
-            { text: 'OK', onPress: () => navigation.goBack() },
-          ]);
-        }
-      } catch (err: any) {
-        Alert.alert('Error', err.message || 'Failed to send snap.');
-      } finally {
-        setSendLoading(false);
-      }
-    } else {
-      // Direct user to SendToScreen for multiple selection
-      navigation.navigate('SendTo', {
-        mediaUri: uri,
-        mediaType: type === 'video' ? 'video' : 'image',
-        metadata: getPackagedMetadata()
-      });
-    }
+  const handleSendSnap = () => {
+    navigation.navigate('SendTo', {
+      mediaUri: uri,
+      mediaType: type === 'video' ? 'video' : 'image',
+      metadata: getPackagedMetadata(),
+      saveDirectlyTo: null,
+      sendToUserId: sendToUserId || null,
+      sendToUsername: sendToUsername || null,
+      conversationId: conversationId || null,
+    });
   };
 
   const handleAddToStory = async () => {
@@ -869,37 +819,6 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         {/* Save/Send Actions */}
         {!drawingMode && (
           <View style={styles.actionsContainer}>
-            {fromChatCamera ? (
-              <View style={styles.actionButtonsRow}>
-                {/* Left: Cancel Button */}
-                <TouchableOpacity 
-                  style={[styles.saveBtn, { backgroundColor: 'rgba(255, 255, 255, 0.1)', borderColor: 'transparent' }]} 
-                  onPress={() => navigation.goBack()}
-                >
-                  <Text style={styles.saveBtnText}>Cancel</Text>
-                </TouchableOpacity>
-
-                <View style={{ flex: 1 }} />
-
-                {/* Right: Send Snap Button */}
-                <TouchableOpacity 
-                  style={[styles.sendBtn, { width: 140 }]} 
-                  onPress={handleSendSnap} 
-                  disabled={sendLoading}
-                >
-                  {sendLoading ? (
-                    <ActivityIndicator size="small" color="#000000" />
-                  ) : (
-                    <>
-                      <Text style={styles.sendBtnText}>Send Snap</Text>
-                      <View style={styles.sendBtnIconContainer}>
-                        <Send size={16} color="#000000" />
-                      </View>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            ) : (
               <View style={styles.actionButtonsRow}>
                 {/* Left: Save Button */}
                 <TouchableOpacity style={styles.saveBtn} onPress={handleSaveToSelectedDestination}>
@@ -947,7 +866,6 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
                   )}
                 </TouchableOpacity>
               </View>
-            )}
           </View>
         )}
       </View>
