@@ -18,19 +18,23 @@ export function useCameraPermissions() {
 
   useEffect(() => {
     if (Platform.OS === 'web') {
+      const persisted = localStorage.getItem('web_camera_permissions_granted') === 'true';
       // Check if navigator.permissions is available
       if (navigator.permissions && navigator.permissions.query) {
         Promise.all([
           navigator.permissions.query({ name: 'camera' as any }).catch(() => null),
           navigator.permissions.query({ name: 'microphone' as any }).catch(() => null),
         ]).then(([camStatus, micStatus]) => {
-          const camGranted = camStatus ? camStatus.state === 'granted' : null;
-          const micGranted = micStatus ? micStatus.state === 'granted' : null;
+          const camGranted = camStatus 
+            ? (camStatus.state === 'granted' ? true : (camStatus.state === 'denied' ? false : persisted)) 
+            : persisted;
+          const micGranted = micStatus 
+            ? (micStatus.state === 'granted' ? true : (micStatus.state === 'denied' ? false : persisted)) 
+            : persisted;
 
-          const persisted = localStorage.getItem('web_camera_permissions_granted') === 'true';
           setWebPermissions({
-            camera: camGranted !== null ? camGranted : (persisted ? true : null),
-            microphone: micGranted !== null ? micGranted : (persisted ? true : null),
+            camera: camGranted,
+            microphone: micGranted,
           });
 
           if (camStatus) {
@@ -48,18 +52,16 @@ export function useCameraPermissions() {
             };
           }
         }).catch(() => {
-          const persisted = localStorage.getItem('web_camera_permissions_granted') === 'true';
           setWebPermissions({
-            camera: persisted ? true : null,
-            microphone: persisted ? true : null,
+            camera: persisted,
+            microphone: persisted,
           });
         });
       } else {
         // Fallback for browsers that don't support query (like iOS Safari)
-        const persisted = localStorage.getItem('web_camera_permissions_granted') === 'true';
         setWebPermissions({
-          camera: persisted ? true : null,
-          microphone: persisted ? true : null,
+          camera: persisted,
+          microphone: persisted,
         });
       }
     }
