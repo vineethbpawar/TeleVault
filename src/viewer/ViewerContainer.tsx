@@ -515,6 +515,22 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
               </Text>
             </View>
 
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Telegram Sync</Text>
+              <Text style={[styles.infoValue, { color: activeFile.telegram_file_id ? '#34C759' : '#FF3B30' }]}>
+                {activeFile.telegram_file_id ? '☁️ Uploaded' : '❌ Pending / Local Only'}
+              </Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Upload State</Text>
+              <Text style={styles.infoValue}>
+                {activeFile.telegram_file_id 
+                  ? (activeFile.is_chunked ? 'Completed (Multi-Part Chunked)' : 'Completed (Single File)') 
+                  : 'Queued (Offline Mode)'}
+              </Text>
+            </View>
+
             <TouchableOpacity
               style={styles.infoCloseBtn}
               onPress={() => setShowInfoModal(false)}
