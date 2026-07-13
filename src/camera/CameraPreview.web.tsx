@@ -99,11 +99,31 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
           setStream(localStream);
           if (videoRef.current) {
             videoRef.current.srcObject = localStream;
+            videoRef.current.play().catch(e => console.warn('Safari video play trigger failed:', e));
           }
           if (onReady) onReady();
         } catch (err: any) {
-          console.error('Web Camera stream acquisition failed:', err);
-          setErrorMsg('Camera access is unavailable. Please check permissions.');
+          console.warn('Web Camera stream acquisition failed with ideal constraints, retrying simplified:', err);
+          try {
+            localStream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: facing === 'front' ? 'user' : 'environment' },
+              audio: true
+            });
+            if (!active) {
+              localStream.getTracks().forEach(t => t.stop());
+              return;
+            }
+
+            setStream(localStream);
+            if (videoRef.current) {
+              videoRef.current.srcObject = localStream;
+              videoRef.current.play().catch(e => console.warn('Safari video play trigger failed:', e));
+            }
+            if (onReady) onReady();
+          } catch (retryErr: any) {
+            console.error('All camera initialization attempts failed:', retryErr);
+            setErrorMsg('Camera access is unavailable. Please check permissions.');
+          }
         }
       };
 
@@ -261,12 +281,21 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
           canvasStream.addTrack(track);
         });
 
-        let options = { mimeType: 'video/webm;codecs=vp9,opus' };
-        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-          options = { mimeType: 'video/webm;codecs=vp8,opus' };
-        }
-        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-          options = { mimeType: 'video/webm' };
+        let options: any = {};
+        const candidates = [
+          'video/webm;codecs=vp9,opus',
+          'video/webm;codecs=vp8,opus',
+          'video/webm',
+          'video/mp4;codecs=h264,aac',
+          'video/mp4',
+          'video/quicktime'
+        ];
+
+        for (const candidate of candidates) {
+          if (MediaRecorder.isTypeSupported(candidate)) {
+            options = { mimeType: candidate };
+            break;
+          }
         }
 
         const recorder = new MediaRecorder(canvasStream, options);
