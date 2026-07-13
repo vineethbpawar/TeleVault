@@ -841,53 +841,85 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         {/* Save/Send Actions */}
         {!drawingMode && (
           <View style={styles.actionsContainer}>
-            <View style={styles.actionButtonsRow}>
-              {/* Left: Save Button */}
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveToSelectedDestination}>
-                <DownloadCloud size={20} color="#FFFFFF" />
-                <Text style={styles.saveBtnText}>Save</Text>
-              </TouchableOpacity>
+            {fromChatCamera ? (
+              <View style={styles.actionButtonsRow}>
+                {/* Left: Cancel Button */}
+                <TouchableOpacity 
+                  style={[styles.saveBtn, { backgroundColor: 'rgba(255, 255, 255, 0.1)', borderColor: 'transparent' }]} 
+                  onPress={() => navigation.goBack()}
+                >
+                  <Text style={styles.saveBtnText}>Cancel</Text>
+                </TouchableOpacity>
 
-              {/* Center: Destination Selector Pill */}
-              <TouchableOpacity
-                style={styles.destinationPill}
-                onPress={() => setDestinationPickerVisible(true)}
-              >
-                {selectedDestination === 'private_drive' ? (
-                  <Lock size={16} color="#FFFC00" />
-                ) : selectedDestination === 'drive' ? (
-                  <HardDrive size={16} color="#FFFC00" />
-                ) : selectedDestination === 'story' ? (
-                  <Sparkles size={16} color="#FFFC00" />
-                ) : selectedDestination === 'snap' ? (
-                  <Send size={16} color="#FFFC00" />
-                ) : (
-                  <DownloadCloud size={16} color="#FFFC00" />
-                )}
-                <Text style={styles.destinationPillText}>
-                  {selectedDestination === 'memories' && 'Memories'}
-                  {selectedDestination === 'drive' && 'Drive'}
-                  {selectedDestination === 'private_drive' && 'Private'}
-                  {selectedDestination === 'story' && 'Story'}
-                  {selectedDestination === 'snap' && 'Snap'}
-                  {selectedDestination === 'download' && 'Download'}
-                </Text>
-              </TouchableOpacity>
+                <View style={{ flex: 1 }} />
 
-              {/* Right: Send To Button */}
-              <TouchableOpacity style={styles.sendBtn} onPress={handleSendSnap} disabled={sendLoading}>
-                {sendLoading ? (
-                  <ActivityIndicator size="small" color="#000000" />
-                ) : (
-                  <>
-                    <Text style={styles.sendBtnText}>Send To</Text>
-                    <View style={styles.sendBtnIconContainer}>
-                      <Send size={16} color="#000000" />
-                    </View>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
+                {/* Right: Send Snap Button */}
+                <TouchableOpacity 
+                  style={[styles.sendBtn, { width: 140 }]} 
+                  onPress={handleSendSnap} 
+                  disabled={sendLoading}
+                >
+                  {sendLoading ? (
+                    <ActivityIndicator size="small" color="#000000" />
+                  ) : (
+                    <>
+                      <Text style={styles.sendBtnText}>Send Snap</Text>
+                      <View style={styles.sendBtnIconContainer}>
+                        <Send size={16} color="#000000" />
+                      </View>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.actionButtonsRow}>
+                {/* Left: Save Button */}
+                <TouchableOpacity style={styles.saveBtn} onPress={handleSaveToSelectedDestination}>
+                  <DownloadCloud size={20} color="#FFFFFF" />
+                  <Text style={styles.saveBtnText}>Save</Text>
+                </TouchableOpacity>
+
+                {/* Center: Destination Selector Pill */}
+                <TouchableOpacity
+                  style={styles.destinationPill}
+                  onPress={() => setDestinationPickerVisible(true)}
+                >
+                  {selectedDestination === 'private_drive' ? (
+                    <Lock size={16} color="#FFFC00" />
+                  ) : selectedDestination === 'drive' ? (
+                    <HardDrive size={16} color="#FFFC00" />
+                  ) : selectedDestination === 'story' ? (
+                    <Sparkles size={16} color="#FFFC00" />
+                  ) : selectedDestination === 'snap' ? (
+                    <Send size={16} color="#FFFC00" />
+                  ) : (
+                    <DownloadCloud size={16} color="#FFFC00" />
+                  )}
+                  <Text style={styles.destinationPillText}>
+                    {selectedDestination === 'memories' && 'Memories'}
+                    {selectedDestination === 'drive' && 'Drive'}
+                    {selectedDestination === 'private_drive' && 'Private'}
+                    {selectedDestination === 'story' && 'Story'}
+                    {selectedDestination === 'snap' && 'Snap'}
+                    {selectedDestination === 'download' && 'Download'}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Right: Send To Button */}
+                <TouchableOpacity style={styles.sendBtn} onPress={handleSendSnap} disabled={sendLoading}>
+                  {sendLoading ? (
+                    <ActivityIndicator size="small" color="#000000" />
+                  ) : (
+                    <>
+                      <Text style={styles.sendBtnText}>Send To</Text>
+                      <View style={styles.sendBtnIconContainer}>
+                        <Send size={16} color="#000000" />
+                      </View>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
       </View>
