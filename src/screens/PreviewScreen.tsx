@@ -68,7 +68,7 @@ function dataURItoBlob(dataURI: string): Blob {
 }
 
 export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { uri, type, fromGallery, defaultLens, sendToUserId, sendToUsername, conversationId, isVault, isPrivate } = route.params as any;
+  const { uri, type, fromGallery, defaultLens, sendToUserId, sendToUsername, conversationId, isVault, isPrivate, locationText } = route.params as any;
   const insets = useSafeAreaInsets();
   
   // Try to default highlight the private save based on camera context
@@ -565,36 +565,35 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
 
     const now = new Date();
     const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const dateString = now.toLocaleDateString();
+    const dateString = now.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    const locText = locationText || '📍 Current Location';
 
     return (
       <View style={styles.liveOverlayContainer} pointerEvents="none">
-        {/* Color Tints */}
-        {defaultLens === 'warm' && <View style={styles.warmOverlay} />}
-        {defaultLens === 'cool' && <View style={styles.coolOverlay} />}
-        {defaultLens === 'bw' && <View style={styles.bwOverlay} />}
-        {defaultLens === 'soft' && <View style={styles.softOverlay} />}
-        {defaultLens === 'night' && <View style={styles.nightOverlay} />}
-        
-        {/* Stamp / Text Overlays */}
+        {/* Corner/Ends Stamp Overlays */}
         {defaultLens === 'time' && (
           <View style={styles.textOverlayWrapper}>
-            <Text style={styles.liveOverlayStampText}>{timeString}</Text>
+            <Text style={styles.liveOverlayStampText}>🕒 {timeString}</Text>
           </View>
         )}
         {defaultLens === 'date' && (
           <View style={styles.textOverlayWrapper}>
-            <Text style={styles.liveOverlayStampText}>{dateString}</Text>
+            <Text style={styles.liveOverlayStampText}>📅 {dateString}</Text>
           </View>
         )}
-        {defaultLens === 'vault' && (
-          <View style={styles.stampOverlayWrapper}>
-            <Text style={styles.stampOverlayText}>TELEVAULT SECURE</Text>
+        {defaultLens === 'time_date' && (
+          <View style={styles.textOverlayWrapper}>
+            <Text style={styles.liveOverlayStampText}>⏰ {timeString}{'\n'}📅 {dateString}</Text>
           </View>
         )}
-        {defaultLens === 'private' && (
-          <View style={styles.stampOverlayWrapper}>
-            <Text style={[styles.stampOverlayText, { borderColor: '#FF453A', color: '#FF453A' }]}>PRIVATE LOCK</Text>
+        {defaultLens === 'location' && (
+          <View style={styles.textOverlayWrapper}>
+            <Text style={styles.liveOverlayStampText}>{locText}</Text>
+          </View>
+        )}
+        {defaultLens === 'date_location' && (
+          <View style={styles.textOverlayWrapper}>
+            <Text style={styles.liveOverlayStampText}>{locText}{'\n'}📅 {dateString}</Text>
           </View>
         )}
       </View>
@@ -1444,20 +1443,26 @@ const styles = StyleSheet.create({
   },
   textOverlayWrapper: {
     position: 'absolute',
-    bottom: 240,
-    alignSelf: 'center',
+    top: 90,
+    left: 20,
     backgroundColor: 'rgba(0,0,0,0.65)',
-    paddingVertical: 6,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 3,
+    elevation: 4,
   },
   liveOverlayStampText: {
     color: '#FFFC00',
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '800',
-    textAlign: 'center',
+    textAlign: 'left',
+    lineHeight: 20,
   },
   stampOverlayWrapper: {
     position: 'absolute',

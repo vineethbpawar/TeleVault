@@ -14,6 +14,7 @@ export type CameraLensType =
   | 'private'
   | 'time_date'
   | 'location'
+  | 'date_location'
   | 'emoji'
   | 'crown'
   | 'sunglasses'

@@ -9,15 +9,11 @@ interface LensPickerProps {
 
 const LENSES: { type: CameraLensType; label: string; icon: string }[] = [
   { type: 'original', label: 'Original', icon: '🚫' },
-  { type: 'warm', label: 'Warm', icon: '🔥' },
-  { type: 'cool', label: 'Cool', icon: '❄️' },
-  { type: 'bw', label: 'B/W', icon: '🏁' },
-  { type: 'soft', label: 'Soft', icon: '🌸' },
-  { type: 'night', label: 'Night', icon: '🌙' },
   { type: 'time', label: 'Time', icon: '🕒' },
   { type: 'date', label: 'Date', icon: '📅' },
-  { type: 'vault', label: 'Vault', icon: '🏛️' },
-  { type: 'private', label: 'Private', icon: '🔒' },
+  { type: 'time_date', label: 'Time & Date', icon: '⏰' },
+  { type: 'location', label: 'Location', icon: '📍' },
+  { type: 'date_location', label: 'Date & Location', icon: '🗺️' },
 ];
 
 export const LensPicker: React.FC<LensPickerProps> = ({ selectedLens, onSelectLens }) => {

@@ -104,36 +104,34 @@ const ViewerItem = React.memo<{
 
         const createdDate = file.created_at ? new Date(file.created_at) : new Date();
         const timeString = createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const dateString = createdDate.toLocaleDateString();
+        const dateString = createdDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+        const locText = file.locationText || file.overlay_metadata?.locationText || '📍 Saved Location';
 
         return (
           <View style={styles.liveOverlayContainer} pointerEvents="none">
-            {/* Color Tints */}
-            {lens === 'warm' && <View style={styles.warmOverlay} />}
-            {lens === 'cool' && <View style={styles.coolOverlay} />}
-            {lens === 'bw' && <View style={styles.bwOverlay} />}
-            {lens === 'soft' && <View style={styles.softOverlay} />}
-            {lens === 'night' && <View style={styles.nightOverlay} />}
-            
-            {/* Stamp / Text Overlays */}
             {lens === 'time' && (
               <View style={styles.textOverlayWrapper}>
-                <Text style={styles.liveOverlayStampText}>{timeString}</Text>
+                <Text style={styles.liveOverlayStampText}>🕒 {timeString}</Text>
               </View>
             )}
             {lens === 'date' && (
               <View style={styles.textOverlayWrapper}>
-                <Text style={styles.liveOverlayStampText}>{dateString}</Text>
+                <Text style={styles.liveOverlayStampText}>📅 {dateString}</Text>
               </View>
             )}
-            {lens === 'vault' && (
-              <View style={styles.stampOverlayWrapper}>
-                <Text style={styles.stampOverlayText}>TELEVAULT SECURE</Text>
+            {lens === 'time_date' && (
+              <View style={styles.textOverlayWrapper}>
+                <Text style={styles.liveOverlayStampText}>⏰ {timeString}{'\n'}📅 {dateString}</Text>
               </View>
             )}
-            {lens === 'private' && (
-              <View style={styles.stampOverlayWrapper}>
-                <Text style={[styles.stampOverlayText, { borderColor: '#FF453A', color: '#FF453A' }]}>PRIVATE LOCK</Text>
+            {lens === 'location' && (
+              <View style={styles.textOverlayWrapper}>
+                <Text style={styles.liveOverlayStampText}>{locText}</Text>
+              </View>
+            )}
+            {lens === 'date_location' && (
+              <View style={styles.textOverlayWrapper}>
+                <Text style={styles.liveOverlayStampText}>{locText}{'\n'}📅 {dateString}</Text>
               </View>
             )}
           </View>
@@ -649,46 +647,30 @@ const styles = StyleSheet.create({
   },
   liveOverlayContainer: {
     ...StyleSheet.absoluteFill,
-    justifyContent: 'center',
-    alignItems: 'center',
     zIndex: 5,
-  },
-  warmOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(255, 160, 0, 0.12)',
-  },
-  coolOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 120, 255, 0.12)',
-  },
-  bwOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
-  },
-  softOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-  },
-  nightOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(10, 15, 45, 0.35)',
   },
   textOverlayWrapper: {
     position: 'absolute',
-    bottom: 240,
-    alignSelf: 'center',
+    top: 90,
+    left: 20,
     backgroundColor: 'rgba(0,0,0,0.65)',
-    paddingVertical: 6,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 3,
+    elevation: 4,
   },
   liveOverlayStampText: {
     color: '#FFFC00',
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '800',
-    textAlign: 'center',
+    textAlign: 'left',
+    lineHeight: 20,
   },
   stampOverlayWrapper: {
     position: 'absolute',
