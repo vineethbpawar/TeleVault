@@ -28,7 +28,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showToast } from '../components/ToastBanner';
 
 import * as Sharing from 'expo-sharing';
-import * as MediaLibrary from 'expo-media-library';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'SendTo'>;
 
@@ -93,6 +92,7 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
         document.body.removeChild(link);
         showToast('Download started!');
       } else {
+        const MediaLibrary = require('expo-media-library');
         const { status } = await MediaLibrary.requestPermissionsAsync();
         if (status === 'granted') {
           await MediaLibrary.saveToLibraryAsync(mediaUri);
