@@ -90,6 +90,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const [selectedDestination, setSelectedDestination] = useState<'memories' | 'drive' | 'private_drive' | 'story' | 'snap' | 'download'>(getDefaultDest());
   const [destinationPickerVisible, setDestinationPickerVisible] = useState(false);
+  const [saveModalVisible, setSaveModalVisible] = useState(false);
 
   const [selectedFilter, setSelectedFilter] = useState(FILTERS[0]);
   const [overlays, setOverlays] = useState<MediaOverlayItem[]>([]);
@@ -507,30 +508,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
       await handleSendSnap();
     } else if (selectedDestination === 'download') {
       if (Platform.OS === 'web') {
-        try {
-          const filename = type === 'video' ? `televault_${Date.now()}.mp4` : `televault_${Date.now()}.jpeg`;
-          const mimeType = type === 'video' ? 'video/mp4' : 'image/jpeg';
-          
-          const res = await fetch(uri);
-          const blob = await res.blob();
-          const file = new File([blob], filename, { type: mimeType });
-          const fileUrl = URL.createObjectURL(file);
-          
-          const link = document.createElement('a');
-          link.href = fileUrl;
-          link.download = filename;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          
-          setTimeout(() => {
-            URL.revokeObjectURL(fileUrl);
-          }, 100);
-          
-          showToast('Download started!');
-        } catch (err: any) {
-          Alert.alert('Download Failed', err.message || 'Failed to download media.');
-        }
+        setSaveModalVisible(true);
       } else {
         Alert.alert(
           'Media Saved',
@@ -1075,6 +1053,49 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Save Modal for Web PWA (iOS/Android Safari/Chrome long-press) */}
+      <Modal
+        visible={saveModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setSaveModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.webSaveModalOverlay}
+          activeOpacity={1}
+          onPress={() => setSaveModalVisible(false)}
+        >
+          <View style={styles.webSaveModalContent}>
+            <Text style={styles.webSaveModalTitle}>Save to Device Gallery</Text>
+            <Text style={styles.webSaveModalDesc}>
+              Press and hold the media below, then select {"\n"}
+              <Text style={{ fontWeight: 'bold', color: '#FFFC00' }}>"Add to Photos"</Text> or <Text style={{ fontWeight: 'bold', color: '#FFFC00' }}>"Save Video"</Text>.
+            </Text>
+
+            {type === 'video' ? (
+              <video
+                src={uri}
+                style={{ width: '100%', height: 280, borderRadius: 12, backgroundColor: '#000000', marginBottom: 20 }}
+                controls
+                playsInline
+              />
+            ) : (
+              <img
+                src={uri}
+                style={{ width: '100%', height: 280, objectFit: 'contain', borderRadius: 12, backgroundColor: '#000000', marginBottom: 20 }}
+              />
+            )}
+
+            <TouchableOpacity
+              style={styles.webSaveModalCloseBtn}
+              onPress={() => setSaveModalVisible(false)}
+            >
+              <Text style={styles.webSaveModalCloseBtnText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
@@ -1549,6 +1570,45 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
     letterSpacing: 2,
+  },
+  webSaveModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  webSaveModalContent: {
+    width: '85%',
+    backgroundColor: '#151728',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#242745',
+  },
+  webSaveModalTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  webSaveModalDesc: {
+    color: '#8e92af',
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 18,
+  },
+  webSaveModalCloseBtn: {
+    backgroundColor: '#FFFC00',
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 30,
+  },
+  webSaveModalCloseBtnText: {
+    color: '#000000',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });
 

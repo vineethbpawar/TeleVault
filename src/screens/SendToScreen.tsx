@@ -10,6 +10,7 @@ import {
   TextInput,
   ScrollView,
   Platform,
+  Modal,
 } from 'react-native';
 import { Send, Search, X, Sparkles, DownloadCloud, HardDrive, Lock, Users, ArrowLeft } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -38,6 +39,7 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
   const [friends, setFriends] = useState<UserProfile[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saveModalVisible, setSaveModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sending, setSending] = useState(false);
   const [progressText, setProgressText] = useState('');
@@ -84,26 +86,7 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleSaveToGallery = async () => {
     try {
       if (Platform.OS === 'web') {
-        const filename = mediaType === 'video' ? `televault_${Date.now()}.mp4` : `televault_${Date.now()}.jpeg`;
-        const mimeType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
-        
-        const res = await fetch(mediaUri);
-        const blob = await res.blob();
-        const file = new File([blob], filename, { type: mimeType });
-        const fileUrl = URL.createObjectURL(file);
-        
-        const link = document.createElement('a');
-        link.href = fileUrl;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        setTimeout(() => {
-          URL.revokeObjectURL(fileUrl);
-        }, 100);
-        
-        showToast('Download started!');
+        setSaveModalVisible(true);
       } else {
         const MediaLibrary = require('expo-media-library');
         const { status } = await MediaLibrary.requestPermissionsAsync();
@@ -579,6 +562,49 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
           )}
         </View>
       )}
+
+      {/* Save Modal for Web PWA (iOS/Android Safari/Chrome long-press) */}
+      <Modal
+        visible={saveModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setSaveModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setSaveModalVisible(false)}
+        >
+          <View style={styles.saveModalContent}>
+            <Text style={styles.saveModalTitle}>Save to Device Gallery</Text>
+            <Text style={styles.saveModalDesc}>
+              Press and hold the media below, then select {"\n"}
+              <Text style={{ fontWeight: 'bold', color: '#FFFC00' }}>"Add to Photos"</Text> or <Text style={{ fontWeight: 'bold', color: '#FFFC00' }}>"Save Video"</Text>.
+            </Text>
+
+            {mediaType === 'video' ? (
+              <video
+                src={mediaUri}
+                style={{ width: '100%', height: 280, borderRadius: 12, backgroundColor: '#000000', marginBottom: 20 }}
+                controls
+                playsInline
+              />
+            ) : (
+              <img
+                src={mediaUri}
+                style={{ width: '100%', height: 280, objectFit: 'contain', borderRadius: 12, backgroundColor: '#000000', marginBottom: 20 }}
+              />
+            )}
+
+            <TouchableOpacity
+              style={styles.saveModalCloseBtn}
+              onPress={() => setSaveModalVisible(false)}
+            >
+              <Text style={styles.saveModalCloseBtnText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
@@ -746,6 +772,45 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  saveModalContent: {
+    width: '85%',
+    backgroundColor: '#151728',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#242745',
+  },
+  saveModalTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  saveModalDesc: {
+    color: '#8e92af',
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 18,
+  },
+  saveModalCloseBtn: {
+    backgroundColor: '#FFFC00',
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 30,
+  },
+  saveModalCloseBtnText: {
+    color: '#000000',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });
 
