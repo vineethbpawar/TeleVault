@@ -785,7 +785,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
       }
 
       // 2. Perform soft delete on the chat message row
-      const { error: msgDelErr } = await supabase
+      const { data: updatedData, error: msgDelErr } = await supabase
         .from('chat_messages')
         .update({
           deleted_at: new Date().toISOString(),
@@ -793,8 +793,13 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
           snap_id: null,
           telegram_message_id: null,
         })
-        .eq('id', msg.id);
+        .eq('id', msg.id)
+        .select();
+
       if (msgDelErr) throw msgDelErr;
+      if (!updatedData || updatedData.length === 0) {
+        throw new Error('Message deletion failed (0 rows affected). Please ensure you have run the database migration to add the deleted_at column.');
+      }
 
       // Update state locally
       setMessages((prev) =>
