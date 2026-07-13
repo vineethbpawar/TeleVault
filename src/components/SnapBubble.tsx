@@ -1,6 +1,8 @@
-import React from 'react';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { Play, Camera, Film, Eye, Flame } from 'lucide-react-native';
+import { snapService } from '../services/snapService';
+import VideoPlayer from './VideoPlayer';
 
 interface SnapBubbleProps {
   snap: {
@@ -9,6 +11,8 @@ interface SnapBubbleProps {
     is_viewed: boolean;
     expires_at?: string;
     view_once?: boolean;
+    telegram_file_id?: string | null;
+    caption?: string | null;
   };
   isMe: boolean;
   onOpen: () => void;
@@ -27,13 +31,89 @@ export const SnapBubble: React.FC<SnapBubbleProps> = ({
   const isSavedInChat = snap.view_once === false;
   const isViewed = snap.is_viewed && !isSavedInChat;
 
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isSavedInChat && snap.telegram_file_id) {
+      let active = true;
+      setLoading(true);
+      snapService.resolveTelegramUrl(snap.telegram_file_id)
+        .then((url) => {
+          if (active) {
+            setMediaUrl(url);
+            setLoading(false);
+          }
+        })
+        .catch((err) => {
+          console.warn('Failed to resolve saved snap URL:', err);
+          if (active) setLoading(false);
+        });
+      return () => {
+        active = false;
+      };
+    } else {
+      setMediaUrl(null);
+    }
+  }, [isSavedInChat, snap.telegram_file_id]);
+
   // Red for photo snaps, purple for video snaps (matching Snapchat aesthetic)
   const snapColor = isVideo ? '#A352FC' : '#FF3B30';
 
-  const subtitleText = isSavedInChat 
+  const subtitleText = isSavedInChat
     ? 'Saved in Chat'
     : (isViewed ? 'Opened' : isMe ? 'Delivered' : 'Tap to View');
 
+  // If saved in chat, render direct media content like Snapchat
+  if (isSavedInChat) {
+    return (
+      <View style={[styles.container, isMe ? styles.myRow : styles.otherRow]}>
+        <TouchableOpacity
+          onLongPress={onLongPress}
+          onPress={onOpen}
+          activeOpacity={0.9}
+          style={[
+            styles.savedBubble,
+            isMe ? styles.mySavedBubble : styles.otherSavedBubble,
+          ]}
+        >
+          {loading ? (
+            <View style={styles.savedMediaPlaceholder}>
+              <ActivityIndicator size="small" color="#FFFC00" />
+            </View>
+          ) : mediaUrl ? (
+            <View style={styles.mediaWrapper}>
+              {isVideo ? (
+                <View style={styles.videoPreviewWrapper}>
+                  <VideoPlayer source={mediaUrl} paused={true} style={styles.savedMedia} />
+                  <View style={styles.playOverlay}>
+                    <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
+                  </View>
+                </View>
+              ) : (
+                <Image source={{ uri: mediaUrl }} style={styles.savedMedia} />
+              )}
+              {snap.caption ? (
+                <View style={styles.savedCaptionContainer}>
+                  <Text style={styles.savedCaptionText}>{snap.caption}</Text>
+                </View>
+              ) : null}
+              <View style={styles.savedLabel}>
+                <Flame size={11} color="#FFFC00" style={{ marginRight: 4 }} />
+                <Text style={styles.savedLabelText}>Saved in Chat</Text>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.savedMediaPlaceholder}>
+              <Text style={{ color: '#8E8E93', fontSize: 12 }}>Failed to load media</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Otherwise, render the classic unopened/opened snap block
   return (
     <View style={[styles.container, isMe ? styles.myRow : styles.otherRow]}>
       <View
@@ -114,6 +194,82 @@ const styles = StyleSheet.create({
   },
   otherBubble: {
     borderBottomLeftRadius: 4,
+  },
+  savedBubble: {
+    maxWidth: '70%',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 16,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  mySavedBubble: {
+    borderBottomRightRadius: 4,
+  },
+  otherSavedBubble: {
+    borderBottomLeftRadius: 4,
+  },
+  savedMedia: {
+    width: 200,
+    height: 270,
+    borderRadius: 12,
+    backgroundColor: '#000000',
+  },
+  savedMediaPlaceholder: {
+    width: 200,
+    height: 270,
+    borderRadius: 12,
+    backgroundColor: '#0F0F10',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mediaWrapper: {
+    position: 'relative',
+  },
+  videoPreviewWrapper: {
+    position: 'relative',
+    width: 200,
+    height: 270,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  playOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  savedCaptionContainer: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginTop: 6,
+    maxWidth: 200,
+  },
+  savedCaptionText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  savedLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+    opacity: 0.8,
+  },
+  savedLabelText: {
+    color: '#FFFC00',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   content: {
     flexDirection: 'row',
