@@ -394,7 +394,22 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
       }
     );
 
-    // 2.5. Listen to snap viewed status updates
+    // 2.3. Listen to message deletions
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `conversation_id=eq.${convId}`,
+      },
+      (payload: any) => {
+        const deletedMsg = payload.old;
+        setMessages((prev) => prev.filter((m) => m.id !== deletedMsg.id));
+      }
+    );
+
+    // 2.5. Listen to snap viewed/saved status updates
     channel.on(
       'postgres_changes',
       {
@@ -409,6 +424,28 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
           prev.map((m) => {
             if (m.snap_id === updatedSnap.id) {
               return { ...m, snap: updatedSnap };
+            }
+            return m;
+          })
+        );
+      }
+    );
+
+    // 2.7. Listen to snap deletions
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'snaps',
+        filter: `conversation_id=eq.${convId}`,
+      },
+      (payload: any) => {
+        const deletedSnap = payload.old;
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.snap_id === deletedSnap.id) {
+              return { ...m, snap: null };
             }
             return m;
           })
@@ -741,33 +778,57 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
               console.warn('Failed to delete snap from Telegram:', err);
             });
           }
-          await supabase.from('snaps').delete().eq('id', msg.snap_id);
+          const { error: snapDelErr } = await supabase.from('snaps').delete().eq('id', msg.snap_id);
+          if (snapDelErr) throw snapDelErr;
         }
       }
 
       // 2. Delete the chat message from Supabase
-      await supabase.from('chat_messages').delete().eq('id', msg.id);
+      const { error: msgDelErr } = await supabase.from('chat_messages').delete().eq('id', msg.id);
+      if (msgDelErr) throw msgDelErr;
+
       setMessages((prev) => prev.filter((m) => m.id !== msg.id));
-    } catch (err) {
-      Alert.alert('Error', 'Failed to delete message.');
+    } catch (err: any) {
+      console.error('Delete message failed:', err);
+      Alert.alert('Error', err.message || 'Failed to delete message.');
     }
     setLongPressedMessage(null);
   };
 
   const handleToggleSaveSnap = async (msg: ChatMessage) => {
     setLongPressedMessage(null);
-    if (!msg.snap_id || !msg.snap) return;
-
-    const currentSaveState = msg.snap.view_once === false; // true if currently saved
-    const newViewOnce = currentSaveState; // if saved (view_once=false), toggle to view_once=true (unsave)
+    if (!msg.snap_id) return;
 
     try {
+      let snap = msg.snap;
+      if (!snap) {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('snaps')
+          .select('*')
+          .eq('id', msg.snap_id)
+          .single();
+        setLoading(false);
+        if (error) throw error;
+        snap = data;
+      }
+
+      if (!snap) {
+        Alert.alert('Error', 'Could not retrieve snap details.');
+        return;
+      }
+
+      const isSaved = snap.view_once === false;
+      const newViewOnce = isSaved ? true : false; // Toggle view_once: if saved (false) -> unsave (true)
+
+      setLoading(true);
       const { data: updatedSnap, error } = await supabase
         .from('snaps')
         .update({ view_once: newViewOnce })
         .eq('id', msg.snap_id)
         .select()
         .single();
+      setLoading(false);
 
       if (error) throw error;
 
@@ -785,6 +846,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         })
       );
     } catch (err: any) {
+      setLoading(false);
       Alert.alert('Error', err.message || 'Failed to update snap save state.');
     }
   };

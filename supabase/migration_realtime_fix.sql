@@ -107,6 +107,20 @@ CREATE POLICY "Allow sender or receiver to UPDATE messages"
     USING (auth.uid() = sender_id OR auth.uid() = receiver_id)
     WITH CHECK (auth.uid() = sender_id OR auth.uid() = receiver_id);
 
+-- Allow deletion of messages
+DROP POLICY IF EXISTS "Allow sender to DELETE messages" ON public.chat_messages;
+CREATE POLICY "Allow sender to DELETE messages"
+    ON public.chat_messages FOR DELETE
+    TO authenticated
+    USING (auth.uid() = sender_id);
+
+-- Allow deletion of snaps
+DROP POLICY IF EXISTS "Allow sender or receiver to DELETE snaps" ON public.snaps;
+CREATE POLICY "Allow sender or receiver to DELETE snaps"
+    ON public.snaps FOR DELETE
+    TO authenticated
+    USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+
 -- Notifications RLS policies
 DROP POLICY IF EXISTS "Allow user to SELECT their own notifications" ON public.notifications;
 CREATE POLICY "Allow user to SELECT their own notifications"
