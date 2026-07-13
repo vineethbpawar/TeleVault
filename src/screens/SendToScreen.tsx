@@ -27,6 +27,9 @@ import UserAvatar from '../components/UserAvatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showToast } from '../components/ToastBanner';
 
+import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
+
 type Props = NativeStackScreenProps<AppStackParamList, 'SendTo'>;
 
 export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
@@ -53,17 +56,83 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
   }, []);
 
   const fetchData = async () => {
+    // Add a safety timeout so the UI never hangs on slow network/auth queries
+    const timeoutId = setTimeout(() => {
+      setLoading(false);
+    }, 1500);
+
     try {
       const [friendsList, groupsList] = await Promise.all([
-        friendService.getFriends(),
-        groupService.getGroups(),
+        friendService.getFriends().catch(err => {
+          console.warn('Failed to fetch friends for SendTo:', err);
+          return [];
+        }),
+        groupService.getGroups().catch(err => {
+          console.warn('Failed to fetch groups for SendTo:', err);
+          return [];
+        }),
       ]);
+      clearTimeout(timeoutId);
       setFriends(friendsList);
       setGroups(groupsList);
     } catch (error) {
       console.error('Failed to fetch send targets', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveToGallery = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        const link = document.createElement('a');
+        link.href = mediaUri;
+        link.download = mediaType === 'video' ? `televault_${Date.now()}.mp4` : `televault_${Date.now()}.jpg`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast('Download started!');
+      } else {
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status === 'granted') {
+          await MediaLibrary.saveToLibraryAsync(mediaUri);
+          Alert.alert('Saved!', 'Media saved to your device gallery successfully.');
+        } else {
+          Alert.alert('Permission Denied', 'Permission is required to save media to your device.');
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to save to gallery:', err);
+      Alert.alert('Save Failed', err.message || 'Could not save media.');
+    }
+  };
+
+  const handleShareToOtherApps = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        if (navigator.share) {
+          await navigator.share({
+            title: 'TeleVault Media',
+            text: 'Check out this media from TeleVault!',
+            url: mediaUri,
+          });
+        } else {
+          Alert.alert('Share Unsupported', 'Your browser does not support the web sharing API.');
+        }
+      } else {
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable) {
+          await Sharing.shareAsync(mediaUri);
+        } else {
+          Alert.alert('Share Unavailable', 'Sharing is not available on this device.');
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to share:', err);
+      // Share cancelled is normal and shouldn't throw error alert if user just dismissed it
+      if (err.message && !err.message.includes('dismissed') && !err.message.includes('cancel')) {
+        Alert.alert('Share Failed', err.message || 'Could not share media.');
+      }
     }
   };
 
@@ -358,6 +427,43 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
                 </View>
                 <View style={[styles.checkbox, selectedPrivateDrive && styles.checkboxSelected]}>
                   {selectedPrivateDrive && <Text style={styles.checkMark}>✓</Text>}
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* EXPORT & SHARE SECTION */}
+          {searchQuery.length === 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionHeader}>EXPORT & SHARE</Text>
+              
+              {/* Save to Device Gallery */}
+              <TouchableOpacity
+                style={styles.sectionRow}
+                onPress={handleSaveToGallery}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.rowIconContainer, { backgroundColor: 'rgba(52, 199, 89, 0.1)' }]}>
+                  <DownloadCloud size={20} color="#34C759" />
+                </View>
+                <View style={styles.rowInfo}>
+                  <Text style={styles.rowName}>Save to Device Gallery</Text>
+                  <Text style={styles.rowDesc}>Save local copy to mobile gallery/camera roll</Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Share to Other Apps */}
+              <TouchableOpacity
+                style={styles.sectionRow}
+                onPress={handleShareToOtherApps}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.rowIconContainer, { backgroundColor: 'rgba(0, 122, 255, 0.1)' }]}>
+                  <Send size={20} color="#007AFF" />
+                </View>
+                <View style={styles.rowInfo}>
+                  <Text style={styles.rowName}>Share to Other Apps</Text>
+                  <Text style={styles.rowDesc}>Send via WhatsApp, Telegram, or system share sheet</Text>
                 </View>
               </TouchableOpacity>
             </View>
