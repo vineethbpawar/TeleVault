@@ -68,7 +68,7 @@ function dataURItoBlob(dataURI: string): Blob {
 }
 
 export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { uri, type, fromGallery, defaultLens, sendToUserId, sendToUsername, conversationId, isVault, isPrivate, locationText } = route.params as any;
+  const { uri, type, fromGallery, defaultLens, sendToUserId, sendToUsername, conversationId, isVault, isPrivate, locationText, fromChatCamera } = route.params as any;
   const insets = useSafeAreaInsets();
   
   // Try to default highlight the private save based on camera context
@@ -529,7 +529,20 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
           conversationId || null
         );
         Alert.alert('Success', `Snap sent to @${sendToUsername}!`, [
-          { text: 'OK', onPress: () => navigation.goBack() },
+          { 
+            text: 'OK', 
+            onPress: () => {
+              if (fromChatCamera) {
+                navigation.navigate('ChatRoom', {
+                  friendId: sendToUserId,
+                  friendUsername: sendToUsername,
+                  conversationId: conversationId || undefined
+                } as any);
+              } else {
+                navigation.goBack();
+              }
+            } 
+          },
         ]);
       } catch (err: any) {
         Alert.alert('Error', err.message || 'Failed to send snap.');

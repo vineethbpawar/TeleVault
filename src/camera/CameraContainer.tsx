@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Settings, RefreshCw, Zap, Clock, Compass, Shield } from 'lucide-react-native';
+import { Settings, RefreshCw, Zap, Clock, Compass, Shield, X } from 'lucide-react-native';
 import Animated, { useSharedValue, runOnJS, useAnimatedReaction, SharedValue } from 'react-native-reanimated';
 
 import { useCamera } from './useCamera';
@@ -144,10 +144,11 @@ export const CameraContainer: React.FC<CameraContainerProps> = ({ navigation, ro
         mime_type: 'image/jpeg',
         defaultLens: selectedLens,
         locationText: (selectedLens === 'location' || selectedLens === 'date_location') ? locationText : undefined,
-        defaultDestination,
+        defaultDestination: route.name === 'ChatCamera' ? 'snap' : defaultDestination,
         sendToUserId,
         sendToUsername,
         conversationId,
+        fromChatCamera: route.name === 'ChatCamera',
       });
       zoomShared.value = 0; // Reset zoom
     } catch (err: any) {
@@ -224,10 +225,11 @@ export const CameraContainer: React.FC<CameraContainerProps> = ({ navigation, ro
           mime_type: result.mime_type,
           defaultLens: selectedLens,
           locationText: (selectedLens === 'location' || selectedLens === 'date_location') ? locationText : undefined,
-          defaultDestination,
+          defaultDestination: route.name === 'ChatCamera' ? 'snap' : defaultDestination,
           sendToUserId,
           sendToUsername,
           conversationId,
+          fromChatCamera: route.name === 'ChatCamera',
         });
         zoomShared.value = 0;
       }
@@ -286,19 +288,31 @@ export const CameraContainer: React.FC<CameraContainerProps> = ({ navigation, ro
         />
       )}
 
-      {/* Top Safe Action HUD (Avatar, Mode badge, Settings cog) */}
+      {/* Top Safe Action HUD (Avatar/Close, Mode badge, Settings cog) */}
       <View style={[styles.topBar, { top: insets.top > 0 ? insets.top + 10 : 20 }]}>
-        <TouchableOpacity
-          style={styles.circleBtn}
-          onPress={() => navigation.navigate('MyProfile')}
-          activeOpacity={0.8}
-        >
-          <UserAvatar
-            name={profile?.full_name || profile?.username || 'User'}
-            avatarUrl={profile?.avatar_url}
-            size={36}
-          />
-        </TouchableOpacity>
+        {route.name === 'ChatCamera' ? (
+          <TouchableOpacity
+            style={styles.circleBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.8}
+          >
+            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' }}>
+              <X size={20} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.circleBtn}
+            onPress={() => navigation.navigate('MyProfile')}
+            activeOpacity={0.8}
+          >
+            <UserAvatar
+              name={profile?.full_name || profile?.username || 'User'}
+              avatarUrl={profile?.avatar_url}
+              size={36}
+            />
+          </TouchableOpacity>
+        )}
 
         <View style={styles.destinationBadge}>
           <Text style={styles.destinationBadgeText}>

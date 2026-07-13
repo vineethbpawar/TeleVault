@@ -809,14 +809,11 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleSnapPress = () => {
-    navigation.navigate('Main', {
-      screen: 'CameraTab',
-      params: {
-        sendToUserId: otherUserId,
-        sendToUsername: otherUsername,
-        conversationId: conversationId,
-      },
-    } as any);
+    navigation.navigate('ChatCamera', {
+      sendToUserId: otherUserId,
+      sendToUsername: otherUsername,
+      conversationId: conversationId || null,
+    });
   };
 
   return (

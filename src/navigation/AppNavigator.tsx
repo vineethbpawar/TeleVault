@@ -31,6 +31,7 @@ import PrivateDriveScreen from '../screens/PrivateDriveScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
 import MyProfileScreen from '../screens/MyProfileScreen';
 import SendToScreen from '../screens/SendToScreen';
+import ChatCameraScreen from '../screens/ChatCameraScreen';
 import { Session } from '@supabase/supabase-js';
 import { authEvents } from '../utils/authEvent';
 import { telegramService } from '../services/telegramService';
@@ -256,6 +257,7 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="UserProfile" component={UserProfileScreen} />
               <Stack.Screen name="MyProfile" component={MyProfileScreen} />
               <Stack.Screen name="SendTo" component={SendToScreen} />
+              <Stack.Screen name="ChatCamera" component={ChatCameraScreen} />
               <Stack.Screen
                 name="MemoriesViewer"
                 component={MemoriesViewerScreen}

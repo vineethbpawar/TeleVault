@@ -27,6 +27,17 @@ export type AppStackParamList = {
     file_type?: 'image' | 'video';
     mime_type?: string;
     defaultLens?: string;
+    locationText?: string;
+    defaultDestination?: string;
+    sendToUserId?: string;
+    sendToUsername?: string;
+    conversationId?: string | null;
+    fromChatCamera?: boolean;
+  };
+  ChatCamera: {
+    sendToUserId: string;
+    sendToUsername: string;
+    conversationId: string | null;
   };
   FileDetails: { file: TeleVaultFile };
   UsernameSetup: undefined;
