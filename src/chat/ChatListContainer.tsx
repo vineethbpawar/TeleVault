@@ -298,13 +298,13 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
                     <View style={styles.detailsWrapper}>
                       <Text style={styles.titleText}>{item.other_user?.username}</Text>
                       <Text style={[styles.subtitleText, hasUnread && styles.subtitleTextUnread]} numberOfLines={1}>
-                        {item.last_message?.message || 'Tap to chat'}
+                        {item.last_message_preview || 'Tap to chat'}
                       </Text>
                     </View>
                   </View>
                   <View style={styles.rowRight}>
-                    {item.last_message && (
-                      <Text style={styles.timeText}>{formatTime(item.last_message.created_at)}</Text>
+                    {item.last_message_at && (
+                      <Text style={styles.timeText}>{formatTime(item.last_message_at)}</Text>
                     )}
                     {hasUnread && (
                       <View style={styles.unreadBadge}>
