@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { StyleSheet, View, TouchableOpacity, Text, Platform } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Text, Platform, Pressable } from 'react-native';
 import { Grid, Image as ImageIcon } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { SharedValue } from 'react-native-reanimated';
@@ -222,11 +222,15 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
             </View>
           </View>
         ) : (
-          <View
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            onTouchCancel={handleTouchEnd}
+          <Pressable
+            onPress={onCapture}
+            onLongPress={onStartRecording}
+            onPressOut={() => {
+              if (isRecording) {
+                onStopRecording();
+              }
+            }}
+            delayLongPress={350}
             style={styles.captureContainer}
           >
             <View 
@@ -235,7 +239,7 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
             >
               <View style={[styles.captureInnerCircle, isRecording && styles.captureInnerCircleRecording]} />
             </View>
-          </View>
+          </Pressable>
         )}
 
         <TouchableOpacity
