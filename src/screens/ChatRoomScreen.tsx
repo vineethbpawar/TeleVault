@@ -28,6 +28,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fileService } from '../services/fileService';
 import { previewCacheService } from '../services/previewCacheService';
 import { showToast } from '../components/ToastBanner';
+import { telegramService } from '../services/telegramService';
 
 // Reusable Components
 import ChatBubble from '../components/ChatBubble';
@@ -722,6 +723,29 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleDeleteMessage = async (msg: ChatMessage) => {
     try {
+      // 1. If message type is snap, delete snap metadata and Telegram backup
+      if (msg.message_type === 'snap' && msg.snap_id) {
+        let snap = msg.snap;
+        if (!snap) {
+          const { data } = await supabase
+            .from('snaps')
+            .select('*')
+            .eq('id', msg.snap_id)
+            .single();
+          snap = data;
+        }
+
+        if (snap) {
+          if (snap.telegram_message_id) {
+            telegramService.deleteTelegramMessage(Number(snap.telegram_message_id)).catch((err: any) => {
+              console.warn('Failed to delete snap from Telegram:', err);
+            });
+          }
+          await supabase.from('snaps').delete().eq('id', msg.snap_id);
+        }
+      }
+
+      // 2. Delete the chat message from Supabase
       await supabase.from('chat_messages').delete().eq('id', msg.id);
       setMessages((prev) => prev.filter((m) => m.id !== msg.id));
     } catch (err) {

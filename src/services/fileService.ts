@@ -229,6 +229,34 @@ export const fileService = {
   },
 
   async deleteFolder(id: string): Promise<void> {
+    try {
+      // 1. Fetch and delete all files inside this folder from Telegram and Supabase
+      const { data: files, error: fetchErr } = await supabase
+        .from('files')
+        .select('id, telegram_message_id')
+        .eq('folder_id', id);
+
+      if (!fetchErr && files && files.length > 0) {
+        const fileIds = files.map(f => f.id);
+        await this.bulkDelete(fileIds, true);
+      }
+
+      // 2. Recursively delete subfolders
+      const { data: subfolders } = await supabase
+        .from('folders')
+        .select('id')
+        .eq('parent_folder_id', id);
+
+      if (subfolders && subfolders.length > 0) {
+        for (const sub of subfolders) {
+          await this.deleteFolder(sub.id);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to clean up files/subfolders during deleteFolder:', e);
+    }
+
+    // 3. Delete the folder itself
     const { error } = await supabase
       .from('folders')
       .delete()
