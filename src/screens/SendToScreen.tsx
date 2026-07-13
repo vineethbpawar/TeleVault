@@ -139,14 +139,34 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
           return;
         }
         setSending(true);
-        setProgressText('Preparing share link...');
+        setProgressText('Preparing media to share...');
         try {
           const downloadUrl = await getPublicUrlForWeb(mediaUri, mediaType);
-          await navigator.share({
-            title: 'TeleVault Media',
-            text: 'Check out this media from TeleVault!',
-            url: downloadUrl,
-          });
+          
+          const response = await fetch(downloadUrl);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch media file: ${response.statusText}`);
+          }
+          const blob = await response.blob();
+          
+          const filename = mediaType === 'video' ? `televault_${Date.now()}.mp4` : `televault_${Date.now()}.jpeg`;
+          const mimeType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+          
+          const file = new File([blob], filename, { type: mimeType });
+
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'TeleVault Media',
+              text: 'Check out this media from TeleVault!',
+            });
+          } else {
+            await navigator.share({
+              title: 'TeleVault Media',
+              text: 'Check out this media from TeleVault!',
+              url: downloadUrl,
+            });
+          }
         } catch (err: any) {
           if (err.name !== 'AbortError') {
             Alert.alert('Share Failed', err.message || 'Could not share media.');
@@ -155,11 +175,34 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
           setSending(false);
         }
       } else {
-        const isAvailable = await Sharing.isAvailableAsync();
-        if (isAvailable) {
-          await Sharing.shareAsync(mediaUri);
-        } else {
-          Alert.alert('Share Unavailable', 'Sharing is not available on this device.');
+        setSending(true);
+        setProgressText('Preparing media to share...');
+        try {
+          let localSharePath = mediaUri;
+          
+          if (mediaUri.startsWith('http')) {
+            const FileSystem = require('expo-file-system');
+            const extension = mediaType === 'video' ? '.mp4' : '.jpg';
+            localSharePath = `${FileSystem.cacheDirectory}televault_share_${Date.now()}${extension}`;
+            
+            const downloadResult = await FileSystem.downloadAsync(mediaUri, localSharePath);
+            localSharePath = downloadResult.uri;
+          }
+
+          const isAvailable = await Sharing.isAvailableAsync();
+          if (isAvailable) {
+            const mimeType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+            await Sharing.shareAsync(localSharePath, {
+              mimeType,
+              dialogTitle: 'Share TeleVault Media',
+            });
+          } else {
+            Alert.alert('Share Unavailable', 'Sharing is not available on this device.');
+          }
+        } catch (err: any) {
+          Alert.alert('Share Failed', err.message || 'Could not prepare share file.');
+        } finally {
+          setSending(false);
         }
       }
     } catch (err: any) {
