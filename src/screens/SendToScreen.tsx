@@ -84,12 +84,25 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleSaveToGallery = async () => {
     try {
       if (Platform.OS === 'web') {
+        const filename = mediaType === 'video' ? `televault_${Date.now()}.mp4` : `televault_${Date.now()}.jpeg`;
+        const mimeType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+        
+        const res = await fetch(mediaUri);
+        const blob = await res.blob();
+        const file = new File([blob], filename, { type: mimeType });
+        const fileUrl = URL.createObjectURL(file);
+        
         const link = document.createElement('a');
-        link.href = mediaUri;
-        link.download = mediaType === 'video' ? `televault_${Date.now()}.mp4` : `televault_${Date.now()}.jpg`;
+        link.href = fileUrl;
+        link.download = filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        
+        setTimeout(() => {
+          URL.revokeObjectURL(fileUrl);
+        }, 100);
+        
         showToast('Download started!');
       } else {
         const MediaLibrary = require('expo-media-library');

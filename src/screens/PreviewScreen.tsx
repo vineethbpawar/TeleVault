@@ -506,11 +506,38 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     } else if (selectedDestination === 'snap') {
       await handleSendSnap();
     } else if (selectedDestination === 'download') {
-      Alert.alert(
-        'Media Saved',
-        'This action simulated a download/save to your device gallery successfully.',
-        [{ text: 'OK' }]
-      );
+      if (Platform.OS === 'web') {
+        try {
+          const filename = type === 'video' ? `televault_${Date.now()}.mp4` : `televault_${Date.now()}.jpeg`;
+          const mimeType = type === 'video' ? 'video/mp4' : 'image/jpeg';
+          
+          const res = await fetch(uri);
+          const blob = await res.blob();
+          const file = new File([blob], filename, { type: mimeType });
+          const fileUrl = URL.createObjectURL(file);
+          
+          const link = document.createElement('a');
+          link.href = fileUrl;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          setTimeout(() => {
+            URL.revokeObjectURL(fileUrl);
+          }, 100);
+          
+          showToast('Download started!');
+        } catch (err: any) {
+          Alert.alert('Download Failed', err.message || 'Failed to download media.');
+        }
+      } else {
+        Alert.alert(
+          'Media Saved',
+          'This action simulated a download/save to your device gallery successfully.',
+          [{ text: 'OK' }]
+        );
+      }
     }
   };
 
