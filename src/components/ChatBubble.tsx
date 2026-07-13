@@ -84,6 +84,29 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 
   // Extract reactions if present in message (e.g. from JSON field or in-memory)
   const messageReactions = (message as any).reactions || [];
+  const savedUsers = message.is_saved_by_users || [];
+  const isSaved = savedUsers.length > 0;
+
+  if (message.deleted_at) {
+    return (
+      <View style={[styles.row, isMe ? styles.myRow : styles.otherRow]}>
+        {!isMe && (
+          <View style={styles.avatarContainer}>
+            {showAvatar ? (
+              <UserAvatar name={senderName} avatarUrl={senderAvatarUrl} size={32} />
+            ) : (
+              <View style={styles.avatarSpacer} />
+            )}
+          </View>
+        )}
+        <View style={styles.deletedContainer}>
+          <Text style={styles.deletedText}>
+            {isMe ? 'You deleted a chat' : `${senderName} deleted a chat`}
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.row, isMe ? styles.myRow : styles.otherRow]}>
@@ -126,8 +149,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           activeOpacity={0.95}
           onLongPress={() => onLongPress && onLongPress(message)}
           style={[
-            styles.bubble,
-            isMe ? styles.myBubble : styles.otherBubble,
+            isSaved ? styles.savedBubbleBlock : styles.rawBubbleBlock,
+            isMe ? styles.myRowAlign : styles.otherRowAlign,
             replyToMessage ? styles.bubbleWithReply : null,
           ]}
         >
@@ -147,7 +170,10 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           )}
 
           {/* Actual message text */}
-          <Text style={[styles.text, isMe ? styles.myText : styles.otherText]}>
+          <Text style={[
+            styles.text,
+            isSaved ? styles.savedText : (isMe ? styles.myRawText : styles.otherRawText)
+          ]}>
             {message.message_text}
           </Text>
 
@@ -218,6 +244,29 @@ const styles = StyleSheet.create({
     elevation: 1,
     position: 'relative',
   },
+  savedBubbleBlock: {
+    backgroundColor: '#1E1E1E',
+    borderLeftWidth: 3,
+    borderLeftColor: '#FFFC00',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 4,
+    borderTopRightRadius: 12,
+    borderBottomRightRadius: 12,
+    position: 'relative',
+  },
+  rawBubbleBlock: {
+    backgroundColor: 'transparent',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    position: 'relative',
+  },
+  myRowAlign: {
+    alignSelf: 'flex-end',
+  },
+  otherRowAlign: {
+    alignSelf: 'flex-start',
+  },
   bubbleWithReply: {
     paddingTop: 6,
   },
@@ -238,6 +287,31 @@ const styles = StyleSheet.create({
   },
   otherText: {
     color: '#FFFFFF',
+  },
+  savedText: {
+    color: '#FFFFFF',
+    fontSize: 14.5,
+    lineHeight: 20,
+  },
+  myRawText: {
+    color: '#FFFC00',
+    fontSize: 14.5,
+    lineHeight: 20,
+  },
+  otherRawText: {
+    color: '#FFFFFF',
+    fontSize: 14.5,
+    lineHeight: 20,
+  },
+  deletedContainer: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginVertical: 2,
+  },
+  deletedText: {
+    fontStyle: 'italic',
+    color: '#A0A0A0',
+    fontSize: 13,
   },
   footer: {
     flexDirection: 'row',

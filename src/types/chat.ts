@@ -40,4 +40,6 @@ export interface ChatMessage {
   status: ChatMessageStatus;
   created_at: string;
   snap?: any;
+  deleted_at?: string | null;
+  is_saved_by_users?: string[];
 }

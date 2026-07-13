@@ -167,38 +167,35 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       {/* Composer Row */}
       <View style={styles.composerRow}>
         <TouchableOpacity style={styles.actionBtn} onPress={onCameraPress} activeOpacity={0.7}>
-          <Camera size={22} color="#FFFC00" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionBtn} onPress={toggleTools} activeOpacity={0.7}>
-          <Paperclip size={20} color={showTools ? '#FFFC00' : '#FFFFFF'} />
+          <Camera size={22} color="#FFFFFF" />
         </TouchableOpacity>
 
         <View style={styles.inputWrapper}>
           <TextInput
             style={styles.input}
-            placeholder="Send a chat message..."
+            placeholder="Send a chat..."
             placeholderTextColor="#8E8E93"
             value={text}
             onChangeText={handleTextChange}
             multiline
             maxLength={1000}
           />
+          <TouchableOpacity style={styles.attachmentBtn} onPress={toggleTools} activeOpacity={0.7}>
+            <Paperclip size={18} color={showTools ? '#FFFC00' : '#8E8E93'} />
+          </TouchableOpacity>
         </View>
 
         {text.trim() ? (
-          <Animated.View style={{ transform: [{ scale: sendScale }] }}>
-            <TouchableOpacity
-              style={styles.sendBtn}
-              onPress={handleSendPress}
-              activeOpacity={0.8}
-            >
-              <Send size={16} color="#000000" />
-            </TouchableOpacity>
-          </Animated.View>
+          <TouchableOpacity
+            style={styles.sendBtn}
+            onPress={handleSendPress}
+            activeOpacity={0.8}
+          >
+            <Send size={16} color="#000000" />
+          </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.actionBtn} onPress={onVoicePress} activeOpacity={0.7}>
-            <Mic size={20} color="#FFFFFF" />
+            <Mic size={22} color="#FFFFFF" />
           </TouchableOpacity>
         )}
       </View>
@@ -249,36 +246,43 @@ const styles = StyleSheet.create({
   },
   composerRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   actionBtn: {
-    padding: 10,
-    borderRadius: 20,
-    backgroundColor: '#1E1E1E',
-    marginHorizontal: 4,
+    padding: 8,
+    marginHorizontal: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   inputWrapper: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#1E1E1E',
     borderRadius: 20,
-    marginHorizontal: 4,
+    marginHorizontal: 6,
     maxHeight: 120,
-    justifyContent: 'center',
     paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: '#2C2C2E',
   },
   input: {
+    flex: 1,
     color: '#FFFFFF',
     fontSize: 14.5,
     paddingVertical: Platform.OS === 'ios' ? 8 : 6,
     lineHeight: 18,
+    marginRight: 6,
+  },
+  attachmentBtn: {
+    padding: 4,
   },
   sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#FFFC00',
     justifyContent: 'center',
     alignItems: 'center',

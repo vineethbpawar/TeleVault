@@ -134,3 +134,7 @@ CREATE POLICY "Allow user to UPDATE their own notifications"
     TO authenticated
     USING (auth.uid() = user_id)
     WITH CHECK (auth.uid() = user_id);
+
+-- Add deleted_at and is_saved_by_users columns to chat_messages table
+ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS is_saved_by_users TEXT[] DEFAULT '{}';

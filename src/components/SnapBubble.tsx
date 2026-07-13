@@ -130,19 +130,16 @@ export const SnapBubble: React.FC<SnapBubbleProps> = ({
           activeOpacity={0.8}
           disabled={isViewed}
         >
-          {isViewed ? (
-            <View style={styles.iconWrapper}>
-              <Eye size={20} color="#8E8E93" />
-            </View>
-          ) : (
-            <View style={[styles.iconWrapper, { backgroundColor: snapColor }]}>
-              {isVideo ? (
-                <Film size={16} color="#FFFFFF" />
-              ) : (
-                <Camera size={16} color="#FFFFFF" />
-              )}
-            </View>
-          )}
+          <View
+            style={[
+              styles.snapSquare,
+              {
+                borderColor: snapColor,
+                backgroundColor: isViewed ? 'transparent' : snapColor,
+                borderWidth: isViewed ? 2 : 0,
+              }
+            ]}
+          />
 
           <View style={styles.info}>
             <Text style={[styles.title, isViewed && styles.titleViewed]}>
@@ -274,6 +271,13 @@ const styles = StyleSheet.create({
   content: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  snapSquare: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+    marginRight: 12,
+    marginLeft: 4,
   },
   iconWrapper: {
     width: 36,

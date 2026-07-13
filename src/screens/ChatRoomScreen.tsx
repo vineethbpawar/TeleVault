@@ -38,6 +38,7 @@ import ConversationHeader from '../components/ConversationHeader';
 import TypingIndicator from '../components/TypingIndicator';
 import ReactionBar from '../components/ReactionBar';
 import MediaViewer from '../components/MediaViewer';
+import UserAvatar from '../components/UserAvatar';
 
 const { width } = Dimensions.get('window');
 
@@ -389,7 +390,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         if (updatedMsg.conversation_id !== convId) return;
 
         setMessages((prev) =>
-          prev.map((m) => (m.id === updatedMsg.id ? { ...m, status: updatedMsg.status } : m))
+          prev.map((m) => (m.id === updatedMsg.id ? { ...m, ...updatedMsg } : m))
         );
       }
     );
@@ -783,16 +784,72 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         }
       }
 
-      // 2. Delete the chat message from Supabase
-      const { error: msgDelErr } = await supabase.from('chat_messages').delete().eq('id', msg.id);
+      // 2. Perform soft delete on the chat message row
+      const { error: msgDelErr } = await supabase
+        .from('chat_messages')
+        .update({
+          deleted_at: new Date().toISOString(),
+          message_text: null,
+          snap_id: null,
+          telegram_message_id: null,
+        })
+        .eq('id', msg.id);
       if (msgDelErr) throw msgDelErr;
 
-      setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+      // Update state locally
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msg.id
+            ? {
+                ...m,
+                deleted_at: new Date().toISOString(),
+                message_text: null,
+                snap_id: null,
+                telegram_message_id: null,
+                snap: null,
+              }
+            : m
+        )
+      );
+      showToast('Message deleted.');
     } catch (err: any) {
       console.error('Delete message failed:', err);
       Alert.alert('Error', err.message || 'Failed to delete message.');
     }
     setLongPressedMessage(null);
+  };
+
+  const handleToggleSaveTextMessage = async (msg: ChatMessage) => {
+    setLongPressedMessage(null);
+    if (!currentUserId) return;
+    const savedUsers = msg.is_saved_by_users || [];
+    const isSavedByMe = savedUsers.includes(currentUserId);
+    const newSavedUsers = isSavedByMe
+      ? savedUsers.filter((id) => id !== currentUserId)
+      : [...savedUsers, currentUserId];
+
+    try {
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .update({ is_saved_by_users: newSavedUsers })
+        .eq('id', msg.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      showToast(isSavedByMe ? 'Message unsaved.' : 'Message saved in chat.');
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msg.id
+            ? { ...m, is_saved_by_users: data.is_saved_by_users }
+            : m
+        )
+      );
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to update message save state.');
+    }
   };
 
   const handleToggleSaveSnap = async (msg: ChatMessage) => {
@@ -906,6 +963,16 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
 
     const isMe = item.sender_id === currentUserId;
 
+    if (item.deleted_at) {
+      return (
+        <View style={[styles.deletedRowContainer, isMe ? styles.myDeletedRow : styles.otherDeletedRow]}>
+          <Text style={styles.deletedText}>
+            {isMe ? 'You deleted a chat' : `${otherUsername} deleted a chat`}
+          </Text>
+        </View>
+      );
+    }
+
     if (item.message_type === 'snap') {
       return (
         <SnapBubble
@@ -982,7 +1049,23 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
             />
           )}
 
-          {isOtherTyping && <TypingIndicator />}
+          {/* Presence Indicator sitting inline just above the composer */}
+          {(isOtherOnline || isOtherTyping) && (
+            <View style={styles.presenceContainer}>
+              <View style={styles.avatarPeek}>
+                <UserAvatar name={otherUsername} size={24} />
+              </View>
+              {isOtherTyping ? (
+                <View style={styles.presenceTypingBubble}>
+                  <TypingIndicator />
+                </View>
+              ) : (
+                <View style={styles.presenceTextBubble}>
+                  <Text style={styles.presenceOnlineText}>online</Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
         <SafeAreaView edges={['bottom']} style={{ backgroundColor: '#0A0A0A' }}>
@@ -1037,20 +1120,34 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
                       </Text>
                     </TouchableOpacity>
                   ) : (
-                    <TouchableOpacity
-                      style={styles.optionBtn}
-                      onPress={() => handleCopyMessage(longPressedMessage.message_text || '')}
-                    >
-                      <Text style={styles.optionText}>Copy Text</Text>
-                    </TouchableOpacity>
+                    <>
+                      <TouchableOpacity
+                        style={styles.optionBtn}
+                        onPress={() => handleToggleSaveTextMessage(longPressedMessage)}
+                      >
+                        <Text style={styles.optionText}>
+                          {(longPressedMessage.is_saved_by_users || []).includes(currentUserId || '')
+                            ? 'Unsave from Chat'
+                            : 'Save in Chat'}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.optionBtn}
+                        onPress={() => handleCopyMessage(longPressedMessage.message_text || '')}
+                      >
+                        <Text style={styles.optionText}>Copy Text</Text>
+                      </TouchableOpacity>
+                    </>
                   )}
 
-                  <TouchableOpacity
-                    style={[styles.optionBtn, styles.deleteOptionBtn]}
-                    onPress={() => handleDeleteMessage(longPressedMessage)}
-                  >
-                    <Text style={styles.deleteOptionText}>Delete</Text>
-                  </TouchableOpacity>
+                  {longPressedMessage.sender_id === currentUserId && (
+                    <TouchableOpacity
+                      style={[styles.optionBtn, styles.deleteOptionBtn]}
+                      onPress={() => handleDeleteMessage(longPressedMessage)}
+                    >
+                      <Text style={styles.deleteOptionText}>Delete</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </>
             )}
@@ -1271,6 +1368,54 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  deletedRowContainer: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginVertical: 2,
+  },
+  myDeletedRow: {
+    alignSelf: 'flex-end',
+  },
+  otherDeletedRow: {
+    alignSelf: 'flex-start',
+  },
+  deletedText: {
+    fontStyle: 'italic',
+    color: '#A0A0A0',
+    fontSize: 13,
+  },
+  presenceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: 'transparent',
+  },
+  avatarPeek: {
+    borderWidth: 1.5,
+    borderColor: '#34C759',
+    borderRadius: 14,
+    padding: 1,
+    backgroundColor: '#000000',
+  },
+  presenceTextBubble: {
+    marginLeft: 6,
+    backgroundColor: '#1E1E1E',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  presenceOnlineText: {
+    color: '#34C759',
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  presenceTypingBubble: {
+    marginLeft: 4,
+    transform: [{ scale: 0.8 }],
   },
 });
 
