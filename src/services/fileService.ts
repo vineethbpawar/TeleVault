@@ -638,16 +638,43 @@ export const fileService = {
 
   async bulkDelete(ids: string[], hardDelete: boolean = true): Promise<void> {
     try {
-      // 1. Fetch file info to retrieve telegram_message_ids
+      // 1. Fetch file info to retrieve telegram_message_ids and check if chunked
       const { data: files, error: fetchErr } = await supabase
         .from('files')
-        .select('id, telegram_message_id')
+        .select('id, telegram_message_id, is_chunked, large_file_id')
         .in('id', ids);
 
       if (!fetchErr && files) {
         for (const file of files) {
-          if (file.telegram_message_id) {
-            telegramService.deleteTelegramMessage(Number(file.telegram_message_id)).catch(() => {});
+          // If it is a chunked/large file, delete all of its chunk messages from Telegram
+          if (file.is_chunked && file.large_file_id) {
+            try {
+              const { data: chunks } = await supabase
+                .from('large_file_chunks')
+                .select('telegram_message_id')
+                .eq('large_file_id', file.large_file_id);
+
+              if (chunks && chunks.length > 0) {
+                for (const chunk of chunks) {
+                  if (chunk.telegram_message_id) {
+                    telegramService.deleteTelegramMessage(Number(chunk.telegram_message_id)).catch(() => {});
+                  }
+                }
+              }
+
+              // Delete chunks from large_file_chunks
+              await supabase.from('large_file_chunks').delete().eq('large_file_id', file.large_file_id);
+
+              // Delete large_files record
+              await supabase.from('large_files').delete().eq('id', file.large_file_id);
+            } catch (chunkErr) {
+              console.warn('Failed to delete large file chunks from Telegram/DB:', chunkErr);
+            }
+          } else {
+            // Standard single-file delete
+            if (file.telegram_message_id) {
+              telegramService.deleteTelegramMessage(Number(file.telegram_message_id)).catch(() => {});
+            }
           }
         }
       }
