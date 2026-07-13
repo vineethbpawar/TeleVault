@@ -77,9 +77,13 @@ export type AppStackParamList = {
   UserProfile: { userId: string; username: string };
   MyProfile: undefined;
   SendTo: {
-    mediaUri: string;
-    mediaType: 'image' | 'video';
+    mediaUri?: string;
+    mediaType?: 'image' | 'video';
     metadata?: any;
+    fileId?: string;
+    fileName?: string;
+    fileType?: 'image' | 'video';
+    telegramFileId?: string | null;
   };
   MemoriesViewer: {
     files: TeleVaultFile[];

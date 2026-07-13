@@ -33,7 +33,16 @@ import * as Sharing from 'expo-sharing';
 type Props = NativeStackScreenProps<AppStackParamList, 'SendTo'>;
 
 export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { mediaUri, mediaType, metadata } = route.params;
+  const {
+    mediaUri: initialMediaUri,
+    mediaType: initialMediaType,
+    metadata,
+    fileId,
+    fileName,
+    fileType,
+    telegramFileId
+  } = route.params;
+  
   const insets = useSafeAreaInsets();
   
   const [friends, setFriends] = useState<UserProfile[]>([]);
@@ -42,6 +51,26 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sending, setSending] = useState(false);
   const [progressText, setProgressText] = useState('');
+
+  const [mediaUri, setMediaUri] = useState<string>(initialMediaUri || '');
+  const [mediaType, setMediaType] = useState<'image' | 'video'>(initialMediaType || fileType || 'image');
+
+  useEffect(() => {
+    const resolveParams = async () => {
+      if (!mediaUri && telegramFileId) {
+        try {
+          setLoading(true);
+          const url = await telegramService.getTelegramFileDownloadUrl(telegramFileId);
+          setMediaUri(url);
+          setLoading(false);
+        } catch (err) {
+          setLoading(false);
+          console.error('Failed to resolve telegram file ID in SendToScreen:', err);
+        }
+      }
+    };
+    resolveParams();
+  }, [telegramFileId, mediaUri]);
 
   // Selections
   const [selectedStory, setSelectedStory] = useState(false);
