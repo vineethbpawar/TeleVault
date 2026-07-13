@@ -73,6 +73,7 @@ import { telegramService } from '../services/telegramService';
 import { settingsService, AppSettings } from '../services/settingsService';
 import { largeFileService } from '../services/largeFileService';
 import { exportHelper } from '../utils/exportHelper';
+import { showToast } from '../components/ToastBanner';
 import * as LocalAuthentication from 'expo-local-authentication';
 import PinLockModal from '../components/PinLockModal';
 import UploadProgress from '../components/UploadProgress';
@@ -147,6 +148,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [pinModalMode, setPinModalMode] = useState<'create' | 'verify'>('create');
   const [pendingToggle, setPendingToggle] = useState<'drive' | 'private' | null>(null);
+  const [pendingDisable, setPendingDisable] = useState(false);
 
   const isFocused = useIsFocused();
 
@@ -324,23 +326,21 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     if (value) {
       setPinModalMode('create');
       setPinModalVisible(true);
+      setPendingDisable(false);
     } else {
-      Alert.alert('Remove PIN', 'Are you sure you want to disable all PIN locks? This will remove all folder protection.', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            await securityService.disablePin();
-            loadSettingsData();
-          },
-        },
-      ]);
+      setPinModalMode('verify');
+      setPinModalVisible(true);
+      setPendingDisable(true);
     }
   };
 
   const handlePinSuccess = async () => {
     setPinModalVisible(false);
+    if (pendingDisable) {
+      await securityService.disablePin();
+      setPendingDisable(false);
+      showToast('PIN security lock disabled.');
+    }
     await loadSettingsData();
   };
 
