@@ -36,7 +36,18 @@ import MediaViewer from '../components/MediaViewer';
 type Props = NativeStackScreenProps<AppStackParamList, 'ChatRoom'>;
 
 export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { conversationId: initialConversationId, otherUserId, otherUsername, otherFullName } = route.params;
+  const {
+    conversationId: initialConversationId,
+    otherUserId: paramOtherUserId,
+    otherUsername: paramOtherUsername,
+    otherFullName: paramOtherFullName,
+    friendId,
+    friendUsername,
+  } = route.params || {};
+
+  const otherUserId = (paramOtherUserId || friendId || '') as string;
+  const otherUsername = (paramOtherUsername || friendUsername || 'User') as string;
+  const otherFullName = (paramOtherFullName || null) as string | null;
 
   const insets = useSafeAreaInsets();
   const [keyboardVisible, setKeyboardVisible] = useState(false);

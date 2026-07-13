@@ -32,7 +32,14 @@ export type AppStackParamList = {
   UsernameSetup: undefined;
   UserSearch: { mode?: 'chat' | 'snap'; mediaUri?: string; mediaType?: 'image' | 'video' } | undefined;
   ChatList: undefined;
-  ChatRoom: { conversationId?: string; otherUserId: string; otherUsername: string; otherFullName?: string };
+  ChatRoom: { 
+    conversationId?: string; 
+    otherUserId?: string; 
+    otherUsername?: string; 
+    otherFullName?: string;
+    friendId?: string;
+    friendUsername?: string;
+  };
   SnapInbox: undefined;
   Stories: undefined;
   SnapViewer: {
