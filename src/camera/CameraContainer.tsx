@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Alert, Platform, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Settings, RefreshCw, Zap, Clock, Compass, Shield } from 'lucide-react-native';
 import Animated, { useSharedValue, runOnJS, useAnimatedReaction, SharedValue } from 'react-native-reanimated';
@@ -12,6 +12,32 @@ import CameraControls from '../components/CameraControls';
 import UserAvatar from '../components/UserAvatar';
 import { showToast } from '../components/ToastBanner';
 import { supabase } from '../lib/supabase';
+
+const Alert = {
+  alert: (
+    title: string,
+    message?: string,
+    buttons?: { text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }[]
+  ) => {
+    if (Platform.OS === 'web') {
+      if (buttons && buttons.length > 1) {
+        const confirmBtn = buttons.find(b => b.style !== 'cancel') || buttons[buttons.length - 1];
+        const confirmed = window.confirm(`${title}\n\n${message || ''}`);
+        if (confirmed && confirmBtn && confirmBtn.onPress) {
+          confirmBtn.onPress();
+        }
+      } else {
+        window.alert(`${title}\n\n${message || ''}`);
+        if (buttons && buttons[0] && buttons[0].onPress) {
+          buttons[0].onPress();
+        }
+      }
+      return;
+    }
+    const RNAlert = require('react-native').Alert;
+    RNAlert.alert(title, message, buttons);
+  }
+};
 
 // High-performance Zoom Pill display (Zero React state updates per frame)
 const ZoomPill = ({ zoomShared, bottom }: { zoomShared: SharedValue<number>; bottom: any }) => {
