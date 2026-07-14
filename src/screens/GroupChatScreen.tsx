@@ -304,8 +304,8 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: '#000000' }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
       <View style={styles.container}>
         <SafeAreaView edges={['top']} style={{ backgroundColor: '#000000' }}>
