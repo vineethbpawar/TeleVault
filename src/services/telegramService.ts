@@ -195,10 +195,13 @@ async function uploadFileHelper(
     const ext = fieldName === 'video' ? 'mp4' : fieldName === 'photo' ? 'jpg' : 'bin';
     const mimeType = fieldName === 'video' ? 'video/mp4' : fieldName === 'photo' ? 'image/jpeg' : 'application/octet-stream';
     const uniqueFileName = `upload_${Date.now()}.${ext}`;
+    
+    // Ensure file:// prefix on native platforms
+    const cleanUri = localUri.startsWith('file://') ? localUri : `file://${localUri}`;
 
     const formData = new FormData();
     formData.append(fieldName, {
-      uri: localUri,
+      uri: cleanUri,
       name: uniqueFileName,
       type: mimeType,
     } as any);
@@ -232,7 +235,7 @@ async function uploadFileHelper(
         body: formData,
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'multipart/form-data',
+          // Do NOT set Content-Type header manually to allow system boundary generation
         },
         signal: controller.signal,
       });

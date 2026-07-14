@@ -175,6 +175,24 @@ export const uploadQueueService = {
           continue;
         }
 
+        // Physical file check for native platforms to prevent stalls on cleared cache items
+        if (Platform.OS !== 'web') {
+          try {
+            const fileCheck = await FileSystem.getInfoAsync(pendingItem.local_uri);
+            if (!fileCheck.exists) {
+              console.warn(`[QueueService] Physical file does not exist for: ${pendingItem.file_name}. Flagging as unrecoverable.`);
+              await this.updateUploadQueueItem(pendingItem.id, {
+                status: 'failed',
+                stage: 'File Not Found (Unrecoverable)',
+                error_message: 'The cached local media file is missing on this device.',
+              });
+              continue;
+            }
+          } catch (fileError) {
+            console.error('[QueueService] File validation check failed:', fileError);
+          }
+        }
+
         activeCount++;
         
         // Isolated Try-Catch Transaction Loop
