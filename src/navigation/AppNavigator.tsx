@@ -39,6 +39,8 @@ import { Alert, AppState, AppStateStatus, Platform, View, Text } from 'react-nat
 import { securityService } from '../services/securityService';
 import { PinLockModal } from '../components/PinLockModal';
 
+import { networkService } from '../services/networkService';
+
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
 export const AppNavigator: React.FC = () => {
@@ -50,17 +52,32 @@ export const AppNavigator: React.FC = () => {
   const [isOnline, setIsOnline] = useState(true);
 
   useEffect(() => {
+    // 1. Initial connectivity check
+    networkService.isOnline().then(setIsOnline);
+
+    // 2. Periodic background verification check
+    const interval = setInterval(async () => {
+      const online = await networkService.isOnline();
+      setIsOnline(online);
+    }, 10000);
+
+    // 3. Web event listeners
     if (Platform.OS === 'web') {
       const handleOnline = () => setIsOnline(true);
-      const handleOffline = () => setIsOnline(false);
+      const handleOffline = async () => {
+        const online = await networkService.isOnline();
+        setIsOnline(online);
+      };
       window.addEventListener('online', handleOnline);
       window.addEventListener('offline', handleOffline);
-      setIsOnline(navigator.onLine);
       return () => {
+        clearInterval(interval);
         window.removeEventListener('online', handleOnline);
         window.removeEventListener('offline', handleOffline);
       };
     }
+
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {

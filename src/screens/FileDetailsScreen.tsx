@@ -25,6 +25,7 @@ import AppCard from '../components/AppCard';
 import AppButton from '../components/AppButton';
 
 import { previewCacheService } from '../services/previewCacheService';
+import { supabase } from '../lib/supabase';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'FileDetails'>;
 
@@ -74,6 +75,29 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   useEffect(() => {
     fetchTelegramUrl();
   }, [file.telegram_file_id]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`file-details-${file.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'files',
+          filter: `id=eq.${file.id}`,
+        },
+        (payload) => {
+          console.log('[FileDetails] Real-time metadata sync received:', payload.new);
+          setFile(payload.new as any);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [file.id]);
 
   const handleDelete = () => {
     Alert.alert(

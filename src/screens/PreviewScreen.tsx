@@ -487,6 +487,9 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
       });
 
       showToast('Saving to Memories...');
+      uploadQueueService.processUploadQueue().catch(err => {
+        console.error('[PreviewScreen] Proactive queue sync kickoff failed:', err);
+      });
       navigation.navigate('Main', { screen: 'CameraTab' });
     } catch (error: any) {
       console.error('Queue add failed:', error);

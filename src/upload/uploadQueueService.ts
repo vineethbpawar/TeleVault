@@ -10,8 +10,10 @@ import { largeFileService, NORMAL_TELEGRAM_LIMIT_BYTES } from '../services/large
 import { getWebBlob, deleteWebBlob } from '../services/webBlobStore';
 import { activeControllers, activeNativeTasks, activeUploadRegistry } from '../services/activeUploadRegistry';
 import { queueProcessorRegistry } from '../services/queueProcessorRegistry';
+import { networkService } from '../services/networkService';
 
 let isRecovered = false;
+let isProcessingQueue = false;
 
 // Register the modular queue processor in the global registry
 queueProcessorRegistry.registerQueueProcessor(async () => {
@@ -126,45 +128,84 @@ export const uploadQueueService = {
 
   // Main Upload Queue Dispatcher Loop
   async processUploadQueue(): Promise<void> {
-    if (!isRecovered) {
-      isRecovered = true;
-      await this.recoverUploadQueue();
-    }
-
-    const settings = await settingsService.getSettings();
-    const maxConcurrency = settings.uploadMode === 'Fast' ? 2 : 1;
-
-    const queue = await this.getUploadQueue();
-    const activeItems = queue.filter(item => item.status === 'uploading' || item.status === ('processing' as any));
-    let activeCount = activeItems.length;
-
-    if (activeCount >= maxConcurrency) {
-      console.log(`[QueueService] Processing active uploads at concurrency limit: ${activeCount}/${maxConcurrency}`);
+    if (isProcessingQueue) {
+      console.log('[QueueService] Queue processor is already running. Exiting.');
       return;
     }
 
-    const pendingItems = queue.filter(item => item.status === 'pending');
-    if (pendingItems.length === 0) {
-      console.log('[QueueService] No pending items in queue.');
-      return;
-    }
+    isProcessingQueue = true;
+    try {
+      if (!isRecovered) {
+        isRecovered = true;
+        await this.recoverUploadQueue();
+      }
 
-    for (const pendingItem of pendingItems) {
+      // Connectivity verification check
+      const online = await networkService.isOnline();
+      if (!online) {
+        console.log('[QueueService] Network is offline. Postponing upload queue processing.');
+        return;
+      }
+
+      const settings = await settingsService.getSettings();
+      const maxConcurrency = settings.uploadMode === 'Fast' ? 2 : 1;
+
+      const queue = await this.getUploadQueue();
+      const activeItems = queue.filter(item => item.status === 'uploading' || item.status === ('processing' as any));
+      let activeCount = activeItems.length;
+
       if (activeCount >= maxConcurrency) {
-        break;
+        console.log(`[QueueService] Concurrency limit active: ${activeCount}/${maxConcurrency}`);
+        return;
       }
 
-      // Concurrency protection: do not parallelize chunked large file uploads
-      if (pendingItem.upload_mode === 'chunked' && activeCount > 0) {
-        continue;
+      const pendingItems = queue.filter(item => item.status === 'pending');
+      if (pendingItems.length === 0) {
+        console.log('[QueueService] No pending items in queue.');
+        return;
       }
 
-      activeCount++;
-      this.processQueueItem(pendingItem).finally(() => {
-        this.processUploadQueue().catch(err => {
-          console.error('[QueueService] Dispatcher loop failed:', err);
-        });
-      });
+      for (const pendingItem of pendingItems) {
+        if (activeCount >= maxConcurrency) {
+          break;
+        }
+
+        // Concurrency protection: do not parallelize chunked large file uploads
+        if (pendingItem.upload_mode === 'chunked' && activeCount > 0) {
+          continue;
+        }
+
+        activeCount++;
+        
+        // Isolated Try-Catch Transaction Loop
+        try {
+          await this.processQueueItem(pendingItem);
+        } catch (itemError: any) {
+          console.error(`[QueueService] Isolated upload transaction failed for item: ${pendingItem.file_name}`, itemError);
+          const nextRetry = (pendingItem.retry_count || 0) + 1;
+          const maxRetries = 5;
+          
+          if (nextRetry >= maxRetries) {
+            await this.updateUploadQueueItem(pendingItem.id, {
+              status: 'failed',
+              stage: 'Failed',
+              retry_count: nextRetry,
+              error_message: itemError.message || String(itemError),
+            });
+          } else {
+            await this.updateUploadQueueItem(pendingItem.id, {
+              status: 'pending',
+              stage: `Queued (Retry ${nextRetry}/${maxRetries})`,
+              retry_count: nextRetry,
+              error_message: itemError.message || String(itemError),
+            });
+          }
+        } finally {
+          activeCount--;
+        }
+      }
+    } finally {
+      isProcessingQueue = false;
     }
   },
 
@@ -357,7 +398,7 @@ export const uploadQueueService = {
         });
       }
 
-      await this.updateUploadQueueItem(itemId, { status: 'completed', stage: 'Completed', progress: 100 });
+      await this.updateUploadQueueItem(itemId, { status: 'completed', stage: 'Completed (Single File)', progress: 100 });
       
       if (Platform.OS === 'web') {
         await deleteWebBlob(itemId);
@@ -377,6 +418,7 @@ export const uploadQueueService = {
         stage: 'Failed',
         error_message: errorText,
       });
+      throw err;
     } finally {
       activeUploadRegistry.unregisterAbortController(itemId);
       

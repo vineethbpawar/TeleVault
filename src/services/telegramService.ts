@@ -191,66 +191,71 @@ async function uploadFileHelper(
       }
     });
   } else {
-    const { activeUploadRegistry } = require('./activeUploadRegistry');
-    const task = FileSystem.createUploadTask(
-      url,
-      localUri,
-      {
-        fieldName: fieldName,
-        httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        parameters: parameters,
-      },
-      (data) => {
-        if (onProgress && data.totalBytesExpectedToSend > 0) {
-          const percent = Math.round((data.totalBytesSent / data.totalBytesExpectedToSend) * 100);
-          onProgress(percent);
-        }
-      }
-    );
+    // Native Android / iOS FormData multipart upload
+    const ext = fieldName === 'video' ? 'mp4' : fieldName === 'photo' ? 'jpg' : 'bin';
+    const mimeType = fieldName === 'video' ? 'video/mp4' : fieldName === 'photo' ? 'image/jpeg' : 'application/octet-stream';
+    const uniqueFileName = `upload_${Date.now()}.${ext}`;
 
-    if (itemId) {
-      activeUploadRegistry.registerNativeUploadTask(itemId, task);
+    const formData = new FormData();
+    formData.append(fieldName, {
+      uri: localUri,
+      name: uniqueFileName,
+      type: mimeType,
+    } as any);
+
+    Object.keys(parameters).forEach((key) => {
+      formData.append(key, parameters[key]);
+    });
+
+    const controller = new AbortController();
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        controller.abort();
+      });
+    }
+
+    if (onProgress) {
+      onProgress(30); // Simulate start progress
     }
 
     let timeoutId: any;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(async () => {
-        try {
-          await task.cancelAsync();
-        } catch (_) {}
+      timeoutId = setTimeout(() => {
+        controller.abort();
         reject(new Error('Upload task timed out'));
       }, 60000); // 60 seconds timeout
     });
 
-    try {
-      if (signal) {
-        signal.addEventListener('abort', async () => {
-          try {
-            await task.cancelAsync();
-          } catch (_) {}
-        });
-      }
+    const uploadPromise = (async () => {
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'multipart/form-data',
+        },
+        signal: controller.signal,
+      });
 
-      const result = await Promise.race([task.uploadAsync(), timeoutPromise]);
-      clearTimeout(timeoutId);
-      if (itemId) {
-        activeUploadRegistry.unregisterNativeUploadTask(itemId);
-      }
-
-      if (!result) {
-        throw new Error('Upload task returned empty response.');
-      }
-
+      const bodyText = await response.text();
       return {
-        status: result.status,
-        body: result.body,
+        status: response.status,
+        body: bodyText,
       };
-    } catch (err) {
-      if (itemId) {
-        activeUploadRegistry.unregisterNativeUploadTask(itemId);
+    })();
+
+    try {
+      const result = await Promise.race([uploadPromise, timeoutPromise]);
+      clearTimeout(timeoutId);
+      
+      if (onProgress) {
+        onProgress(100); // Complete progress
       }
-      throw err;
+      
+      return result;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      throw error;
     }
   }
 }
