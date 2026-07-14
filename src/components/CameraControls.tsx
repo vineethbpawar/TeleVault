@@ -33,6 +33,16 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
   const globalMouseMoveRef = useRef<any>(null);
   const globalMouseUpRef = useRef<any>(null);
 
+  const onCaptureRef = useRef(onCapture);
+  const onStartRecordingRef = useRef(onStartRecording);
+  const onStopRecordingRef = useRef(onStopRecording);
+  const isRecordingRef = useRef(isRecording);
+
+  onCaptureRef.current = onCapture;
+  onStartRecordingRef.current = onStartRecording;
+  onStopRecordingRef.current = onStopRecording;
+  isRecordingRef.current = isRecording;
+
   React.useEffect(() => {
     return () => {
       if (Platform.OS === 'web') {
@@ -58,11 +68,11 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
 
         longPressTimeoutRef.current = setTimeout(() => {
           isRecordingStartedRef.current = true;
-          onStartRecording();
+          onStartRecordingRef.current();
         }, 350);
       },
       onPanResponderMove: (evt, gestureState) => {
-        if (isRecording || isRecordingStartedRef.current || longPressTimeoutRef.current !== null) {
+        if (isRecordingRef.current || isRecordingStartedRef.current || longPressTimeoutRef.current !== null) {
           const dy = initialTouchY.current - gestureState.moveY;
           const sensitivity = 500;
           const newZoom = Math.max(0, Math.min(1, startZoomRef.current + (dy / sensitivity)));
@@ -77,10 +87,10 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
 
         const duration = Date.now() - touchStartTimeRef.current;
 
-        if (isRecording || isRecordingStartedRef.current) {
-          onStopRecording();
+        if (isRecordingRef.current || isRecordingStartedRef.current) {
+          onStopRecordingRef.current();
         } else if (duration < 350) {
-          onCapture();
+          onCaptureRef.current();
         }
 
         isRecordingStartedRef.current = false;
@@ -90,8 +100,8 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
           clearTimeout(longPressTimeoutRef.current);
           longPressTimeoutRef.current = null;
         }
-        if (isRecording || isRecordingStartedRef.current) {
-          onStopRecording();
+        if (isRecordingRef.current || isRecordingStartedRef.current) {
+          onStopRecordingRef.current();
         }
         isRecordingStartedRef.current = false;
       },

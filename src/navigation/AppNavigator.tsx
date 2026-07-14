@@ -78,6 +78,13 @@ export const AppNavigator: React.FC = () => {
       if (appLockActive) {
         setAppLocked(true);
       }
+      
+      if (session) {
+        try {
+          const { uploadQueueService } = require('../services/uploadQueueService');
+          uploadQueueService.processUploadQueue().catch((err: any) => console.warn('Offline sync failed:', err));
+        } catch (_) {}
+      }
     };
     checkInitialLock();
   }, [session]);
