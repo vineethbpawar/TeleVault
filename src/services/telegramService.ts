@@ -119,57 +119,25 @@ async function uploadFileHelper(
   signal?: AbortSignal,
   itemId?: string
 ): Promise<{ status: number; body: string }> {
-  if (Platform.OS === 'web') {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', url);
+  try {
+    const ext = fieldName === 'video' ? 'mp4' : fieldName === 'photo' ? 'jpg' : 'bin';
+    const mimeType = fieldName === 'video' ? 'video/mp4' : fieldName === 'photo' ? 'image/jpeg' : 'application/octet-stream';
+    let fileName = parameters.caption || `upload_${Date.now()}`;
+    if (!fileName.toLowerCase().endsWith(`.${ext}`)) {
+      fileName = `${fileName}.${ext}`;
+    }
 
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable && onProgress) {
-          const percent = Math.round((event.loaded / event.total) * 100);
-          onProgress(percent);
-        }
-      };
-
-      xhr.timeout = 45000; // 45 seconds timeout
-      xhr.ontimeout = () => {
-        reject(new Error('Upload request timed out'));
-      };
-
-      xhr.onload = () => {
-        resolve({
-          status: xhr.status,
-          body: xhr.responseText,
-        });
-      };
-
-      xhr.onerror = () => {
-        reject(new Error('Network upload error'));
-      };
-
-      const formData = new FormData();
-      
-      const sendFormData = (blob: Blob) => {
-        const fileName = parameters.caption || 'file';
-        formData.append(fieldName, blob, fileName);
-        Object.keys(parameters).forEach((key) => {
-          formData.append(key, parameters[key]);
-        });
-        xhr.send(formData);
-      };
-
+    let base64Data = '';
+    if (Platform.OS === 'web') {
+      let blob: Blob;
       if (localUri.startsWith('webblob:')) {
         const { getWebBlob } = require('./webBlobStore');
         const key = localUri.split(':')[1];
-        getWebBlob(key)
-          .then((blob: Blob | null) => {
-            if (!blob) {
-              reject(new Error('IndexedDB blob not found for upload.'));
-              return;
-            }
-            sendFormData(blob);
-          })
-          .catch(reject);
+        const resBlob = await getWebBlob(key);
+        if (!resBlob) {
+          throw new Error('IndexedDB blob not found for upload.');
+        }
+        blob = resBlob;
       } else if (localUri.startsWith('data:')) {
         const arr = localUri.split(',');
         const mime = arr[0].match(/:(.*?);/)![1];
@@ -179,36 +147,56 @@ async function uploadFileHelper(
         while (n--) {
           u8arr[n] = bstr.charCodeAt(n);
         }
-        const blob = new Blob([u8arr], { type: mime });
-        sendFormData(blob);
+        blob = new Blob([u8arr], { type: mime });
       } else {
-        fetch(localUri)
-          .then(res => res.blob())
-          .then(blob => {
-            sendFormData(blob);
-          })
-          .catch(reject);
+        const res = await fetch(localUri);
+        blob = await res.blob();
       }
-    });
-  } else {
-    // Native Android / iOS FormData multipart upload
-    const ext = fieldName === 'video' ? 'mp4' : fieldName === 'photo' ? 'jpg' : 'bin';
-    const mimeType = fieldName === 'video' ? 'video/mp4' : fieldName === 'photo' ? 'image/jpeg' : 'application/octet-stream';
-    const uniqueFileName = `upload_${Date.now()}.${ext}`;
-    
-    // Ensure file:// prefix on native platforms
-    const cleanUri = localUri.startsWith('file://') ? localUri : `file://${localUri}`;
 
-    const formData = new FormData();
-    formData.append(fieldName, {
-      uri: cleanUri,
-      name: uniqueFileName,
-      type: mimeType,
-    } as any);
+      base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          // Clean the dataUrl prefix (stripping data:image/jpeg;base64,) out of FileReader output
+          resolve(result.split(',')[1] || '');
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } else {
+      const FileSystem = require('expo-file-system');
+      const cleanUri = localUri.startsWith('file://') ? localUri : `file://${localUri}`;
+      base64Data = await FileSystem.readAsStringAsync(cleanUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+    }
 
-    Object.keys(parameters).forEach((key) => {
-      formData.append(key, parameters[key]);
-    });
+    // Extract the target Telegram bot API endpoint from the url
+    const urlParts = url.split('/bot');
+    const botTokenPart = urlParts[1] || '';
+    const botToken = botTokenPart.split('/')[0] || '';
+    const endpoint = botTokenPart.split('/')[1] || '';
+
+    // Retrieve active Supabase user session token to authenticate request securely
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || '';
+    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+
+    const payload = {
+      fileData: base64Data,
+      fileName,
+      mimeType,
+      botToken,
+      chat_id: parameters.chat_id,
+      endpoint,
+    };
+
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/telegram-upload-proxy`;
+
+    if (onProgress) {
+      onProgress(40);
+    }
 
     const controller = new AbortController();
     if (signal) {
@@ -217,49 +205,35 @@ async function uploadFileHelper(
       });
     }
 
-    if (onProgress) {
-      onProgress(30); // Simulate start progress
-    }
+    // 75 seconds timeout for large Base64 operations
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 75000);
 
-    let timeoutId: any;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => {
-        controller.abort();
-        reject(new Error('Upload task timed out'));
-      }, 60000); // 60 seconds timeout
+    const response = await fetch(edgeFunctionUrl, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token || anonKey}`,
+      },
+      signal: controller.signal,
     });
 
-    const uploadPromise = (async () => {
-      const response = await fetch(url, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Accept': 'application/json',
-          // Do NOT set Content-Type header manually to allow system boundary generation
-        },
-        signal: controller.signal,
-      });
+    clearTimeout(timeoutId);
 
-      const bodyText = await response.text();
-      return {
-        status: response.status,
-        body: bodyText,
-      };
-    })();
-
-    try {
-      const result = await Promise.race([uploadPromise, timeoutPromise]);
-      clearTimeout(timeoutId);
-      
-      if (onProgress) {
-        onProgress(100); // Complete progress
-      }
-      
-      return result;
-    } catch (error: any) {
-      clearTimeout(timeoutId);
-      throw error;
+    if (onProgress) {
+      onProgress(100);
     }
+
+    const bodyText = await response.text();
+    return {
+      status: response.status,
+      body: bodyText,
+    };
+  } catch (error: any) {
+    console.error('Base64 upload proxy fetch pipeline error:', error);
+    throw error;
   }
 }
 
