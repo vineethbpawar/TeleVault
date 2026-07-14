@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { StyleSheet, View, TouchableOpacity, Text, Platform, Pressable } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Text, Platform, Pressable, PanResponder } from 'react-native';
 import { Grid, Image as ImageIcon } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { SharedValue } from 'react-native-reanimated';
@@ -46,45 +46,57 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
     };
   }, []);
 
-  const handleTouchStart = (e: any) => {
-    initialTouchY.current = e.nativeEvent.pageY;
-    startZoomRef.current = zoomShared.value;
-    touchStartTimeRef.current = Date.now();
-    isRecordingStartedRef.current = false;
+  const nativePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt, gestureState) => {
+        initialTouchY.current = gestureState.y0;
+        startZoomRef.current = zoomShared.value;
+        touchStartTimeRef.current = Date.now();
+        isRecordingStartedRef.current = false;
 
-    // Trigger video recording start on hold (350ms)
-    longPressTimeoutRef.current = setTimeout(() => {
-      isRecordingStartedRef.current = true;
-      onStartRecording();
-    }, 350);
-  };
+        longPressTimeoutRef.current = setTimeout(() => {
+          isRecordingStartedRef.current = true;
+          onStartRecording();
+        }, 350);
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (isRecording || isRecordingStartedRef.current || longPressTimeoutRef.current !== null) {
+          const dy = initialTouchY.current - gestureState.moveY;
+          const sensitivity = 500;
+          const newZoom = Math.max(0, Math.min(1, startZoomRef.current + (dy / sensitivity)));
+          zoomShared.value = newZoom;
+        }
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (longPressTimeoutRef.current) {
+          clearTimeout(longPressTimeoutRef.current);
+          longPressTimeoutRef.current = null;
+        }
 
-  const handleTouchMove = (e: any) => {
-    const currentY = e.nativeEvent.pageY;
-    if (isRecording || isRecordingStartedRef.current || longPressTimeoutRef.current !== null) {
-      const dy = initialTouchY.current - currentY; // positive when dragging up
-      const sensitivity = 500; // Snapchat sensitivity
-      const newZoom = Math.max(0, Math.min(1, startZoomRef.current + (dy / sensitivity)));
-      zoomShared.value = newZoom;
-    }
-  };
+        const duration = Date.now() - touchStartTimeRef.current;
 
-  const handleTouchEnd = () => {
-    if (longPressTimeoutRef.current) {
-      clearTimeout(longPressTimeoutRef.current);
-      longPressTimeoutRef.current = null;
-    }
+        if (isRecording || isRecordingStartedRef.current) {
+          onStopRecording();
+        } else if (duration < 350) {
+          onCapture();
+        }
 
-    const duration = Date.now() - touchStartTimeRef.current;
-
-    if (isRecording || isRecordingStartedRef.current) {
-      onStopRecording();
-    } else if (duration < 350) {
-      onCapture();
-    }
-
-    isRecordingStartedRef.current = false;
-  };
+        isRecordingStartedRef.current = false;
+      },
+      onPanResponderTerminate: (evt, gestureState) => {
+        if (longPressTimeoutRef.current) {
+          clearTimeout(longPressTimeoutRef.current);
+          longPressTimeoutRef.current = null;
+        }
+        if (isRecording || isRecordingStartedRef.current) {
+          onStopRecording();
+        }
+        isRecordingStartedRef.current = false;
+      },
+    })
+  ).current;
 
   // Web recording gesture flow helpers
   const startRecordingFlowWeb = (clientY: number) => {
@@ -222,15 +234,8 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
             </View>
           </View>
         ) : (
-          <Pressable
-            onPress={onCapture}
-            onLongPress={onStartRecording}
-            onPressOut={() => {
-              if (isRecording) {
-                onStopRecording();
-              }
-            }}
-            delayLongPress={350}
+          <View
+            {...nativePanResponder.panHandlers}
             style={styles.captureContainer}
           >
             <View 
@@ -239,7 +244,7 @@ export const CameraControls: React.FC<CameraControlsProps> = ({
             >
               <View style={[styles.captureInnerCircle, isRecording && styles.captureInnerCircleRecording]} />
             </View>
-          </Pressable>
+          </View>
         )}
 
         <TouchableOpacity
