@@ -26,6 +26,8 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     const cameraRef = useRef<CameraView | null>(null);
 
     const [zoomScale, setZoomScale] = useState(0);
+    const [cameraMode, setCameraMode] = useState<'picture' | 'video'>('picture');
+    const recordingPromiseRef = useRef<Promise<any> | null>(null);
 
     useAnimatedReaction(
       () => zoomShared.value,
@@ -51,6 +53,12 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     useImperativeHandle(ref, () => ({
       takePicture: async (): Promise<CaptureResult> => {
         if (!cameraRef.current) throw new Error('Camera is not initialized');
+        
+        if (cameraMode !== 'picture') {
+          setCameraMode('picture');
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+
         if (Platform.OS === 'android') {
           try {
             const dir = FileSystem.cacheDirectory + 'Camera/';
@@ -77,6 +85,12 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
 
       startRecording: async () => {
         if (!cameraRef.current) throw new Error('Camera is not initialized');
+        
+        if (cameraMode !== 'video') {
+          setCameraMode('video');
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+
         if (Platform.OS === 'android') {
           try {
             const dir = FileSystem.cacheDirectory + 'Camera/';
@@ -89,25 +103,39 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
             console.warn('[CameraPreview] Failed to verify/create Camera cache directory for video:', err);
           }
         }
-        await cameraRef.current.recordAsync({
+        
+        recordingPromiseRef.current = cameraRef.current.recordAsync({
           maxDuration: 60,
         });
       },
 
       stopRecording: async (): Promise<CaptureResult> => {
         if (!cameraRef.current) throw new Error('Camera is not initialized');
-        // Stop recording triggers returning native video uri through expo-camera callback structure
-        // Wait, does stopRecording directly return or does recordAsync resolve?
-        // Let's check how the existing code did it!
-        // In the existing code:
-        // cameraRef.current.recordAsync resolves when stopRecording is called.
-        // Let's call stopRecording and fetch the URI.
-        cameraRef.current.stopRecording();
-        // Return dummy type, as the promise from recordAsync resolves with the actual URI.
-        // Wait, how did the existing code handle it?
-        // Let's check:
+        
+        try {
+          cameraRef.current.stopRecording();
+        } catch (e) {
+          console.warn('[CameraPreview] stopRecording failed:', e);
+        }
+
+        let videoUri = '';
+        if (recordingPromiseRef.current) {
+          try {
+            const video = await recordingPromiseRef.current;
+            if (video && video.uri) {
+              videoUri = video.uri;
+            }
+          } catch (err) {
+            console.warn('[CameraPreview] Failed to resolve video recording promise:', err);
+          } finally {
+            recordingPromiseRef.current = null;
+          }
+        }
+
+        setCameraMode('picture');
+
         return {
-          uri: '',
+          uri: videoUri,
           type: 'video',
           mime_type: 'video/mp4'
         };
@@ -121,7 +149,7 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
             ref={cameraRef as any}
             style={StyleSheet.absoluteFill}
             facing={facing}
-            mode="video"
+            mode={cameraMode}
             enableTorch={flash === 'on'}
             onCameraReady={onReady}
             zoom={zoomScale}

@@ -216,7 +216,7 @@ export const CameraContainer: React.FC<CameraContainerProps> = ({ navigation, ro
       // Native recordAsync resolves inside stopRecording ref wrapper with empty uri 
       // because native handler manages navigations inside recordAsync callback.
       // If we are on Web, we resolve the Blob ObjectURL directly here:
-      if (Platform.OS === 'web' && result.uri) {
+      if (result.uri) {
         navigation.navigate('Preview', {
           uri: result.uri,
           type: 'video',

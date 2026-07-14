@@ -10,8 +10,9 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Keyboard,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Send, Camera, MoreVertical, Plus, LogOut, Users } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
@@ -28,6 +29,7 @@ type Props = NativeStackScreenProps<AppStackParamList, 'GroupChat'>;
 
 export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
   const { groupId, groupName } = route.params;
+  const insets = useSafeAreaInsets();
 
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -35,8 +37,31 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
   const [sending, setSending] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setKeyboardVisible(true);
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardVisible(false);
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -330,7 +355,7 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
           />
         )}
 
-        <SafeAreaView edges={['bottom']} style={{ backgroundColor: '#0F0F12' }}>
+        <View style={{ backgroundColor: '#0F0F12', paddingBottom: keyboardVisible ? 4 : Math.max(insets.bottom, 4) }}>
           <View style={styles.inputContainer}>
             <TouchableOpacity style={styles.inputCameraBtn} onPress={handleSnapPress}>
               <Camera size={24} color="#FFFFFF" />
@@ -357,7 +382,7 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
               )}
             </TouchableOpacity>
           </View>
-        </SafeAreaView>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );

@@ -138,3 +138,11 @@ CREATE POLICY "Allow user to UPDATE their own notifications"
 -- Add deleted_at and is_saved_by_users columns to chat_messages table
 ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
 ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS is_saved_by_users TEXT[] DEFAULT '{}';
+
+-- Update snaps update policy to allow both sender and receiver to toggle save state
+DROP POLICY IF EXISTS "snaps_update_policy" ON public.snaps;
+CREATE POLICY "snaps_update_policy"
+    ON public.snaps FOR UPDATE
+    TO authenticated
+    USING (auth.uid() = sender_id OR auth.uid() = receiver_id)
+    WITH CHECK (auth.uid() = sender_id OR auth.uid() = receiver_id);

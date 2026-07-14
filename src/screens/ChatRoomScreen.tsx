@@ -1073,7 +1073,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
           )}
         </View>
 
-        <SafeAreaView edges={['bottom']} style={{ backgroundColor: '#0A0A0A' }}>
+        <View style={{ backgroundColor: '#0A0A0A', paddingBottom: keyboardVisible ? 4 : Math.max(insets.bottom, 4) }}>
           <MessageComposer
             onSend={handleSend}
             onCameraPress={handleSnapPress}
@@ -1082,7 +1082,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
             replyToMessage={replyToMessage}
             onClearReply={() => setReplyToMessage(null)}
           />
-        </SafeAreaView>
+        </View>
       </View>
 
       {/* Message Reaction & Options Overlay Modal */}
