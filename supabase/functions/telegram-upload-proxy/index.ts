@@ -3,7 +3,8 @@ import { decode } from "https://deno.land/std@0.145.0/encoding/base64.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-file-name, x-mime-type, x-bot-token, x-chat-id, x-target-endpoint',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 serve(async (req: Request) => {
@@ -13,20 +14,49 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { fileData, fileName, mimeType, botToken, chat_id, endpoint } = await req.json();
+    let fileBlob: Blob;
+    let fileName: string;
+    let mimeType: string;
+    let botToken: string;
+    let chat_id: string;
+    let endpoint: string;
 
-    if (!fileData || !fileName || !mimeType || !botToken || !chat_id || !endpoint) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required parameters.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const contentType = req.headers.get("content-type") || "";
+
+    if (contentType.includes("multipart/form-data")) {
+      fileName = req.headers.get("x-file-name") || "snap.jpg";
+      mimeType = req.headers.get("x-mime-type") || "image/jpeg";
+      botToken = req.headers.get("x-bot-token") || "";
+      chat_id = req.headers.get("x-chat-id") || "";
+      endpoint = req.headers.get("x-target-endpoint") || "sendPhoto";
+
+      const formDataParser = await req.formData();
+      const rawFile = formDataParser.get('file');
+      if (!rawFile) {
+        throw new Error("No file found in form data");
+      }
+      const fileData = rawFile as any;
+      fileBlob = new Blob([await fileData.arrayBuffer()], { type: mimeType });
+    } else {
+      const { fileData, fileName: fn, mimeType: mt, botToken: bt, chat_id: ci, endpoint: ep } = await req.json();
+      fileName = fn;
+      mimeType = mt;
+      botToken = bt;
+      chat_id = ci;
+      endpoint = ep;
+
+      if (!fileData || !fileName || !mimeType || !botToken || !chat_id || !endpoint) {
+        return new Response(
+          JSON.stringify({ error: 'Missing required parameters.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const binaryBuffer = decode(fileData);
+      fileBlob = new Blob([binaryBuffer], { type: mimeType });
     }
 
-    // Convert the Base64 text string back into pure raw binary bytes
-    const binaryBuffer = decode(fileData);
-    const mediaBlob = new Blob([binaryBuffer], { type: mimeType });
-
-    // Pack cleanly for the Telegram HTTP Endpoint
+    // Forward the file payload directly to Telegram's backend
     const tgPayload = new FormData();
     tgPayload.append('chat_id', chat_id);
     
@@ -38,7 +68,7 @@ serve(async (req: Request) => {
       fieldName = 'video';
     }
     
-    tgPayload.append(fieldName, mediaBlob, fileName);
+    tgPayload.append(fieldName, fileBlob, fileName);
 
     const tgUrl = `https://api.telegram.org/bot${botToken}/${endpoint}`;
     const tgResponse = await fetch(tgUrl, {
