@@ -85,6 +85,14 @@ async function uploadFileHelper(
     const telegramDirectUrl = `https://api.telegram.org/bot${botToken}/${endpoint}`;
     let tgResult: any;
 
+    // Dynamically calculate telegramFieldKey based on destination endpoint
+    let telegramFieldKey = 'document';
+    if (endpoint === 'sendPhoto') {
+      telegramFieldKey = 'photo';
+    } else if (endpoint === 'sendVideo') {
+      telegramFieldKey = 'video';
+    }
+
     if (Platform.OS !== 'web') {
       const cleanUri = localUri.startsWith('file://') ? localUri : `file://${localUri}`;
       console.log(`[Native Android Upload] Direct binary streaming for ${fileName} via FileSystem.uploadAsync to ${telegramDirectUrl}`);
@@ -101,7 +109,7 @@ async function uploadFileHelper(
       }
 
       const uploadResult = await FileSystem.uploadAsync(telegramDirectUrl, cleanUri, {
-        fieldName: fieldName,
+        fieldName: telegramFieldKey,
         httpMethod: 'POST',
         uploadType: FileSystem.FileSystemUploadType.MULTIPART,
         parameters: uploadParams,
@@ -149,7 +157,7 @@ async function uploadFileHelper(
       if (parameters.caption) {
         formData.append('caption', parameters.caption);
       }
-      formData.append(fieldName, blob, fileName);
+      formData.append(telegramFieldKey, blob, fileName);
 
       if (onProgress) {
         onProgress(40);
