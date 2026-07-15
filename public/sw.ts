@@ -36,10 +36,18 @@ sw.addEventListener('activate', (event: any) => {
 });
 
 sw.addEventListener('fetch', (event: any) => {
+  const requestUrl = new URL(event.request.url);
+  if (
+    requestUrl.hostname === 'api.telegram.org' ||
+    requestUrl.hostname.includes('supabase.co')
+  ) {
+    return event.respondWith(fetch(event.request));
+  }
+
   if (event.request.method !== 'GET') return;
 
   const request = event.request;
-  const url = new URL(request.url);
+  const url = requestUrl;
 
   // Only handle requests to our own origin
   if (url.origin !== sw.location.origin) return;
