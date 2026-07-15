@@ -6,108 +6,47 @@ import { Platform } from 'react-native';
 const fileInfoRequests = new Map<string, Promise<any>>();
 
 export async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries = 3): Promise<Response> {
-  if (Platform.OS !== 'web') {
-    let attempt = 0;
-    while (attempt < maxRetries) {
-      try {
-        const response = await fetch(url, options);
-        if (response.status === 429) {
-          attempt++;
-          let waitSec = 3;
-          try {
-            const data = await response.clone().json();
-            if (data.parameters && data.parameters.retry_after) {
-              waitSec = data.parameters.retry_after;
-            }
-          } catch (_) {}
-          console.warn(`[Telegram API] 429 Rate Limit. Waiting ${waitSec}s before retry (attempt ${attempt}/${maxRetries})...`);
-          await new Promise(resolve => setTimeout(resolve, waitSec * 1000));
-          continue;
-        }
-        
-        if (response.status >= 500 && response.status <= 504) {
-          attempt++;
-          if (attempt >= maxRetries) {
-            return response;
+  let attempt = 0;
+  while (attempt < maxRetries) {
+    try {
+      const response = await fetch(url, options);
+      if (response.status === 429) {
+        attempt++;
+        let waitSec = 3;
+        try {
+          const data = await response.clone().json();
+          if (data.parameters && data.parameters.retry_after) {
+            waitSec = data.parameters.retry_after;
           }
-          const backoffMs = Math.pow(2, attempt) * 1000 + Math.random() * 500;
-          console.warn(`[Telegram API] Status ${response.status}. Retrying in ${Math.round(backoffMs)}ms...`);
-          await new Promise(resolve => setTimeout(resolve, backoffMs));
-          continue;
-        }
-        
-        return response;
-      } catch (err: any) {
+        } catch (_) {}
+        console.warn(`[Telegram API] 429 Rate Limit. Waiting ${waitSec}s before retry (attempt ${attempt}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, waitSec * 1000));
+        continue;
+      }
+      
+      if (response.status >= 500 && response.status <= 504) {
         attempt++;
         if (attempt >= maxRetries) {
-          throw err;
+          return response;
         }
         const backoffMs = Math.pow(2, attempt) * 1000 + Math.random() * 500;
-        console.warn(`[Telegram API] Network Error: ${err.message}. Retrying in ${Math.round(backoffMs)}ms...`);
+        console.warn(`[Telegram API] Status ${response.status}. Retrying in ${Math.round(backoffMs)}ms...`);
         await new Promise(resolve => setTimeout(resolve, backoffMs));
+        continue;
       }
-    }
-    throw new Error('Maximum retries exceeded');
-  }
-
-  // Web fallback proxy logic
-  let rawUrl = url;
-  if (url.startsWith('https://corsproxy.io/?')) {
-    rawUrl = url.substring('https://corsproxy.io/?'.length);
-  } else if (url.startsWith('https://api.allorigins.win/raw?url=')) {
-    rawUrl = decodeURIComponent(url.substring('https://api.allorigins.win/raw?url='.length));
-  } else if (url.startsWith('https://api.codetabs.com/v1/proxy?quest=')) {
-    rawUrl = decodeURIComponent(url.substring('https://api.codetabs.com/v1/proxy?quest='.length));
-  } else if (url.includes('/api/telegram-proxy?url=')) {
-    const idx = url.indexOf('/api/telegram-proxy?url=');
-    rawUrl = decodeURIComponent(url.substring(idx + '/api/telegram-proxy?url='.length));
-  }
-
-  if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
-    return fetch(url, options);
-  }
-
-  const CORS_PROXIES = [
-    (u: string) => {
-      if (typeof window !== 'undefined' && window.location) {
-        const hostname = window.location.hostname;
-        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.')) {
-          return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(u)}`;
-        }
+      
+      return response;
+    } catch (err: any) {
+      attempt++;
+      if (attempt >= maxRetries) {
+        throw err;
       }
-      return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(u)}`;
-    },
-    (u: string) => `https://corsproxy.io/?${u}`,
-    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
-  ];
-
-  let lastError: any = null;
-  for (const getProxiedUrl of CORS_PROXIES) {
-    const proxiedUrl = getProxiedUrl(rawUrl);
-    let attempt = 0;
-    const currentMaxRetries = 2;
-    while (attempt < currentMaxRetries) {
-      try {
-        console.log(`[Proxy Fallback] Fetching via proxy: ${proxiedUrl}`);
-        const response = await fetch(proxiedUrl, options);
-        if (response.status === 403 || response.status === 429 || response.status >= 500) {
-          console.warn(`[Proxy Fallback] Proxy returned status ${response.status} for ${proxiedUrl}. Trying next proxy...`);
-          break;
-        }
-        return response;
-      } catch (err: any) {
-        attempt++;
-        lastError = err;
-        if (attempt >= currentMaxRetries) {
-          break;
-        }
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
+      const backoffMs = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+      console.warn(`[Telegram API] Network Error: ${err.message}. Retrying in ${Math.round(backoffMs)}ms...`);
+      await new Promise(resolve => setTimeout(resolve, backoffMs));
     }
   }
-
-  throw lastError || new Error(`All CORS proxies failed to fetch ${rawUrl}`);
+  throw new Error('Maximum retries exceeded');
 }
 
 async function uploadFileHelper(
@@ -118,17 +57,69 @@ async function uploadFileHelper(
   onProgress?: (percent: number) => void,
   signal?: AbortSignal,
   itemId?: string
-): Promise<{ status: number; body: string }> {
+): Promise<string> {
   try {
     const ext = fieldName === 'video' ? 'mp4' : fieldName === 'photo' ? 'jpg' : 'bin';
-    const mimeType = fieldName === 'video' ? 'video/mp4' : fieldName === 'photo' ? 'image/jpeg' : 'application/octet-stream';
     let fileName = parameters.caption || `upload_${Date.now()}`;
+    fileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
     if (!fileName.toLowerCase().endsWith(`.${ext}`)) {
       fileName = `${fileName}.${ext}`;
     }
 
-    let base64Data = '';
-    if (Platform.OS === 'web') {
+    // Extract target Telegram bot API token and endpoint directly from the url to construct the direct Telegram API gateway URL
+    let botToken = '';
+    let endpoint = '';
+
+    const decodedUrl = decodeURIComponent(url);
+    const botMatch = decodedUrl.match(/\/bot([^/]+)\/([^?&/]+)/);
+    if (botMatch) {
+      botToken = botMatch[1];
+      endpoint = botMatch[2];
+    } else {
+      const urlParts = url.split('/bot');
+      const botTokenPart = urlParts[1] || '';
+      botToken = botTokenPart.split('/')[0] || '';
+      endpoint = botTokenPart.split('/')[1] || '';
+    }
+
+    const telegramDirectUrl = `https://api.telegram.org/bot${botToken}/${endpoint}`;
+    let tgResult: any;
+
+    if (Platform.OS !== 'web') {
+      const cleanUri = localUri.startsWith('file://') ? localUri : `file://${localUri}`;
+      console.log(`[Native Android Upload] Direct binary streaming for ${fileName} via FileSystem.uploadAsync to ${telegramDirectUrl}`);
+
+      if (onProgress) {
+        onProgress(30);
+      }
+
+      const uploadParams: Record<string, string> = {
+        chat_id: parameters.chat_id,
+      };
+      if (parameters.caption) {
+        uploadParams.caption = parameters.caption;
+      }
+
+      const uploadResult = await FileSystem.uploadAsync(telegramDirectUrl, cleanUri, {
+        fieldName: fieldName,
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        parameters: uploadParams,
+      });
+
+      if (onProgress) {
+        onProgress(100);
+      }
+
+      try {
+        tgResult = JSON.parse(uploadResult.body);
+      } catch (_) {}
+
+      if (uploadResult.status < 200 || uploadResult.status >= 300 || !tgResult) {
+        const errorMsg = tgResult?.description || `Telegram upload failed with status ${uploadResult.status}`;
+        throw new Error(errorMsg);
+      }
+    } else {
       let blob: Blob;
       if (localUri.startsWith('webblob:')) {
         const { getWebBlob } = require('./webBlobStore');
@@ -153,96 +144,77 @@ async function uploadFileHelper(
         blob = await res.blob();
       }
 
-      base64Data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const result = reader.result as string;
-          // Clean the dataUrl prefix (stripping data:image/jpeg;base64,) out of FileReader output
-          resolve(result.split(',')[1] || '');
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
+      const formData = new FormData();
+      formData.append('chat_id', parameters.chat_id);
+      if (parameters.caption) {
+        formData.append('caption', parameters.caption);
+      }
+      formData.append(fieldName, blob, fileName);
+
+      if (onProgress) {
+        onProgress(40);
+      }
+
+      const controller = new AbortController();
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          controller.abort();
+        });
+      }
+
+      const response = await fetch(telegramDirectUrl, {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
       });
-    } else {
-      const FileSystem = require('expo-file-system');
-      const cleanUri = localUri.startsWith('file://') ? localUri : `file://${localUri}`;
-      base64Data = await FileSystem.readAsStringAsync(cleanUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+
+      if (onProgress) {
+        onProgress(100);
+      }
+
+      const responseText = await response.text();
+      try {
+        tgResult = JSON.parse(responseText);
+      } catch (_) {}
+
+      if (response.status < 200 || response.status >= 300 || !tgResult) {
+        const errorMsg = tgResult?.description || `Telegram direct upload failed with status ${response.status}`;
+        throw new Error(errorMsg);
+      }
     }
 
-    // Extract the target Telegram bot API endpoint from the url
-    const urlParts = url.split('/bot');
-    const botTokenPart = urlParts[1] || '';
-    const botToken = botTokenPart.split('/')[0] || '';
-    const endpoint = botTokenPart.split('/')[1] || '';
-
-    // Retrieve active Supabase user session token to authenticate request securely
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token || '';
-    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-
-    const payload = {
-      fileData: base64Data,
-      fileName,
-      mimeType,
-      botToken,
-      chat_id: parameters.chat_id,
-      endpoint,
-    };
-
-    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/telegram-upload-proxy`;
-
-    if (onProgress) {
-      onProgress(40);
-    }
-
-    const controller = new AbortController();
-    if (signal) {
-      signal.addEventListener('abort', () => {
-        controller.abort();
-      });
-    }
-
-    // 75 seconds timeout for large Base64 operations
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-    }, 75000);
-
-    const response = await fetch(edgeFunctionUrl, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token || anonKey}`,
-      },
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (onProgress) {
-      onProgress(100);
-    }
-
-    let result: any;
-    const bodyText = await response.text();
-    try {
-      result = JSON.parse(bodyText);
-    } catch (_) {}
-
-    if (!response.ok || !result || !result.file_id) {
-      const errorMsg = result?.error || result?.description || 'Failed to parse file_id configuration from server proxy';
+    if (!tgResult || tgResult.ok !== true) {
+      const errorMsg = tgResult?.description || 'Telegram upload API returned error.';
       throw new Error(errorMsg);
     }
 
-    return {
-      status: response.status,
-      body: bodyText,
-    };
+    // Extract file_id from the Telegram JSON response
+    let targetFileId = '';
+    const resultObj = tgResult.result;
+    if (resultObj) {
+      if (resultObj.photo && Array.isArray(resultObj.photo) && resultObj.photo.length > 0) {
+        targetFileId = resultObj.photo[resultObj.photo.length - 1].file_id;
+      } else if (resultObj.video && typeof resultObj.video === 'object') {
+        targetFileId = resultObj.video.file_id;
+      } else if (resultObj.document && typeof resultObj.document === 'object') {
+        targetFileId = resultObj.document.file_id;
+      } else {
+        const key = Object.keys(resultObj).find(
+          (k) => resultObj[k] && typeof resultObj[k] === 'object' && resultObj[k].file_id
+        );
+        if (key) {
+          targetFileId = resultObj[key].file_id;
+        }
+      }
+    }
+
+    if (!targetFileId) {
+      throw new Error('Telegram response did not return a valid file ID.');
+    }
+
+    return targetFileId;
   } catch (error: any) {
-    console.error('Base64 upload proxy fetch pipeline error:', error);
+    console.error('Direct Telegram upload pipeline error:', error);
     throw error;
   }
 }
@@ -272,17 +244,7 @@ export interface TelegramUploadResult {
 
 export const telegramService = {
   getTelegramApiUrl(endpoint: string, botToken: string): string {
-    const rawUrl = `https://api.telegram.org/bot${botToken}/${endpoint}`;
-    if (Platform.OS === 'web') {
-      if (typeof window !== 'undefined' && window.location) {
-        const hostname = window.location.hostname;
-        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.')) {
-          return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(rawUrl)}`;
-        }
-      }
-      return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(rawUrl)}`;
-    }
-    return rawUrl;
+    return `https://api.telegram.org/bot${botToken}/${endpoint}`;
   },
 
   async saveTelegramConfig(botToken: string, channelId: string): Promise<void> {
@@ -590,11 +552,11 @@ export const telegramService = {
       }
 
       let finalChannelId = targetChannelId;
-      let uploadResult;
+      let fileId: string;
       try {
         const url = this.getTelegramApiUrl(endpoint, botToken);
         
-        uploadResult = await uploadFileHelper(
+        fileId = await uploadFileHelper(
           url,
           uploadUri,
           fieldName,
@@ -614,7 +576,7 @@ export const telegramService = {
         if (fallback && fallback !== finalChannelId) {
           finalChannelId = fallback;
           const url = this.getTelegramApiUrl(endpoint, botToken);
-          uploadResult = await uploadFileHelper(
+          fileId = await uploadFileHelper(
             url,
             uploadUri,
             fieldName,
@@ -631,59 +593,10 @@ export const telegramService = {
         }
       }
 
-      if (uploadResult.status < 200 || uploadResult.status >= 300) {
-        let errorMsg = `HTTP Error ${uploadResult.status}`;
-        try {
-          const bodyJson = JSON.parse(uploadResult.body);
-          if (bodyJson.description) {
-            errorMsg = bodyJson.description;
-          }
-        } catch (_) {}
-        throw new Error(errorMsg);
-      }
-
-      const responseData = JSON.parse(uploadResult.body);
-      if (!responseData.ok) {
-        throw new Error(responseData.description || 'Telegram upload API returned error.');
-      }
-
-      // Handle both flat response from the proxy and standard/fallback Telegram response
-      const telegramMessageId = String(responseData.message_id || (responseData.result && responseData.result.message_id) || '');
-      let telegramFileId = responseData.file_id || '';
-      let telegramFileUniqueId = '';
-
-      if (!telegramFileId && responseData.result) {
-        const result = responseData.result;
-        if (fileType === 'image' && result.photo) {
-          const photoArr = result.photo;
-          const largestPhoto = photoArr[photoArr.length - 1];
-          telegramFileId = largestPhoto.file_id;
-          telegramFileUniqueId = largestPhoto.file_unique_id;
-        } else if (fileType === 'video' && result.video) {
-          telegramFileId = result.video.file_id;
-          telegramFileUniqueId = result.video.file_unique_id;
-        } else if (result.document) {
-          telegramFileId = result.document.file_id;
-          telegramFileUniqueId = result.document.file_unique_id;
-        } else {
-          const key = Object.keys(result).find(
-            (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
-          );
-          if (key) {
-            telegramFileId = result[key].file_id;
-            telegramFileUniqueId = result[key].file_unique_id;
-          }
-        }
-      }
-
-      if (!telegramFileId) {
-        throw new Error('Telegram response did not return a valid file ID.');
-      }
-
       return {
-        telegramMessageId,
-        telegramFileId,
-        telegramFileUniqueId,
+        telegramMessageId: '',
+        telegramFileId: fileId,
+        telegramFileUniqueId: '',
       };
     } finally {
       if (tempCopiedFile) {
@@ -767,48 +680,14 @@ export const telegramService = {
 
       const url = this.getTelegramApiUrl(endpoint, botToken);
       
-      const uploadResult = await uploadFileHelper(url, data.localUri, fieldName, {
+      const fileId = await uploadFileHelper(url, data.localUri, fieldName, {
         chat_id: channelId,
         caption: formattedCaption,
       });
 
-      if (uploadResult.status < 200 || uploadResult.status >= 300) {
-        throw new Error(`HTTP Error ${uploadResult.status}`);
-      }
-
-      const responseData = JSON.parse(uploadResult.body);
-      if (!responseData.ok) {
-        throw new Error(responseData.description || 'Telegram upload API returned error.');
-      }
-
-      const telegramMessageId = String(responseData.message_id || (responseData.result && responseData.result.message_id) || '');
-      let telegramFileId = responseData.file_id || '';
-
-      if (!telegramFileId && responseData.result) {
-        const result = responseData.result;
-        if (data.mediaType === 'image' && result.photo) {
-          const photoArr = result.photo;
-          const largestPhoto = photoArr[photoArr.length - 1];
-          telegramFileId = largestPhoto.file_id;
-        } else if (data.mediaType === 'video' && result.video) {
-          telegramFileId = result.video.file_id;
-        } else {
-          const key = Object.keys(result).find(
-            (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
-          );
-          if (key) {
-            telegramFileId = result[key].file_id;
-          }
-        }
-      }
-
-      if (!telegramFileId) {
-        throw new Error('Telegram response did not return a valid file ID.');
-      }
-
       return {
-        telegramMessageId,
-        telegramFileId,
+        telegramMessageId: '',
+        telegramFileId: fileId,
       };
     } catch (error) {
       console.warn('Failed to send snap to Telegram:', error);
@@ -854,9 +733,9 @@ export const telegramService = {
     const url = this.getTelegramApiUrl('sendDocument', botToken);
 
     let finalChannelId = targetChannelId;
-    let uploadResult;
+    let fileId: string;
     try {
-      uploadResult = await uploadFileHelper(
+      fileId = await uploadFileHelper(
         url,
         chunkUri,
         'document',
@@ -875,7 +754,7 @@ export const telegramService = {
       const fallback = await this.selectTargetChannel(chunkSize).catch(() => null);
       if (fallback && fallback !== finalChannelId) {
         finalChannelId = fallback;
-        uploadResult = await uploadFileHelper(
+        fileId = await uploadFileHelper(
           url,
           chunkUri,
           'document',
@@ -892,46 +771,9 @@ export const telegramService = {
       }
     }
 
-    if (uploadResult.status < 200 || uploadResult.status >= 300) {
-      let errorMsg = `HTTP Error ${uploadResult.status}`;
-      try {
-        const bodyJson = JSON.parse(uploadResult.body);
-        if (bodyJson.description) {
-          errorMsg = bodyJson.description;
-        }
-      } catch (_) {}
-      throw new Error(errorMsg);
-    }
-
-    const responseData = JSON.parse(uploadResult.body);
-    if (!responseData.ok) {
-      throw new Error(responseData.description || 'Telegram chunk upload API returned error.');
-    }
-
-    const telegramMessageId = String(responseData.message_id || (responseData.result && responseData.result.message_id) || '');
-    let telegramFileId = responseData.file_id || '';
-
-    if (!telegramFileId && responseData.result) {
-      const result = responseData.result;
-      if (result.document) {
-        telegramFileId = result.document.file_id;
-      } else {
-        const key = Object.keys(result).find(
-          (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
-        );
-        if (key) {
-          telegramFileId = result[key].file_id;
-        }
-      }
-    }
-
-    if (!telegramFileId) {
-      throw new Error('Telegram response did not return a valid file ID for chunk.');
-    }
-
     return {
-      telegramMessageId,
-      telegramFileId,
+      telegramMessageId: '',
+      telegramFileId: fileId,
     };
   },
 

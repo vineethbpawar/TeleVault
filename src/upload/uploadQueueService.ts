@@ -200,24 +200,11 @@ export const uploadQueueService = {
           await this.processQueueItem(pendingItem);
         } catch (itemError: any) {
           console.error(`[QueueService] Isolated upload transaction failed for item: ${pendingItem.file_name}`, itemError);
-          const nextRetry = (pendingItem.retry_count || 0) + 1;
-          const maxRetries = 5;
-          
-          if (nextRetry >= maxRetries) {
-            await this.updateUploadQueueItem(pendingItem.id, {
-              status: 'failed',
-              stage: 'Failed',
-              retry_count: nextRetry,
-              error_message: itemError.message || String(itemError),
-            });
-          } else {
-            await this.updateUploadQueueItem(pendingItem.id, {
-              status: 'pending',
-              stage: `Queued (Retry ${nextRetry}/${maxRetries})`,
-              retry_count: nextRetry,
-              error_message: itemError.message || String(itemError),
-            });
-          }
+          await this.updateUploadQueueItem(pendingItem.id, {
+            status: 'failed',
+            stage: 'Failed',
+            error_message: itemError.message || String(itemError),
+          });
         } finally {
           activeCount--;
         }
