@@ -368,52 +368,55 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     const fileName = `TV_${destination.toUpperCase()}_${timestamp}.${extension}`;
     const mimeType = type === 'video' ? 'video/mp4' : 'image/jpeg';
 
-    let localThumbnailUri: string | null = null;
-    if (type === 'video') {
-      try {
-        if (Platform.OS === 'web') {
-          localThumbnailUri = await new Promise<string>((resolve, reject) => {
-            const video = document.createElement('video');
-            video.src = uri;
-            video.crossOrigin = 'anonymous';
-            video.playsInline = true;
-            video.muted = true;
-            video.play().catch(() => {});
-            video.pause();
-            video.onloadeddata = () => {
-              video.currentTime = 0.5;
-            };
-            video.onseeked = () => {
-              try {
-                const canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                const ctx = canvas.getContext('2d');
-                if (ctx) {
-                  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                  resolve(canvas.toDataURL('image/jpeg'));
-                } else {
-                  reject(new Error('Failed to get 2D canvas context'));
-                }
-              } catch (err) {
-                reject(err);
-              }
-            };
-            video.onerror = (err) => reject(err);
-          });
-        } else {
-          const VideoThumbnails = require('expo-video-thumbnails');
-          const thumb = await VideoThumbnails.getThumbnailAsync(uri, { time: 500 });
-          if (thumb && thumb.uri) {
-            localThumbnailUri = thumb.uri;
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to pre-generate video thumbnail on save:', e);
-      }
-    }
+    showToast('Saving to Memories...');
+    navigation.navigate('Main', { screen: 'CameraTab' });
 
-    try {
+    (async () => {
+      let localThumbnailUri: string | null = null;
+      if (type === 'video') {
+        try {
+          if (Platform.OS === 'web') {
+            localThumbnailUri = await new Promise<string>((resolve, reject) => {
+              const video = document.createElement('video');
+              video.src = uri;
+              video.crossOrigin = 'anonymous';
+              video.playsInline = true;
+              video.muted = true;
+              video.play().catch(() => {});
+              video.pause();
+              video.onloadeddata = () => {
+                video.currentTime = 0.5;
+              };
+              video.onseeked = () => {
+                try {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = video.videoWidth;
+                  canvas.height = video.videoHeight;
+                  const ctx = canvas.getContext('2d');
+                  if (ctx) {
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    resolve(canvas.toDataURL('image/jpeg'));
+                  } else {
+                    reject(new Error('Failed to get 2D canvas context'));
+                  }
+                } catch (err) {
+                  reject(err);
+                }
+              };
+              video.onerror = (err) => reject(err);
+            });
+          } else {
+            const VideoThumbnails = require('expo-video-thumbnails');
+            const thumb = await VideoThumbnails.getThumbnailAsync(uri, { time: 500 });
+            if (thumb && thumb.uri) {
+              localThumbnailUri = thumb.uri;
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to pre-generate video thumbnail on save:', e);
+        }
+      }
+
       const itemId = Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
       let finalUri = uri;
       let finalThumbUri = localThumbnailUri;
@@ -450,7 +453,6 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         }
       }
 
-      // 1. Pre-insert the metadata record to Supabase so it shows up instantly in Memories!
       const metaData = getPackagedMetadata(finalThumbUri);
       const dbRecord = await fileService.saveFileMetadata({
         folder_id: null,
@@ -460,7 +462,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         file_size: fileSize || 0,
         is_private: destination === 'private_drive',
         is_drive_file: destination !== 'memories',
-        local_thumbnail_uri: finalThumbUri || finalUri, // fallback for fast preview
+        local_thumbnail_uri: finalThumbUri || finalUri,
         overlay_metadata: {
           ...metaData,
           local_uri: finalUri
@@ -470,7 +472,6 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         telegram_file_unique_id: null,
       });
 
-      // 2. Add to background upload queue referencing the DB file ID
       await uploadQueueService.addToUploadQueue({
         local_uri: finalUri,
         file_name: fileName,
@@ -486,15 +487,12 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         db_file_id: dbRecord.id,
       });
 
-      showToast('Saving to Memories...');
       uploadQueueService.processUploadQueue().catch(err => {
         console.error('[PreviewScreen] Proactive queue sync kickoff failed:', err);
       });
-      navigation.navigate('Main', { screen: 'CameraTab' });
-    } catch (error: any) {
-      console.error('Queue add failed:', error);
-      Alert.alert('Queue Error', 'Failed to schedule media upload.');
-    }
+    })().catch(err => {
+      console.error('[PreviewScreen] Background queue save failed:', err);
+    });
   };
 
   const getPublicUrlForWeb = async (mediaUri: string, mediaType: 'image' | 'video'): Promise<string> => {
@@ -560,32 +558,36 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     if (fileSize !== null && fileSize > 50 * 1024 * 1024) return;
 
     if (sendToUserId) {
-      setSendLoading(true);
       try {
-        await snapService.sendDirectSnap(
-          sendToUserId,
-          uri,
-          type === 'video' ? 'video' : 'image',
-          null, // caption
-          getPackagedMetadata(),
-          conversationId || null
-        );
+        // Optimistically navigate first to avoid UI blocking on the thread
         if (fromChatCamera) {
-          showToast('Snap sent!');
+          showToast('Sending snap...');
           navigation.navigate('ChatRoom', {
             friendId: sendToUserId,
             friendUsername: sendToUsername,
             conversationId: conversationId || undefined
           } as any);
         } else {
-          Alert.alert('Success', `Snap sent to @${sendToUsername}!`, [
-            { text: 'OK', onPress: () => navigation.goBack() },
-          ]);
+          showToast('Sending snap...');
+          navigation.goBack();
         }
+
+        // Fire-and-forget background upload execution
+        snapService.sendDirectSnap(
+          sendToUserId,
+          uri,
+          type === 'video' ? 'video' : 'image',
+          null, // caption
+          getPackagedMetadata(),
+          conversationId || null
+        ).then(() => {
+          showToast('Snap sent successfully!');
+          uploadQueueService.notifyListeners();
+        }).catch((err) => {
+          console.error('[PreviewScreen] Background snap upload failure:', err);
+        });
       } catch (err: any) {
-        Alert.alert('Error', err.message || 'Failed to send snap.');
-      } finally {
-        setSendLoading(false);
+        Alert.alert('Error', err.message || 'Failed to initiate sending snap.');
       }
     } else {
       navigation.navigate('SendTo', {
@@ -598,16 +600,24 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleAddToStory = async () => {
     if (fileSize !== null && fileSize > 50 * 1024 * 1024) return;
-    setStoryLoading(true);
     try {
-      await snapService.addToStory(uri, type === 'video' ? 'video' : 'image', null, getPackagedMetadata());
-      Alert.alert('Success', 'Added to story.', [
-        { text: 'OK', onPress: () => navigation.replace('Main', { screen: 'CameraTab' }) }
-      ]);
+      showToast('Adding to story...');
+      navigation.replace('Main', { screen: 'CameraTab' });
+
+      // Run background add to story
+      snapService.addToStory(
+        uri,
+        type === 'video' ? 'video' : 'image',
+        null,
+        getPackagedMetadata()
+      ).then(() => {
+        showToast('Story added successfully!');
+        uploadQueueService.notifyListeners();
+      }).catch((err) => {
+        console.error('[PreviewScreen] Background story upload failure:', err);
+      });
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to add to story.');
-    } finally {
-      setStoryLoading(false);
+      Alert.alert('Error', err.message || 'Failed to initiate story upload.');
     }
   };
 

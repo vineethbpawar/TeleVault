@@ -113,6 +113,10 @@ async function uploadFileHelper(
         httpMethod: 'POST',
         uploadType: FileSystem.FileSystemUploadType.MULTIPART,
         parameters: uploadParams,
+        headers: {
+          'Connection': 'keep-alive',
+          'Cache-Control': 'no-cache',
+        },
       });
 
       if (onProgress) {
@@ -172,6 +176,10 @@ async function uploadFileHelper(
 
       const response = await fetch(telegramDirectUrl, {
         method: 'POST',
+        headers: {
+          'Connection': 'keep-alive',
+          'Cache-Control': 'no-cache',
+        },
         body: formData,
         signal: controller.signal,
       });

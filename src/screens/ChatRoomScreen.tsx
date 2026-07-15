@@ -606,36 +606,53 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handlePickMedia = async (file: any) => {
     try {
-      setLoading(true);
-      
       // 1. Resolve preview path
       const res = await previewCacheService.resolveFilePreview(file);
       const uri = res.playableUri || res.previewUri || file.local_thumbnail_uri;
       if (!uri) throw new Error('Could not resolve media path.');
 
-      // 2. Send snap directly
-      await snapService.sendDirectSnap(
+      // 2. Append optimistic snap message in list
+      const tempId = `temp-${Date.now()}`;
+      if (conversationId && currentUserId) {
+        const optimisticMsg: ChatMessage = {
+          id: tempId,
+          conversation_id: conversationId,
+          sender_id: currentUserId,
+          receiver_id: otherUserId,
+          message_type: 'snap',
+          message_text: '📸 Sent a snap',
+          status: 'sending',
+          created_at: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, optimisticMsg]);
+      }
+
+      showToast('Sending snap...');
+      setShowMediaPicker(false);
+
+      // 3. Send snap directly in the background
+      snapService.sendDirectSnap(
         otherUserId,
         uri,
         file.file_type === 'video' ? 'video' : 'image',
         null,
         file.overlay_metadata || [],
         conversationId || null
-      );
-
-      showToast('Snap sent successfully!');
-      setShowMediaPicker(false);
-      
-      // 3. Reload messages list
-      if (conversationId) {
-        const updated = await chatService.getMessages(conversationId);
-        setMessages(updated);
-      }
+      ).then(async () => {
+        showToast('Snap sent successfully!');
+        if (conversationId) {
+          const updated = await chatService.getMessages(conversationId);
+          setMessages(updated);
+        }
+      }).catch((err) => {
+        console.error('[ChatRoomScreen] Background pick-media snap upload failure:', err);
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempId ? { ...m, status: 'failed' as any } : m))
+        );
+      });
     } catch (err: any) {
       console.error('[PICK_SEND] Failed to send memory snap:', err);
       Alert.alert('Send Failed', err.message || 'Failed to send snap.');
-    } finally {
-      setLoading(false);
     }
   };
 
