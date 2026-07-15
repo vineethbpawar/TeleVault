@@ -51,10 +51,29 @@ serve(async (req: Request) => {
       throw new Error(tgResult.description || 'Telegram upload failed');
     }
 
-    return new Response(
-      JSON.stringify(tgResult),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    // 1. Correctly extract the target media payload based on the endpoint structure
+    let targetFileId = '';
+    if (endpoint === 'sendVideo') {
+      targetFileId = tgResult.result.video.file_id;
+    } else if (endpoint === 'sendDocument') {
+      targetFileId = tgResult.result.document.file_id;
+    } else {
+      // Photos array contains multiple sizes; grab the highest resolution (last item)
+      const photosArray = tgResult.result.photo;
+      targetFileId = photosArray[photosArray.length - 1].file_id;
+    }
+
+    // 2. Return a standardized layout that your app can read effortlessly
+    const customReturnPayload = {
+      ok: true,
+      file_id: targetFileId,
+      message_id: tgResult.result.message_id
+    };
+
+    return new Response(JSON.stringify(customReturnPayload), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
 
   } catch (err: any) {
     console.error('Edge Function Error:', err);

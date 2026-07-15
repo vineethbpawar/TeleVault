@@ -226,7 +226,17 @@ async function uploadFileHelper(
       onProgress(100);
     }
 
+    let result: any;
     const bodyText = await response.text();
+    try {
+      result = JSON.parse(bodyText);
+    } catch (_) {}
+
+    if (!response.ok || !result || !result.file_id) {
+      const errorMsg = result?.error || result?.description || 'Failed to parse file_id configuration from server proxy';
+      throw new Error(errorMsg);
+    }
+
     return {
       status: response.status,
       body: bodyText,
@@ -637,32 +647,37 @@ export const telegramService = {
         throw new Error(responseData.description || 'Telegram upload API returned error.');
       }
 
-      const result = responseData.result;
-      const telegramMessageId = String(result.message_id);
-      let telegramFileId = '';
+      // Handle both flat response from the proxy and standard/fallback Telegram response
+      const telegramMessageId = String(responseData.message_id || (responseData.result && responseData.result.message_id) || '');
+      let telegramFileId = responseData.file_id || '';
       let telegramFileUniqueId = '';
 
-      if (fileType === 'image' && result.photo) {
-        const photoArr = result.photo;
-        const largestPhoto = photoArr[photoArr.length - 1];
-        telegramFileId = largestPhoto.file_id;
-        telegramFileUniqueId = largestPhoto.file_unique_id;
-      } else if (fileType === 'video' && result.video) {
-        telegramFileId = result.video.file_id;
-        telegramFileUniqueId = result.video.file_unique_id;
-      } else if (result.document) {
-        telegramFileId = result.document.file_id;
-        telegramFileUniqueId = result.document.file_unique_id;
-      } else {
-        const key = Object.keys(result).find(
-          (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
-        );
-        if (key) {
-          telegramFileId = result[key].file_id;
-          telegramFileUniqueId = result[key].file_unique_id;
+      if (!telegramFileId && responseData.result) {
+        const result = responseData.result;
+        if (fileType === 'image' && result.photo) {
+          const photoArr = result.photo;
+          const largestPhoto = photoArr[photoArr.length - 1];
+          telegramFileId = largestPhoto.file_id;
+          telegramFileUniqueId = largestPhoto.file_unique_id;
+        } else if (fileType === 'video' && result.video) {
+          telegramFileId = result.video.file_id;
+          telegramFileUniqueId = result.video.file_unique_id;
+        } else if (result.document) {
+          telegramFileId = result.document.file_id;
+          telegramFileUniqueId = result.document.file_unique_id;
         } else {
-          throw new Error('Telegram response did not return a valid file ID.');
+          const key = Object.keys(result).find(
+            (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
+          );
+          if (key) {
+            telegramFileId = result[key].file_id;
+            telegramFileUniqueId = result[key].file_unique_id;
+          }
         }
+      }
+
+      if (!telegramFileId) {
+        throw new Error('Telegram response did not return a valid file ID.');
       }
 
       return {
@@ -766,25 +781,29 @@ export const telegramService = {
         throw new Error(responseData.description || 'Telegram upload API returned error.');
       }
 
-      const result = responseData.result;
-      const telegramMessageId = String(result.message_id);
-      let telegramFileId = '';
+      const telegramMessageId = String(responseData.message_id || (responseData.result && responseData.result.message_id) || '');
+      let telegramFileId = responseData.file_id || '';
 
-      if (data.mediaType === 'image' && result.photo) {
-        const photoArr = result.photo;
-        const largestPhoto = photoArr[photoArr.length - 1];
-        telegramFileId = largestPhoto.file_id;
-      } else if (data.mediaType === 'video' && result.video) {
-        telegramFileId = result.video.file_id;
-      } else {
-        const key = Object.keys(result).find(
-          (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
-        );
-        if (key) {
-          telegramFileId = result[key].file_id;
+      if (!telegramFileId && responseData.result) {
+        const result = responseData.result;
+        if (data.mediaType === 'image' && result.photo) {
+          const photoArr = result.photo;
+          const largestPhoto = photoArr[photoArr.length - 1];
+          telegramFileId = largestPhoto.file_id;
+        } else if (data.mediaType === 'video' && result.video) {
+          telegramFileId = result.video.file_id;
         } else {
-          throw new Error('Telegram response did not return a valid file ID.');
+          const key = Object.keys(result).find(
+            (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
+          );
+          if (key) {
+            telegramFileId = result[key].file_id;
+          }
         }
+      }
+
+      if (!telegramFileId) {
+        throw new Error('Telegram response did not return a valid file ID.');
       }
 
       return {
@@ -889,21 +908,25 @@ export const telegramService = {
       throw new Error(responseData.description || 'Telegram chunk upload API returned error.');
     }
 
-    const result = responseData.result;
-    const telegramMessageId = String(result.message_id);
-    let telegramFileId = '';
+    const telegramMessageId = String(responseData.message_id || (responseData.result && responseData.result.message_id) || '');
+    let telegramFileId = responseData.file_id || '';
 
-    if (result.document) {
-      telegramFileId = result.document.file_id;
-    } else {
-      const key = Object.keys(result).find(
-        (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
-      );
-      if (key) {
-        telegramFileId = result[key].file_id;
+    if (!telegramFileId && responseData.result) {
+      const result = responseData.result;
+      if (result.document) {
+        telegramFileId = result.document.file_id;
       } else {
-        throw new Error('Telegram response did not return a valid file ID for chunk.');
+        const key = Object.keys(result).find(
+          (k) => result[k] && typeof result[k] === 'object' && result[k].file_id
+        );
+        if (key) {
+          telegramFileId = result[key].file_id;
+        }
       }
+    }
+
+    if (!telegramFileId) {
+      throw new Error('Telegram response did not return a valid file ID for chunk.');
     }
 
     return {
