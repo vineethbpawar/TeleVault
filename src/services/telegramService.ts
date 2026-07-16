@@ -82,7 +82,10 @@ async function uploadFileHelper(
       endpoint = botTokenPart.split('/')[1] || '';
     }
 
-    const telegramDirectUrl = `https://api.telegram.org/bot${botToken}/${endpoint}`;
+    let telegramDirectUrl = `https://api.telegram.org/bot${botToken}/${endpoint}`;
+    if (Platform.OS === 'web') {
+      telegramDirectUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(telegramDirectUrl)}`;
+    }
     let tgResult: any;
 
     // Dynamically calculate telegramFieldKey based on destination endpoint
@@ -282,7 +285,11 @@ export interface TelegramUploadResult {
 
 export const telegramService = {
   getTelegramApiUrl(endpoint: string, botToken: string): string {
-    return `https://api.telegram.org/bot${botToken}/${endpoint}`;
+    const url = `https://api.telegram.org/bot${botToken}/${endpoint}`;
+    if (Platform.OS === 'web') {
+      return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(url)}`;
+    }
+    return url;
   },
 
   async saveTelegramConfig(botToken: string, channelId: string): Promise<void> {
@@ -910,7 +917,7 @@ export const telegramService = {
       const { botToken, channelId } = await this.getTelegramConfig();
       if (!botToken || !channelId) return false;
       
-      const url = `https://api.telegram.org/bot${botToken}/deleteMessage`;
+      const url = this.getTelegramApiUrl('deleteMessage', botToken);
       const response = await fetchWithRetry(url, {
         method: 'POST',
         headers: {

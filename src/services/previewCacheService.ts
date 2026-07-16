@@ -327,7 +327,8 @@ export const previewCacheService = {
           if (Platform.OS === 'web') {
             if (file.is_private) {
               const { encryptionService } = require('./encryptionService');
-              previewUri = await encryptionService.decryptFile(url, fileName, file.mime_type);
+              const proxiedUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(url)}`;
+              previewUri = await encryptionService.decryptFile(proxiedUrl, fileName, file.mime_type);
             } else {
               previewUri = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
             }
@@ -408,7 +409,8 @@ export const previewCacheService = {
               if (file.is_private) {
                 const { encryptionService } = require('./encryptionService');
                 if (Platform.OS === 'web') {
-                  playableUri = await encryptionService.decryptFile(url, fileName, file.mime_type);
+                  const proxiedUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(url)}`;
+                  playableUri = await encryptionService.decryptFile(proxiedUrl, fileName, file.mime_type);
                 } else {
                   const tempEncPath = `${FileSystem.cacheDirectory}temp_enc_${file.id}_${fileName}`;
                   await FileSystem.downloadAsync(url, tempEncPath);
@@ -607,7 +609,8 @@ export const previewCacheService = {
           if (Platform.OS === 'web') {
             if (file.is_private) {
               const { encryptionService } = require('./encryptionService');
-              previewUri = await encryptionService.decryptFile(url, fileName, file.mime_type);
+              const proxiedUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(url)}`;
+              previewUri = await encryptionService.decryptFile(proxiedUrl, fileName, file.mime_type);
             } else {
               previewUri = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
             }
