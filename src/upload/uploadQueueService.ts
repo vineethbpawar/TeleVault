@@ -127,6 +127,14 @@ export const uploadQueueService = {
     return uploadStore.recoverUploadQueue();
   },
 
+  async getUploadLogs(): Promise<UploadQueueItem[]> {
+    return uploadStore.getUploadLogs();
+  },
+
+  async clearUploadLogs(): Promise<void> {
+    return uploadStore.clearUploadLogs();
+  },
+
   // Main Upload Queue Dispatcher Loop
   async processUploadQueue(): Promise<void> {
     if (isProcessingQueue) {

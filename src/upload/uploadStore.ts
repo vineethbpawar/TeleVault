@@ -3,6 +3,7 @@ import { UploadQueueItem } from '../types/camera';
 import { NORMAL_TELEGRAM_LIMIT_BYTES } from '../services/largeFileService';
 
 const QUEUE_STORAGE_KEY = 'televault_upload_queue';
+const HISTORY_STORAGE_KEY = 'televault_upload_history';
 let listeners: ((queue: UploadQueueItem[]) => void)[] = [];
 
 export const uploadStore = {
@@ -71,6 +72,7 @@ export const uploadStore = {
 
     queue.push(newItem);
     await this.saveUploadQueue(queue);
+    await this.addToHistory(newItem);
     await this.notifyListeners();
     return newItem;
   },
@@ -85,6 +87,7 @@ export const uploadStore = {
         updated_at: new Date().toISOString(),
       };
       await this.saveUploadQueue(queue);
+      await this.updateHistoryItem(id, updates);
       await this.notifyListeners();
     }
   },
@@ -113,6 +116,12 @@ export const uploadStore = {
       queue[index].error_message = null;
       queue[index].updated_at = new Date().toISOString();
       await this.saveUploadQueue(queue);
+      await this.updateHistoryItem(id, {
+        status: 'pending',
+        progress: 0,
+        stage: 'Queued',
+        error_message: null,
+      });
       await this.notifyListeners();
     }
   },
@@ -164,6 +173,64 @@ export const uploadStore = {
       }
     } catch (err) {
       console.error('[UploadStore] Queue recovery failed:', err);
+    }
+  },
+
+  async addToHistory(item: UploadQueueItem): Promise<void> {
+    try {
+      const stored = await AsyncStorage.getItem(HISTORY_STORAGE_KEY);
+      let history: UploadQueueItem[] = [];
+      if (stored) {
+        history = JSON.parse(stored);
+      }
+      history.unshift(item);
+      if (history.length > 100) {
+        history = history.slice(0, 100);
+      }
+      await AsyncStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+    } catch (e) {
+      console.error('[UploadStore] Failed to save history entry:', e);
+    }
+  },
+
+  async updateHistoryItem(id: string, updates: Partial<UploadQueueItem>): Promise<void> {
+    try {
+      const stored = await AsyncStorage.getItem(HISTORY_STORAGE_KEY);
+      if (stored) {
+        let history: UploadQueueItem[] = JSON.parse(stored);
+        const index = history.findIndex(item => item.id === id);
+        if (index !== -1) {
+          history[index] = {
+            ...history[index],
+            ...updates,
+            updated_at: new Date().toISOString(),
+          };
+          await AsyncStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+        }
+      }
+    } catch (e) {
+      console.error('[UploadStore] Failed to update history entry:', e);
+    }
+  },
+
+  async getUploadLogs(): Promise<UploadQueueItem[]> {
+    try {
+      const stored = await AsyncStorage.getItem(HISTORY_STORAGE_KEY);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+      return [];
+    } catch (error) {
+      console.error('[UploadStore] Failed to read history:', error);
+      return [];
+    }
+  },
+
+  async clearUploadLogs(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(HISTORY_STORAGE_KEY);
+    } catch (error) {
+      console.error('[UploadStore] Failed to clear history:', error);
     }
   },
 };

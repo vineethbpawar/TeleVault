@@ -82,6 +82,7 @@ import { UploadQueueBadge } from '../components/UploadQueueBadge';
 import TeleVaultLogo from '../components/TeleVaultLogo';
 import { fileService } from '../services/fileService';
 import { storageService } from '../services/storageService';
+import { uploadQueueService } from '../services/uploadQueueService';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'SettingsTab'>,
@@ -160,6 +161,11 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [nukePassword, setNukePassword] = useState('');
   const [nukeLoading, setNukeLoading] = useState(false);
   const [nukeError, setNukeError] = useState('');
+
+  // Upload Logs States
+  const [logsModalVisible, setLogsModalVisible] = useState(false);
+  const [uploadLogs, setUploadLogs] = useState<any[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
 
   const isFocused = useIsFocused();
 
@@ -268,6 +274,42 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     } catch (error) {
       Alert.alert('Error', 'Failed to update setting.');
     }
+  };
+
+  const fetchLogs = async () => {
+    setLogsLoading(true);
+    try {
+      const logs = await uploadQueueService.getUploadLogs();
+      setUploadLogs(logs || []);
+    } catch (err) {
+      console.error('Failed to load upload logs:', err);
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  const handleOpenLogsModal = () => {
+    setLogsModalVisible(true);
+    fetchLogs();
+  };
+
+  const handleClearLogs = async () => {
+    Alert.alert('Clear History Logs', 'Are you sure you want to clear all upload logs?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await uploadQueueService.clearUploadLogs();
+            setUploadLogs([]);
+            showToast('Logs cleared.');
+          } catch (e) {
+            Alert.alert('Error', 'Failed to clear logs.');
+          }
+        }
+      }
+    ]);
   };
 
   const updateProfilePrivacy = async (key: string, value: any) => {
@@ -840,6 +882,23 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Upload History & Logs */}
+        <View style={styles.section}>
+          <Text style={styles.sectionHeader}>Activity Logs</Text>
+          <View style={styles.card}>
+            <TouchableOpacity style={styles.itemRow} onPress={handleOpenLogsModal}>
+              <View style={styles.itemLeft}>
+                <FileText size={20} color="#FFFC00" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Upload History Logs</Text>
+                  <Text style={styles.itemSubtitle}>View logs of completed and failed enqueued tasks</Text>
+                </View>
+              </View>
+              <ChevronRight size={18} color="#8E8E93" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Privacy Settings */}
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>Privacy Controls</Text>
@@ -1268,6 +1327,94 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           />
         </View>
       </ScrollView>
+
+      {/* Upload History Logs Modal */}
+      <Modal
+        visible={logsModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setLogsModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '80%', width: '90%' }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={styles.modalTitle}>Upload History Logs</Text>
+              <TouchableOpacity onPress={() => setLogsModalVisible(false)}>
+                <XCircle size={24} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
+
+            {logsLoading ? (
+              <ActivityIndicator size="large" color="#FFFC00" style={{ marginVertical: 40 }} />
+            ) : uploadLogs.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                <FileText size={48} color="#2C2C2E" style={{ marginBottom: 12 }} />
+                <Text style={{ color: '#8E8E93', fontSize: 14 }}>No upload history logs recorded yet.</Text>
+              </View>
+            ) : (
+              <ScrollView style={{ flex: 1 }}>
+                {uploadLogs.map((log) => {
+                  const statusColors: Record<string, string> = {
+                    completed: '#30D158',
+                    failed: '#FF453A',
+                    pending: '#0A84FF',
+                    uploading: '#FFD60A',
+                    processing: '#BF5AF2',
+                  };
+                  const statusColor = statusColors[log.status] || '#8E8E93';
+                  const dateStr = log.created_at ? new Date(log.created_at).toLocaleString() : '';
+
+                  return (
+                    <View
+                      key={log.id}
+                      style={{
+                        paddingVertical: 12,
+                        borderBottomWidth: 0.5,
+                        borderBottomColor: '#2C2C2E',
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600', flex: 1, marginRight: 8 }} numberOfLines={1}>
+                          {log.file_name}
+                        </Text>
+                        <View style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                          <Text style={{ color: statusColor, fontSize: 10, fontWeight: '700', textTransform: 'uppercase' }}>
+                            {log.status}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                        <Text style={{ color: '#8E8E93', fontSize: 11 }}>
+                          {log.file_size ? (log.file_size / (1024 * 1024)).toFixed(2) : '0.00'} MB • {log.destination ? log.destination.toUpperCase() : 'UNKNOWN'}
+                        </Text>
+                        <Text style={{ color: '#8E8E93', fontSize: 11 }}>
+                          {dateStr}
+                        </Text>
+                      </View>
+
+                      {log.error_message && (
+                        <Text style={{ color: '#FF453A', fontSize: 11, marginTop: 4, fontStyle: 'italic' }}>
+                          Error: {log.error_message}
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            {uploadLogs.length > 0 && (
+              <TouchableOpacity
+                style={{ backgroundColor: '#FF453A', marginTop: 16, paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
+                onPress={handleClearLogs}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>Clear History Logs</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Nuke Data Modal */}
       <Modal
