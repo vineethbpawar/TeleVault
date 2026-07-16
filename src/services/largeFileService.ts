@@ -16,8 +16,8 @@ async function deleteFileHelper(tempUri: string): Promise<void> {
   }
 }
 
-export const NORMAL_TELEGRAM_LIMIT_BYTES = 50 * 1024 * 1024;
-export const CHUNK_SIZE_BYTES = 45 * 1024 * 1024;
+export const NORMAL_TELEGRAM_LIMIT_BYTES = Platform.OS === 'web' ? 4 * 1024 * 1024 : 50 * 1024 * 1024;
+export const CHUNK_SIZE_BYTES = Platform.OS === 'web' ? 4 * 1024 * 1024 : 45 * 1024 * 1024;
 export const MAX_CHUNKED_FILE_BYTES = 500 * 1024 * 1024;
 
 export const largeFileService = {

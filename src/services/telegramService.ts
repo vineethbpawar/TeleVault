@@ -83,8 +83,9 @@ async function uploadFileHelper(
     }
 
     let telegramDirectUrl = `https://api.telegram.org/bot${botToken}/${endpoint}`;
-    // Do NOT proxy uploads on Web to avoid Vercel's 4.5MB request body size limit.
-    // Telegram Bot API supports CORS directly for upload endpoints.
+    if (Platform.OS === 'web') {
+      telegramDirectUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(telegramDirectUrl)}`;
+    }
     let tgResult: any;
 
     // Dynamically calculate telegramFieldKey based on destination endpoint
