@@ -247,11 +247,18 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
 
         if (!result.canceled && result.assets && result.assets.length > 0) {
           const asset = result.assets[0];
+          const mime = asset.mimeType || 'application/octet-stream';
+          let detectedType: 'image' | 'video' | 'document' = 'document';
+          if (mime.startsWith('image/')) {
+            detectedType = 'image';
+          } else if (mime.startsWith('video/')) {
+            detectedType = 'video';
+          }
           await scheduleUpload(
             asset.uri,
-            'document',
+            detectedType,
             asset.name,
-            asset.mimeType || 'application/octet-stream',
+            mime,
             asset.size || 0
           );
         }
@@ -272,23 +279,42 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
     }
 
     try {
-      await uploadQueueService.addToUploadQueue({
-        local_uri: uri,
+      // 1. Create placeholder record in Supabase immediately with local URI cached in local_thumbnail_uri
+      const placeholder = await fileService.saveFileMetadata({
+        folder_id: currentFolder ? currentFolder.id : null,
         file_name: name,
         file_type: type,
         mime_type: mime,
         file_size: size,
-        destination: 'drive',
+        is_private: isPrivateMode,
+        is_drive_file: true,
+        local_thumbnail_uri: uri, // Cache local uri as preview cache during upload
+        telegram_file_id: null,
+        telegram_message_id: null,
+        telegram_file_unique_id: null,
+        overlay_metadata: null,
+      });
+
+      // 2. Queue the item referencing the placeholder's database ID
+      await uploadQueueService.addToUploadQueue({
+        db_file_id: placeholder.id,
+        local_uri: uri,
+        local_thumbnail_uri: uri,
+        file_name: name,
+        file_type: type,
+        mime_type: mime,
+        file_size: size,
+        destination: isPrivateMode ? 'private' : 'drive',
         folder_id: currentFolder ? currentFolder.id : null,
         is_private: isPrivateMode,
         is_drive_file: true,
         overlay_metadata: null,
       });
 
+      // Refresh files list immediately to show the placeholder
+      loadContent(false);
+
       setQueueModalVisible(true);
-      setTimeout(() => {
-        loadContent(false);
-      }, 2500);
     } catch (err: any) {
       Alert.alert('Upload Request Failed', err.message || 'Failed to enqueue upload.');
     }

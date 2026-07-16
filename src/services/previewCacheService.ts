@@ -339,7 +339,9 @@ export const previewCacheService = {
               previewUri = await encryptionService.decryptFile(tempEncPath, fileName, file.mime_type);
               await FileSystem.deleteAsync(tempEncPath, { idempotent: true });
             } else {
-              previewUri = url;
+              const localCachePath = `${FileSystem.cacheDirectory}cache_${file.id}_${fileName}`;
+              await FileSystem.downloadAsync(url, localCachePath);
+              previewUri = localCachePath;
             }
           }
           await this.setCachedPreview(file.telegram_file_id, previewUri);
@@ -417,7 +419,9 @@ export const previewCacheService = {
                 if (Platform.OS === 'web') {
                   playableUri = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
                 } else {
-                  playableUri = url;
+                  const localCachePath = `${FileSystem.cacheDirectory}cache_${file.id}_${fileName}`;
+                  await FileSystem.downloadAsync(url, localCachePath);
+                  playableUri = localCachePath;
                 }
               }
               if (playableUri) {
@@ -615,7 +619,9 @@ export const previewCacheService = {
               previewUri = await encryptionService.decryptFile(tempEncPath, fileName, file.mime_type);
               await FileSystem.deleteAsync(tempEncPath, { idempotent: true });
             } else {
-              previewUri = url;
+              const localCachePath = `${FileSystem.cacheDirectory}cache_${file.id}_${fileName}`;
+              await FileSystem.downloadAsync(url, localCachePath);
+              previewUri = localCachePath;
             }
           }
           await this.setCachedPreview(file.telegram_file_id, previewUri);
