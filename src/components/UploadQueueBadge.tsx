@@ -45,8 +45,6 @@ export const UploadQueueBadge: React.FC = () => {
     };
   }, [activeCount]);
 
-  if (activeCount === 0) return null;
-
   const spin = rotateAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
@@ -62,9 +60,11 @@ export const UploadQueueBadge: React.FC = () => {
         <Animated.View style={{ transform: [{ rotate: spin }] }}>
           <Loader2 size={16} color="#FFFC00" />
         </Animated.View>
-        <View style={styles.countBadge}>
-          <Text style={styles.countText}>{activeCount}</Text>
-        </View>
+        {activeCount > 0 && (
+          <View style={styles.countBadge}>
+            <Text style={styles.countText}>{activeCount}</Text>
+          </View>
+        )}
       </TouchableOpacity>
 
       {modalVisible && (
