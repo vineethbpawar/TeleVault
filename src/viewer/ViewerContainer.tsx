@@ -569,6 +569,11 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
             </View>
 
             <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Message ID</Text>
+              <Text style={styles.infoValue}>{activeFile.telegram_message_id || 'None'}</Text>
+            </View>
+
+            <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Upload State</Text>
               <Text style={styles.infoValue}>
                 {activeFile.telegram_file_id 
