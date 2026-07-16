@@ -11,6 +11,7 @@ import { getWebBlob, deleteWebBlob } from '../services/webBlobStore';
 import { activeControllers, activeNativeTasks, activeUploadRegistry } from '../services/activeUploadRegistry';
 import { queueProcessorRegistry } from '../services/queueProcessorRegistry';
 import { networkService } from '../services/networkService';
+import { supabase } from '../lib/supabase';
 
 let isRecovered = false;
 let isProcessingQueue = false;
@@ -144,6 +145,13 @@ export const uploadQueueService = {
       const online = await networkService.isOnline();
       if (!online) {
         console.log('[QueueService] Network is offline. Postponing upload queue processing.');
+        return;
+      }
+
+      // Check if user is authenticated in Supabase before starting processing
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || !session.user) {
+        console.log('[QueueService] User session not restored yet. Postponing upload queue processing.');
         return;
       }
 
