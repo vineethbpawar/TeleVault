@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Platform,
   Linking,
+  Modal,
 } from 'react-native';
 import AppInput from '../components/AppInput';
 import AppButton from '../components/AppButton';
@@ -79,6 +80,8 @@ import PinLockModal from '../components/PinLockModal';
 import UploadProgress from '../components/UploadProgress';
 import { UploadQueueBadge } from '../components/UploadQueueBadge';
 import TeleVaultLogo from '../components/TeleVaultLogo';
+import { fileService } from '../services/fileService';
+import { storageService } from '../services/storageService';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'SettingsTab'>,
@@ -151,6 +154,12 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [pinModalMode, setPinModalMode] = useState<'create' | 'verify'>('create');
   const [pendingToggle, setPendingToggle] = useState<'drive' | 'private' | null>(null);
   const [pendingDisable, setPendingDisable] = useState(false);
+
+  // Nuke Modal State
+  const [nukeModalVisible, setNukeModalVisible] = useState(false);
+  const [nukePassword, setNukePassword] = useState('');
+  const [nukeLoading, setNukeLoading] = useState(false);
+  const [nukeError, setNukeError] = useState('');
 
   const isFocused = useIsFocused();
 
@@ -496,6 +505,81 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         },
       },
     ]);
+  };
+
+  const handleDeleteAllData = async () => {
+    if (!nukePassword) {
+      setNukeError('Please enter your password.');
+      return;
+    }
+
+    setNukeLoading(true);
+    setNukeError('');
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !user.email) {
+        throw new Error('User session not found.');
+      }
+
+      // 1. Verify password by logging in again
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: nukePassword,
+      });
+
+      if (signInErr) {
+        throw new Error('Incorrect password. Please try again.');
+      }
+
+      // 2. Fetch and delete all user files (deletes from both Telegram and Supabase)
+      const { data: files, error: filesErr } = await supabase
+        .from('files')
+        .select('id')
+        .eq('user_id', user.id);
+
+      if (filesErr) {
+        throw new Error(filesErr.message || 'Failed to fetch files for deletion.');
+      }
+
+      if (files && files.length > 0) {
+        const fileIds = files.map((f: any) => f.id);
+        await fileService.bulkDelete(fileIds, true);
+      }
+
+      // 3. Delete folders
+      const { error: foldersErr } = await supabase
+        .from('folders')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (foldersErr) {
+        throw new Error(foldersErr.message || 'Failed to delete folders.');
+      }
+
+      // 4. Delete Telegram Configuration from Supabase & Storage
+      await telegramService.deleteTelegramConfig();
+
+      // 5. Clear all storage keys
+      await storageService.clear();
+
+      // 6. Delete user profile record
+      await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', user.id);
+
+      // 7. Sign out of Supabase
+      await supabase.auth.signOut();
+
+      setNukeModalVisible(false);
+      setNukePassword('');
+      showToast('All data has been permanently deleted.');
+    } catch (err: any) {
+      setNukeError(err.message || 'An error occurred during data deletion.');
+    } finally {
+      setNukeLoading(false);
+    }
   };
 
   return (
@@ -1169,11 +1253,87 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Log Out */}
+        {/* Log Out & Danger Zone */}
         <View style={[styles.section, { marginBottom: 30 }]}>
-          <AppButton title="Log Out" onPress={handleLogout} variant="danger" />
+          <AppButton 
+            title="Log Out" 
+            onPress={handleLogout} 
+            variant="secondary" 
+            style={{ marginBottom: 12 }} 
+          />
+          <AppButton 
+            title="Delete All Data (Danger Zone)" 
+            onPress={() => setNukeModalVisible(true)} 
+            variant="danger" 
+          />
         </View>
       </ScrollView>
+
+      {/* Nuke Data Modal */}
+      <Modal
+        visible={nukeModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          if (!nukeLoading) setNukeModalVisible(false);
+        }}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => {
+            if (!nukeLoading) setNukeModalVisible(false);
+          }}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>⚠️ Delete All Data</Text>
+            <Text style={styles.modalSubtitle}>
+              This action is <Text style={{ fontWeight: 'bold', color: '#FF3B30' }}>permanent and irreversible</Text>. 
+              It will completely delete all your files, folders, and configurations from both Supabase and your Telegram channel.
+            </Text>
+
+            <AppInput
+              label="Enter Account Password"
+              placeholder="Password"
+              value={nukePassword}
+              onChangeText={(text) => {
+                setNukePassword(text);
+                setNukeError('');
+              }}
+              isPassword={true}
+              autoCapitalize="none"
+            />
+
+            {nukeError ? <Text style={styles.errorText}>{nukeError}</Text> : null}
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  setNukeModalVisible(false);
+                  setNukePassword('');
+                  setNukeError('');
+                }}
+                disabled={nukeLoading}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={handleDeleteAllData}
+                disabled={nukeLoading}
+              >
+                {nukeLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmButtonText}>Delete Everything</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Upload Queue Overlay */}
       <UploadProgress visible={queueModalVisible} onClose={() => setQueueModalVisible(false)} />
@@ -1428,6 +1588,74 @@ const styles = StyleSheet.create({
     color: '#FFFC00',
     fontSize: 14,
     fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#1C1C1E',
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+  },
+  modalTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    color: '#8E8E93',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  modalButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#2C2C2E',
+    marginRight: 8,
+  },
+  confirmButton: {
+    backgroundColor: '#FF3B30',
+    marginLeft: 8,
+  },
+  cancelButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  confirmButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  errorText: {
+    color: '#FF3B30',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: -8,
+    marginBottom: 12,
+    textAlign: 'center',
   },
 });
 
