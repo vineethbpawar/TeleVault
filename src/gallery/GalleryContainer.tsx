@@ -64,8 +64,13 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
   const [captionText, setCaptionText] = useState('');
   const [captionModalVisible, setCaptionModalVisible] = useState(false);
 
+  const isFetchingRef = React.useRef(false);
+
   // Load files from metadata database
   const loadMemories = useCallback(async (showSpinner = true) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
     if (showSpinner && items.length === 0) setLoading(true);
     try {
       const data = await fileService.fetchMemories();
@@ -75,6 +80,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
     } finally {
       setLoading(false);
       setRefreshing(false);
+      isFetchingRef.current = false;
     }
   }, [items.length]);
 
