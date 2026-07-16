@@ -57,7 +57,7 @@ async function uploadFileHelper(
   onProgress?: (percent: number) => void,
   signal?: AbortSignal,
   itemId?: string
-): Promise<string> {
+): Promise<{ fileId: string; messageId: string; fileUniqueId: string }> {
   try {
     const ext = fieldName === 'video' ? 'mp4' : fieldName === 'photo' ? 'jpg' : 'bin';
     let fileName = parameters.caption || `upload_${Date.now()}`;
@@ -214,22 +214,30 @@ async function uploadFileHelper(
       throw new Error(errorMsg);
     }
 
-    // Extract file_id from the Telegram JSON response
+    // Extract file_id and message_id from the Telegram JSON response
     let targetFileId = '';
+    let targetFileUniqueId = '';
     const resultObj = tgResult.result;
+    const messageId = String(resultObj?.message_id || '');
+
     if (resultObj) {
       if (resultObj.photo && Array.isArray(resultObj.photo) && resultObj.photo.length > 0) {
-        targetFileId = resultObj.photo[resultObj.photo.length - 1].file_id;
+        const photoObj = resultObj.photo[resultObj.photo.length - 1];
+        targetFileId = photoObj.file_id;
+        targetFileUniqueId = photoObj.file_unique_id || '';
       } else if (resultObj.video && typeof resultObj.video === 'object') {
         targetFileId = resultObj.video.file_id;
+        targetFileUniqueId = resultObj.video.file_unique_id || '';
       } else if (resultObj.document && typeof resultObj.document === 'object') {
         targetFileId = resultObj.document.file_id;
+        targetFileUniqueId = resultObj.document.file_unique_id || '';
       } else {
         const key = Object.keys(resultObj).find(
           (k) => resultObj[k] && typeof resultObj[k] === 'object' && resultObj[k].file_id
         );
         if (key) {
           targetFileId = resultObj[key].file_id;
+          targetFileUniqueId = resultObj[key].file_unique_id || '';
         }
       }
     }
@@ -238,7 +246,11 @@ async function uploadFileHelper(
       throw new Error('Telegram response did not return a valid file ID.');
     }
 
-    return targetFileId;
+    return {
+      fileId: targetFileId,
+      messageId,
+      fileUniqueId: targetFileUniqueId,
+    };
   } catch (error: any) {
     console.error('Direct Telegram upload pipeline error:', error);
     throw error;
@@ -580,11 +592,11 @@ export const telegramService = {
       }
 
       let finalChannelId = targetChannelId;
-      let fileId: string;
+      let uploadRes: { fileId: string; messageId: string; fileUniqueId: string };
       try {
         const url = this.getTelegramApiUrl(endpoint, botToken);
         
-        fileId = await uploadFileHelper(
+        uploadRes = await uploadFileHelper(
           url,
           uploadUri,
           fieldName,
@@ -604,7 +616,7 @@ export const telegramService = {
         if (fallback && fallback !== finalChannelId) {
           finalChannelId = fallback;
           const url = this.getTelegramApiUrl(endpoint, botToken);
-          fileId = await uploadFileHelper(
+          uploadRes = await uploadFileHelper(
             url,
             uploadUri,
             fieldName,
@@ -622,9 +634,9 @@ export const telegramService = {
       }
 
       return {
-        telegramMessageId: '',
-        telegramFileId: fileId,
-        telegramFileUniqueId: '',
+        telegramMessageId: uploadRes.messageId,
+        telegramFileId: uploadRes.fileId,
+        telegramFileUniqueId: uploadRes.fileUniqueId,
       };
     } finally {
       if (tempCopiedFile) {
@@ -708,14 +720,14 @@ export const telegramService = {
 
       const url = this.getTelegramApiUrl(endpoint, botToken);
       
-      const fileId = await uploadFileHelper(url, data.localUri, fieldName, {
+      const uploadRes = await uploadFileHelper(url, data.localUri, fieldName, {
         chat_id: channelId,
         caption: formattedCaption,
       });
 
       return {
-        telegramMessageId: '',
-        telegramFileId: fileId,
+        telegramMessageId: uploadRes.messageId,
+        telegramFileId: uploadRes.fileId,
       };
     } catch (error) {
       console.warn('Failed to send snap to Telegram:', error);
@@ -761,9 +773,9 @@ export const telegramService = {
     const url = this.getTelegramApiUrl('sendDocument', botToken);
 
     let finalChannelId = targetChannelId;
-    let fileId: string;
+    let uploadRes: { fileId: string; messageId: string; fileUniqueId: string };
     try {
-      fileId = await uploadFileHelper(
+      uploadRes = await uploadFileHelper(
         url,
         chunkUri,
         'document',
@@ -782,7 +794,7 @@ export const telegramService = {
       const fallback = await this.selectTargetChannel(chunkSize).catch(() => null);
       if (fallback && fallback !== finalChannelId) {
         finalChannelId = fallback;
-        fileId = await uploadFileHelper(
+        uploadRes = await uploadFileHelper(
           url,
           chunkUri,
           'document',
@@ -800,8 +812,8 @@ export const telegramService = {
     }
 
     return {
-      telegramMessageId: '',
-      telegramFileId: fileId,
+      telegramMessageId: uploadRes.messageId,
+      telegramFileId: uploadRes.fileId,
     };
   },
 
