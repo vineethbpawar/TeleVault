@@ -146,7 +146,7 @@ export const uploadStore = {
       const queue = await this.getUploadQueue();
       let changed = false;
       const recovered = queue.map(item => {
-        if (item.status === 'uploading' || item.status === 'failed') {
+        if (item.status === 'uploading' || item.status === 'failed' || item.status === 'processing') {
           changed = true;
           return {
             ...item,

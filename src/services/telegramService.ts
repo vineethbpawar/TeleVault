@@ -276,6 +276,7 @@ export const telegramService = {
   async saveTelegramConfig(botToken: string, channelId: string): Promise<void> {
     await storageService.setItem(BOT_TOKEN_KEY, botToken.trim());
     await storageService.setItem(CHANNEL_ID_KEY, channelId.trim());
+    await storageService.removeItem('telegram_channels_list');
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -332,6 +333,7 @@ export const telegramService = {
   async deleteTelegramConfig(): Promise<void> {
     await storageService.removeItem(BOT_TOKEN_KEY);
     await storageService.removeItem(CHANNEL_ID_KEY);
+    await storageService.removeItem('telegram_channels_list');
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
