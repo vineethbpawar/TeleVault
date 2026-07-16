@@ -107,8 +107,9 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
     }
   }, [isFocused, filterType, isUnlocked, loadMemories]);
 
-  // Postgres realtime changes listener
+  // Postgres realtime changes listener (Only enabled on Native to prevent WebSocket hangs on Web/PWA)
   useEffect(() => {
+    if (Platform.OS === 'web') return;
     if (!isFocused) return;
     const channel = supabase
       .channel('memories_realtime_channel')

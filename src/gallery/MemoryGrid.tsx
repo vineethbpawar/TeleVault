@@ -116,6 +116,10 @@ export const MemoryGrid: React.FC<MemoryGridProps> = ({
           sections={sections}
           keyExtractor={(row, index) => `row-${row[0]?.id}-${index}`}
           stickySectionHeadersEnabled={true}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS !== 'web'}
           renderSectionHeader={({ section: { title } }) => (
             <View style={styles.sectionHeaderContainer}>
               <Text style={styles.sectionHeaderTitle}>{title}</Text>

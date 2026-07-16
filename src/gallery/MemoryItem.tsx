@@ -15,7 +15,9 @@ interface MemoryItemProps {
 
 export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
   ({ item, size, onPress, onLongPress, isSelected, isSelectionMode }) => {
-    const [imgUri, setImgUri] = useState<string | null>(null);
+    const [imgUri, setImgUri] = useState<string | null>(() => {
+      return previewCacheService.getInMemoryPreview(item.telegram_file_id || item.id);
+    });
 
     useEffect(() => {
       let active = true;

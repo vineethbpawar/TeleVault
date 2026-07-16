@@ -44,6 +44,7 @@ const CACHE_PREFIX = 'televault_preview_';
 const CACHE_EXPIRY_MS = 40 * 60 * 1000; // 40 minutes expiry for Telegram getFile URLs (links expire in 1 hr)
 
 const activeResolutions = new Map<string, Promise<any>>();
+const inMemoryBlobCache = new Map<string, string>();
 
 async function resolveWebBlobUrl(webBlobUri: string): Promise<string> {
   if (!webBlobUri.startsWith('webblob:')) return webBlobUri;
@@ -68,13 +69,26 @@ function isWebValidUri(uri: string | null | undefined): boolean {
 }
 
 export const previewCacheService = {
+  getInMemoryPreview(fileId: string): string | null {
+    if (Platform.OS === 'web') {
+      return inMemoryBlobCache.get(fileId) || null;
+    }
+    return null;
+  },
+
   async getCachedPreview(fileId: string): Promise<string | null> {
     try {
       if (Platform.OS === 'web') {
+        if (inMemoryBlobCache.has(fileId)) {
+          return inMemoryBlobCache.get(fileId)!;
+        }
+
         const { getWebBlob } = require('./webBlobStore');
         const blob = await getWebBlob('preview_' + fileId);
         if (blob) {
-          return URL.createObjectURL(blob);
+          const blobUrl = URL.createObjectURL(blob);
+          inMemoryBlobCache.set(fileId, blobUrl);
+          return blobUrl;
         }
         // Fallback to checking string cache (for legacy webblob references)
       }
@@ -130,6 +144,7 @@ export const previewCacheService = {
     try {
       if (Platform.OS === 'web') {
         if (url && url.startsWith('blob:')) {
+          inMemoryBlobCache.set(fileId, url);
           const res = await fetch(url);
           const blob = await res.blob();
           const { setWebBlob } = require('./webBlobStore');

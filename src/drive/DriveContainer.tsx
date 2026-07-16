@@ -53,7 +53,9 @@ export const DriveFileGridItem: React.FC<{
   isSelectionMode: boolean;
   onSelectToggle: () => void;
 }> = React.memo(({ file, size, onPress, onMorePress, isSelected, isSelectionMode, onSelectToggle }) => {
-  const [imgUri, setImgUri] = useState<string | null>(null);
+  const [imgUri, setImgUri] = useState<string | null>(() => {
+    return previewCacheService.getInMemoryPreview(file.telegram_file_id || file.id);
+  });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
