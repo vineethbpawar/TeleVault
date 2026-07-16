@@ -191,6 +191,54 @@ function showWebShareOverlay(
   `;
   container.appendChild(nameText);
 
+  // 0. Render Image/Video preview if applicable
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  const isImg = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext || '');
+  const isVid = ['mp4', 'mov', 'webm'].includes(ext || '');
+
+  if (isImg) {
+    const previewEl = document.createElement('img');
+    previewEl.src = blobUrl;
+    previewEl.style.cssText = `
+      display: block;
+      width: 100%;
+      max-height: 200px;
+      object-fit: contain;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      background: #000000;
+    `;
+    container.appendChild(previewEl);
+  } else if (isVid) {
+    const previewEl = document.createElement('video');
+    previewEl.src = blobUrl;
+    previewEl.controls = true;
+    previewEl.playsInline = true;
+    previewEl.style.cssText = `
+      display: block;
+      width: 100%;
+      max-height: 200px;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      background: #000000;
+    `;
+    container.appendChild(previewEl);
+  }
+
+  // 0.5. Add helper hint text
+  const hintText = document.createElement('p');
+  hintText.innerHTML = isImg || isVid 
+    ? '💡 <b>Hint:</b> You can also long-press / tap-hold the image or video above to save or share it directly!' 
+    : '💡 <b>Hint:</b> Use the download and share options below.';
+  hintText.style.cssText = `
+    margin: 0 0 20px 0;
+    font-size: 12px;
+    color: #FFFC00;
+    line-height: 1.4;
+    text-align: center;
+  `;
+  container.appendChild(hintText);
+
   // 1. Download Link Button (synchronous standard href download)
   const downloadBtn = document.createElement('a');
   downloadBtn.href = blobUrl;
