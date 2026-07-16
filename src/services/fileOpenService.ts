@@ -24,6 +24,24 @@ export const fileOpenService = {
 
       if (Platform.OS === 'web') {
         try {
+          // 1. For public files, download directly from Telegram to bypass Vercel's 4.5MB response size limit.
+          if (!file.is_private) {
+            const directUrl = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id);
+            const cleanUrl = directUrl.includes('telegram-proxy')
+              ? decodeURIComponent(directUrl.split('?url=')[1])
+              : directUrl;
+
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.href = cleanUrl;
+            downloadAnchor.download = file.file_name;
+            downloadAnchor.target = '_blank';
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            document.body.removeChild(downloadAnchor);
+            return;
+          }
+
+          // 2. Private/Encrypted files require javascript download & decryption
           const response = await fetch(cachedUri);
           if (!response.ok) {
             throw new Error(`Failed to fetch media file: ${response.statusText}`);
@@ -42,16 +60,30 @@ export const fileOpenService = {
           const fileObj = new File([mediaBlob], file.file_name, { type: mimeType });
           const blobUrl = window.URL.createObjectURL(fileObj);
 
+          // Web Share API support check (iOS Safari / Android Chrome PWAs support this)
+          if (navigator.share && navigator.canShare && navigator.canShare({ files: [fileObj] })) {
+            try {
+              await navigator.share({
+                files: [fileObj],
+                title: file.file_name,
+              });
+              window.URL.revokeObjectURL(blobUrl);
+              return;
+            } catch (shareErr) {
+              console.warn('Native share failed, falling back to download:', shareErr);
+            }
+          }
+
+          // Fallback to downloading
           const downloadAnchor = document.createElement('a');
           downloadAnchor.href = blobUrl;
           downloadAnchor.download = file.file_name;
           document.body.appendChild(downloadAnchor);
           downloadAnchor.click();
-
           document.body.removeChild(downloadAnchor);
           window.URL.revokeObjectURL(blobUrl);
         } catch (err: any) {
-          console.error('PWA Download Engine Failure:', err);
+          console.error('PWA Download/Share Engine Failure:', err);
           // Fallback to direct download link on failure
           const link = document.createElement('a');
           link.href = cachedUri;
