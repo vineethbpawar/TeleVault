@@ -8,6 +8,7 @@ import { VideoPlayer } from './VideoPlayer';
 import { previewCacheService } from '../services/previewCacheService';
 import { fileService } from '../services/fileService';
 import { showToast } from '../components/ToastBanner';
+import { supabase } from '../lib/supabase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -185,6 +186,7 @@ const showAlert = (
 };
 
 export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initialIndex, navigation }) => {
+  const [localFiles, setLocalFiles] = useState(files);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isHoldActive, setIsHoldActive] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -199,7 +201,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   // Snapchat-style animated progress bar timing
   const progressAnim = useRef(new Animated.Value(0)).current;
 
-  const activeFile = files[currentIndex];
+  const activeFile = localFiles[currentIndex];
 
   useEffect(() => {
     progressAnim.setValue(0);
@@ -224,6 +226,50 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
       progressAnim.stopAnimation();
     };
   }, [currentIndex, isHoldActive, isMenuOpen, isDragging]);
+
+  // Postgres realtime changes listener to automatically update localFiles when database changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('viewer_realtime_channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'files' }, async (payload) => {
+        if (payload.eventType === 'UPDATE' && payload.new) {
+          const updatedFile = payload.new as any;
+          setLocalFiles(prev => prev.map(f => f.id === updatedFile.id ? updatedFile : f));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Local upload queue state changes subscription
+  useEffect(() => {
+    const { uploadQueueService } = require('../services/uploadQueueService');
+    const unsubscribe = uploadQueueService.subscribeToQueue(async (updatedQueue: any[]) => {
+      const activeQueueItem = updatedQueue.find(q => q.db_file_id === activeFile?.id);
+      if (activeQueueItem && activeQueueItem.status === 'completed' && !activeFile.telegram_file_id) {
+        try {
+          const { data, error } = await supabase
+            .from('files')
+            .select('*')
+            .eq('id', activeFile.id)
+            .maybeSingle();
+
+          if (data && !error) {
+            setLocalFiles(prev => prev.map(f => f.id === activeFile.id ? data : f));
+          }
+        } catch (err) {
+          console.warn('[ViewerContainer] Failed to update active file metadata:', err);
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [currentIndex, activeFile?.id]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -270,7 +316,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   ).current;
 
   const goToNext = () => {
-    if (currentIndex < files.length - 1) {
+    if (currentIndex < localFiles.length - 1) {
       const nextIndex = currentIndex + 1;
       setCurrentIndex(nextIndex);
       flatListRef.current?.scrollToIndex({ index: nextIndex, animated: false });
@@ -291,7 +337,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
     setIsDragging(false);
     const contentOffsetX = e.nativeEvent.contentOffset.x;
     const index = Math.round(contentOffsetX / width);
-    if (index !== currentIndex && index >= 0 && index < files.length) {
+    if (index !== currentIndex && index >= 0 && index < localFiles.length) {
       setCurrentIndex(index);
     }
   };
@@ -299,7 +345,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   const handleMenuFavorite = async () => {
     try {
       const updated = await fileService.toggleFavoriteFile(activeFile.id, !activeFile.is_favorite);
-      activeFile.is_favorite = updated.is_favorite;
+      setLocalFiles(prev => prev.map(f => f.id === activeFile.id ? { ...f, is_favorite: updated.is_favorite } : f));
       showToast(updated.is_favorite ? 'Added to favorites.' : 'Removed from favorites.');
     } catch (_) {
       showAlert('Error', 'Failed to toggle favorite.');
@@ -362,7 +408,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        data={files}
+        data={localFiles}
         keyExtractor={(item) => item.id}
         initialScrollIndex={initialIndex}
         getItemLayout={(_, index) => ({
@@ -416,7 +462,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
                 })}
               </Text>
               <Text style={styles.indexIndicatorText}>
-                {currentIndex + 1} of {files.length}
+                {currentIndex + 1} of {localFiles.length}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
