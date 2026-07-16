@@ -19,20 +19,21 @@
     <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
 
-    <!-- Service Worker Unregistration (Prevents stale cache hangs) -->
+    <!-- Service Worker Registration -->
     <script>
-      try {
-        if ('serviceWorker' in navigator && typeof navigator.serviceWorker.getRegistrations === 'function') {
-          navigator.serviceWorker.getRegistrations().then(function(registrations) {
-            if (registrations && registrations.length > 0) {
-              for (var i = 0; i < registrations.length; i++) {
-                registrations[i].unregister().catch(function() {});
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js')
+            .then(function(reg) {
+              console.log('Service Worker registered:', reg.scope);
+              if (typeof reg.update === 'function') {
+                reg.update().catch(function() {});
               }
-            }
-          }).catch(function() {});
-        }
-      } catch (e) {
-        console.error('SW unregistration failed:', e);
+            })
+            .catch(function(err) {
+              console.error('Service Worker registration failed:', err);
+            });
+        });
       }
     </script>
 
