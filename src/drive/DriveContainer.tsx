@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { StyleSheet, View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Modal, Platform, AppState, ScrollView, RefreshControl } from 'react-native';
+import { StyleSheet, View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Modal, Platform, AppState, ScrollView, RefreshControl, Dimensions, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Plus, FolderPlus, Upload, ArrowLeft, Folder, ChevronRight, MoreVertical, Search, ArrowUpDown, Lock, FileText, HardDrive, Star, Image as ImageIcon, Video, Trash2, Edit, CheckSquare, X, Share2 } from 'lucide-react-native';
+import { Plus, FolderPlus, Upload, ArrowLeft, Folder, ChevronRight, MoreVertical, Search, ArrowUpDown, Lock, FileText, HardDrive, Star, Image as ImageIcon, Video, Trash2, Edit, CheckSquare, X, Share2, CloudUpload } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -15,6 +15,7 @@ import FileCard from '../components/FileCard';
 import PinLockModal from '../components/PinLockModal';
 import UploadProgress from '../components/UploadProgress';
 import { fileOpenService } from '../services/fileOpenService';
+import { previewCacheService } from '../services/previewCacheService';
 
 const Alert = {
   alert: (
@@ -41,6 +42,143 @@ const Alert = {
     RNAlert.alert(title, message, buttons);
   }
 };
+
+export const DriveFileGridItem: React.FC<{
+  file: any;
+  size: number;
+  onPress: () => void;
+  onMorePress: () => void;
+  isSelected: boolean;
+  isSelectionMode: boolean;
+  onSelectToggle: () => void;
+}> = React.memo(({ file, size, onPress, onMorePress, isSelected, isSelectionMode, onSelectToggle }) => {
+  const [imgUri, setImgUri] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const isImage = file.file_type === 'image' ||
+      (file.mime_type && file.mime_type.startsWith('image/')) ||
+      (file.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(file.file_name));
+    const isVideo = file.file_type === 'video';
+
+    if (isImage || isVideo || file.local_thumbnail_uri) {
+      setLoading(true);
+      previewCacheService.resolveFilePreview({
+        id: file.id,
+        file_name: file.file_name,
+        file_type: isImage ? 'image' : (isVideo ? 'video' : 'document'),
+        mime_type: file.mime_type,
+        local_thumbnail_uri: file.local_thumbnail_uri,
+        telegram_file_id: file.telegram_file_id,
+        is_private: file.is_private,
+        overlay_metadata: file.overlay_metadata,
+      }, false).then(res => {
+        if (active) {
+          if (res.previewUri) {
+            setImgUri(res.previewUri);
+          }
+          setLoading(false);
+        }
+      }).catch(() => {
+        if (active) setLoading(false);
+      });
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [file.id, file.local_thumbnail_uri, file.telegram_file_id]);
+
+  const isVideo = file.file_type === 'video';
+  const isImage = file.file_type === 'image' ||
+    (file.mime_type && file.mime_type.startsWith('image/')) ||
+    (file.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(file.file_name));
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={isSelectionMode ? onSelectToggle : onPress}
+      onLongPress={onMorePress}
+      style={{
+        width: size,
+        height: size,
+        margin: 4,
+        position: 'relative',
+        borderRadius: 16,
+        overflow: 'hidden',
+        backgroundColor: '#1E1E1E',
+        borderWidth: 1,
+        borderColor: '#2C2C2E',
+      }}
+    >
+      {/* Thumbnail background */}
+      {imgUri ? (
+        <Image source={{ uri: imgUri }} style={styles.gridFileImage} resizeMode="cover" />
+      ) : (
+        <View style={styles.gridFileFallback}>
+          {loading ? (
+            <ActivityIndicator size="small" color="#FFFC00" />
+          ) : isVideo ? (
+            <Video size={24} color="#8E8E93" />
+          ) : isImage ? (
+            <ImageIcon size={24} color="#8E8E93" />
+          ) : (
+            <FileText size={24} color="#007AFF" />
+          )}
+          {(!isImage && !isVideo) && (
+            <Text style={styles.gridDocName} numberOfLines={2}>
+              {file.file_name}
+            </Text>
+          )}
+        </View>
+      )}
+
+      {/* Title overlay for images/videos in drive to keep the drive feel */}
+      {(isImage || isVideo) && imgUri && (
+        <View style={styles.gridFileTitleOverlay}>
+          <Text style={styles.gridFileTitleText} numberOfLines={1}>
+            {file.file_name}
+          </Text>
+        </View>
+      )}
+
+      {/* Video Badge */}
+      {isVideo && (
+        <View style={styles.gridVideoBadge}>
+          <Video size={8} color="#FFFFFF" fill="#FFFFFF" />
+        </View>
+      )}
+
+      {/* Uploading indicator */}
+      {!file.telegram_file_id && (
+        <View style={styles.gridUploadingBadge}>
+          <CloudUpload size={8} color="#FFFC00" />
+        </View>
+      )}
+
+      {/* More menu trigger */}
+      {!isSelectionMode && (
+        <TouchableOpacity
+          style={styles.gridFileMore}
+          onPress={onMorePress}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <MoreVertical size={14} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
+
+      {/* Selection Checkbox */}
+      {isSelectionMode && (
+        <View style={[styles.gridSelectionOverlay, isSelected && styles.gridSelectionOverlaySelected]}>
+          <View style={[styles.gridCheckbox, isSelected && styles.gridCheckboxSelected]}>
+            {isSelected && <Text style={styles.gridCheckboxCheck}>✓</Text>}
+          </View>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+});
 
 export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFocused, isPrivateMode }) => {
   const insets = useSafeAreaInsets();
@@ -526,6 +664,49 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
     return list;
   }, [folders, searchQuery]);
 
+  const screenWidth = Dimensions.get('window').width;
+
+  const renderHeader = () => {
+    return (
+      <View>
+        {/* Folders Section */}
+        {processedFolders.length > 0 && (
+          <View>
+            <Text style={styles.sectionTitle}>Folders</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.foldersScroll}
+            >
+              {processedFolders.map(folder => (
+                <TouchableOpacity
+                  key={folder.id}
+                  style={styles.gridFolderCard}
+                  onPress={() => handleEnterFolder(folder)}
+                  onLongPress={() => handleSelectItemOption('folder', folder.id, folder.name)}
+                >
+                  <Folder size={18} color="#FFFC00" style={{ marginRight: 8 }} />
+                  <Text style={styles.gridFolderName} numberOfLines={1}>{folder.name}</Text>
+                  <TouchableOpacity
+                    style={styles.gridFolderMore}
+                    onPress={() => handleSelectItemOption('folder', folder.id, folder.name)}
+                  >
+                    <MoreVertical size={14} color="#8E8E93" />
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Files Section Title */}
+        {processedFiles.length > 0 && (
+          <Text style={styles.sectionTitle}>Files</Text>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {/* Search Header HUD */}
@@ -581,8 +762,11 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
         </View>
       ) : (
         <FlatList
-          data={[...processedFolders.map(f => ({ ...f, isFolder: true })), ...processedFiles]}
-          keyExtractor={(item: any) => (item.isFolder ? `folder-${item.id}` : `file-${item.id}`)}
+          key="grid-3-columns"
+          data={processedFiles}
+          numColumns={3}
+          keyExtractor={(item) => `file-${item.id}`}
+          ListHeaderComponent={renderHeader}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -591,35 +775,20 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
               tintColor="#FFFC00"
             />
           }
-          renderItem={({ item }: { item: any }) => {
-            if (item.isFolder) {
-              return (
-                <FolderCard
-                  folder={item}
-                  onPress={() => handleEnterFolder(item)}
-                  onMorePress={() => handleSelectItemOption('folder', item.id, item.name)}
-                />
-              );
-            }
-
+          renderItem={({ item }) => {
             const isSelected = selectedIds.has(item.id);
+            const size = (screenWidth - 32) / 3;
             return (
-              <View style={styles.fileCardRow}>
-                {isSelectionMode && (
-                  <TouchableOpacity
-                    style={[styles.checkbox, isSelected && styles.checkboxSelected]}
-                    onPress={() => toggleSelectId(item.id)}
-                  >
-                    {isSelected && <Text style={styles.checkboxCheck}>✓</Text>}
-                  </TouchableOpacity>
-                )}
-                <View style={{ flex: 1 }}>
-                  <FileCard
-                    file={item}
-                    onPress={() => handleFilePress(item)}
-                    onMorePress={isSelectionMode ? undefined : () => handleSelectItemOption('file', item.id, item.file_name)}
-                  />
-                </View>
+              <View style={{ padding: 2 }}>
+                <DriveFileGridItem
+                  file={item}
+                  size={size}
+                  onPress={() => handleFilePress(item)}
+                  onMorePress={() => handleSelectItemOption('file', item.id, item.file_name)}
+                  isSelected={isSelected}
+                  isSelectionMode={isSelectionMode}
+                  onSelectToggle={() => toggleSelectId(item.id)}
+                />
               </View>
             );
           }}
@@ -1048,6 +1217,126 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 12,
     fontWeight: '800',
+  },
+  gridFolderCard: {
+    width: 140,
+    height: 44,
+    backgroundColor: '#1E1E1E',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    marginRight: 10,
+  },
+  gridFolderName: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
+  },
+  gridFolderMore: {
+    padding: 2,
+  },
+  gridFileImage: {
+    width: '100%',
+    height: '100%',
+  },
+  gridFileFallback: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 8,
+  },
+  gridDocName: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 4,
+    width: '100%',
+  },
+  gridFileTitleOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  gridFileTitleText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '500',
+  },
+  gridVideoBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    padding: 3,
+    borderRadius: 6,
+  },
+  gridUploadingBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    padding: 3,
+    borderRadius: 6,
+  },
+  gridFileMore: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: 4,
+    borderRadius: 10,
+  },
+  gridSelectionOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    padding: 8,
+  },
+  gridSelectionOverlaySelected: {
+    backgroundColor: 'rgba(255, 252, 0, 0.15)',
+  },
+  gridCheckbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gridCheckboxSelected: {
+    backgroundColor: '#FFFC00',
+    borderColor: '#FFFC00',
+  },
+  gridCheckboxCheck: {
+    color: '#000000',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  sectionTitle: {
+    color: '#8E8E93',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginHorizontal: 12,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  foldersScroll: {
+    paddingHorizontal: 12,
+    paddingBottom: 8,
   },
 });
 export default DriveContainer;
