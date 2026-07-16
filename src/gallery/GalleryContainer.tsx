@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase';
 import { showToast } from '../components/ToastBanner';
 import PinLockModal from '../components/PinLockModal';
 import { fileOpenService } from '../services/fileOpenService';
+import { uploadQueueService } from '../services/uploadQueueService';
 
 interface GalleryContainerProps {
   navigation: any;
@@ -117,6 +118,18 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
 
     return () => {
       supabase.removeChannel(channel);
+    };
+  }, [isFocused, loadMemories]);
+
+  // Local upload queue changes listener
+  useEffect(() => {
+    if (!isFocused) return;
+    const unsubscribe = uploadQueueService.subscribeToQueue(() => {
+      loadMemories(false);
+    });
+
+    return () => {
+      unsubscribe();
     };
   }, [isFocused, loadMemories]);
 

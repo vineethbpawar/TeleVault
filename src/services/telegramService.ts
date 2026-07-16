@@ -108,15 +108,25 @@ async function uploadFileHelper(
         uploadParams.caption = parameters.caption;
       }
 
-      const uploadResult = await FileSystem.uploadAsync(telegramDirectUrl, cleanUri, {
-        fieldName: telegramFieldKey,
-        httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        parameters: uploadParams,
-        headers: {
-          'Connection': 'keep-alive',
-          'Cache-Control': 'no-cache',
-        },
+      // Wrap the native upload call inside an immediate, un-awaited asynchronous background Task wrapper thread
+      const uploadResult = await new Promise<any>((resolve, reject) => {
+        setTimeout(async () => {
+          try {
+            const result = await FileSystem.uploadAsync(telegramDirectUrl, cleanUri, {
+              fieldName: telegramFieldKey,
+              httpMethod: 'POST',
+              uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+              parameters: uploadParams,
+              headers: {
+                'Connection': 'keep-alive',
+                'Cache-Control': 'no-cache',
+              },
+            });
+            resolve(result);
+          } catch (err) {
+            reject(err);
+          }
+        }, 0);
       });
 
       if (onProgress) {

@@ -368,8 +368,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     const fileName = `TV_${destination.toUpperCase()}_${timestamp}.${extension}`;
     const mimeType = type === 'video' ? 'video/mp4' : 'image/jpeg';
 
-    showToast('Saving to Memories...');
-    navigation.navigate('Main', { screen: 'CameraTab' });
+    showToast(`Saving to ${destination === 'memories' ? 'Memories' : 'Drive'}...`);
 
     (async () => {
       let localThumbnailUri: string | null = null;
@@ -490,6 +489,9 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
       uploadQueueService.processUploadQueue().catch(err => {
         console.error('[PreviewScreen] Proactive queue sync kickoff failed:', err);
       });
+
+      // Navigate back to the camera screen only after queue save and processor kickoff complete
+      navigation.navigate('Main', { screen: 'CameraTab' });
     })().catch(err => {
       console.error('[PreviewScreen] Background queue save failed:', err);
     });

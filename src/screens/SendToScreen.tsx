@@ -411,6 +411,11 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
         }
       }
 
+      // Trigger upload queue processing
+      uploadQueueService.processUploadQueue().catch(err => {
+        console.error('[SendToScreen] Failed starting queue worker:', err);
+      });
+
       showToast('Successfully sent in background!');
       navigation.navigate('Main', { screen: 'CameraTab' } as any);
     } catch (err: any) {
