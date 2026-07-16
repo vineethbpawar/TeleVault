@@ -1619,6 +1619,8 @@ const styles = StyleSheet.create({
   },
   previewViewport: {
     flex: 1,
+    width: '100%',
+    alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',

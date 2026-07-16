@@ -300,6 +300,13 @@ export const previewCacheService = {
       let resolvedLocalUri = file.local_uri || file.local_thumbnail_uri || file.overlay_metadata?.local_uri;
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
+          if (file.telegram_file_id && resolvedLocalUri.startsWith('blob:')) {
+            resolvedLocalUri = null;
+          }
+        }
+      }
+      if (resolvedLocalUri) {
+        if (Platform.OS === 'web') {
           if (!isWebValidUri(resolvedLocalUri)) {
             // Ignore native file paths on Web
           } else {
@@ -415,6 +422,13 @@ export const previewCacheService = {
 
       // Locate video path
       let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
+      if (resolvedLocalUri) {
+        if (Platform.OS === 'web') {
+          if (file.telegram_file_id && resolvedLocalUri.startsWith('blob:')) {
+            resolvedLocalUri = null;
+          }
+        }
+      }
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
           if (!isWebValidUri(resolvedLocalUri)) {

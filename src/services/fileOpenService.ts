@@ -17,7 +17,7 @@ function showWebLoadingOverlay() {
     background-color: rgba(9, 10, 20, 0.85);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    z-index: 99999;
+    z-index: 2147483647;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -149,7 +149,7 @@ function showWebShareOverlay(
     background-color: rgba(9, 10, 20, 0.85);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    z-index: 99999;
+    z-index: 2147483647;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -368,10 +368,7 @@ export const fileOpenService = {
         try {
           let cleanUrl = '';
           if (!file.is_private) {
-            const directUrl = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id);
-            cleanUrl = directUrl.includes('telegram-proxy')
-              ? decodeURIComponent(directUrl.split('?url=')[1])
-              : directUrl;
+            cleanUrl = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id);
           } else {
             const cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
             const { encryptionService } = require('./encryptionService');
