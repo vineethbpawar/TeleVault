@@ -329,10 +329,9 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
     previewCacheService.resolveFilePreview(previewFile, false)
     .then(res => {
       if (active) {
-        if (res.previewUri) {
-          setResolvedPreviewUri(res.previewUri);
-        } else if (res.playableUri) {
-          setResolvedPreviewUri(res.playableUri);
+        const uri = res.playableUri || res.previewUri;
+        if (uri) {
+          setResolvedPreviewUri(uri);
         } else {
           setPreviewError('Failed to resolve preview.');
         }
