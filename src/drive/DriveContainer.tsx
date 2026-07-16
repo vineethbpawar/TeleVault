@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Modal, Platform, AppState, ScrollView, RefreshControl, Dimensions, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Plus, FolderPlus, Upload, ArrowLeft, Folder, ChevronRight, ChevronLeft, MoreVertical, Search, ArrowUpDown, Lock, FileText, HardDrive, Star, Image as ImageIcon, Video, Trash2, Edit, CheckSquare, X, Share2, CloudUpload, AlertTriangle } from 'lucide-react-native';
+import { Plus, FolderPlus, Upload, ArrowLeft, Folder, ChevronRight, ChevronLeft, MoreVertical, Search, ArrowUpDown, Lock, FileText, HardDrive, Star, Image as ImageIcon, Video, Trash2, Edit, CheckSquare, X, Share2, CloudUpload, AlertTriangle, Info } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -63,18 +63,13 @@ export const DriveFileGridItem: React.FC<{
       (file.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(file.file_name));
     const isVideo = file.file_type === 'video';
 
-    if (isImage || isVideo || file.local_thumbnail_uri) {
+    if (isImage || isVideo || file.local_thumbnail_uri || file.telegram_file_id) {
       setLoading(true);
-      previewCacheService.resolveFilePreview({
-        id: file.id,
-        file_name: file.file_name,
-        file_type: isImage ? 'image' : (isVideo ? 'video' : 'document'),
-        mime_type: file.mime_type,
-        local_thumbnail_uri: file.local_thumbnail_uri,
-        telegram_file_id: file.telegram_file_id,
-        is_private: file.is_private,
-        overlay_metadata: file.overlay_metadata,
-      }, false).then(res => {
+      previewCacheService.resolveFilePreview(file, false, undefined, (generatedUri) => {
+        if (active) {
+          setImgUri(generatedUri);
+        }
+      }).then(res => {
         if (active) {
           if (res.previewUri) {
             setImgUri(res.previewUri);
@@ -227,6 +222,7 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
   const [previewLoading, setPreviewLoading] = useState<boolean>(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [openingDoc, setOpeningDoc] = useState<boolean>(false);
+  const [showDetails, setShowDetails] = useState<boolean>(false);
 
   // Bulk Selection states
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -330,21 +326,7 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
     setPreviewLoading(true);
     setPreviewError(null);
 
-    const isImage = previewFile.file_type === 'image' ||
-      (previewFile.mime_type && previewFile.mime_type.startsWith('image/')) ||
-      (previewFile.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(previewFile.file_name));
-    const isVideo = previewFile.file_type === 'video';
-
-    previewCacheService.resolveFilePreview({
-      id: previewFile.id,
-      file_name: previewFile.file_name,
-      file_type: isImage ? 'image' : (isVideo ? 'video' : 'document'),
-      mime_type: previewFile.mime_type,
-      local_thumbnail_uri: previewFile.local_thumbnail_uri,
-      telegram_file_id: previewFile.telegram_file_id,
-      is_private: previewFile.is_private,
-      overlay_metadata: previewFile.overlay_metadata,
-    }, false)
+    previewCacheService.resolveFilePreview(previewFile, false)
     .then(res => {
       if (active) {
         if (res.previewUri) {
@@ -1084,6 +1066,10 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
               </Text>
 
               <View style={styles.previewActions}>
+                <TouchableOpacity onPress={() => setShowDetails(!showDetails)} style={styles.previewActionBtn}>
+                  <Info size={20} color={showDetails ? '#FFFC00' : '#FFFFFF'} />
+                </TouchableOpacity>
+
                 <TouchableOpacity onPress={handleToggleFavorite} style={styles.previewActionBtn}>
                   <Star
                     size={20}
@@ -1179,32 +1165,34 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
             </View>
 
             {/* Bottom details pane */}
-            <View style={[styles.previewDetailsPane, { paddingBottom: insets.bottom > 0 ? insets.bottom + 12 : 20 }]}>
-              <View style={styles.previewDetailRow}>
-                <Text style={styles.previewDetailLabel}>Size</Text>
-                <Text style={styles.previewDetailValue}>
-                  {previewFile.file_size ? (previewFile.file_size / (1024 * 1024)).toFixed(2) + ' MB' : '0 B'}
-                </Text>
-              </View>
-              <View style={styles.previewDetailRow}>
-                <Text style={styles.previewDetailLabel}>Date</Text>
-                <Text style={styles.previewDetailValue}>
-                  {previewFile.created_at ? new Date(previewFile.created_at).toLocaleDateString() : 'N/A'}
-                </Text>
-              </View>
-              <View style={styles.previewDetailRow}>
-                <Text style={styles.previewDetailLabel}>Protection</Text>
-                <Text style={[styles.previewDetailValue, { color: previewFile.is_private ? '#FFFC00' : '#8E8E93' }]}>
-                  {previewFile.is_private ? '🔒 E2EE Encrypted' : '🌐 Cloud storage'}
-                </Text>
-              </View>
-              {previewFile.telegram_message_id && (
+            {showDetails && (
+              <View style={[styles.previewDetailsPane, { paddingBottom: insets.bottom > 0 ? insets.bottom + 12 : 20 }]}>
                 <View style={styles.previewDetailRow}>
-                  <Text style={styles.previewDetailLabel}>Message ID</Text>
-                  <Text style={styles.previewDetailValue}>#{previewFile.telegram_message_id}</Text>
+                  <Text style={styles.previewDetailLabel}>Size</Text>
+                  <Text style={styles.previewDetailValue}>
+                    {previewFile.file_size ? (previewFile.file_size / (1024 * 1024)).toFixed(2) + ' MB' : '0 B'}
+                  </Text>
                 </View>
-              )}
-            </View>
+                <View style={styles.previewDetailRow}>
+                  <Text style={styles.previewDetailLabel}>Date</Text>
+                  <Text style={styles.previewDetailValue}>
+                    {previewFile.created_at ? new Date(previewFile.created_at).toLocaleDateString() : 'N/A'}
+                  </Text>
+                </View>
+                <View style={styles.previewDetailRow}>
+                  <Text style={styles.previewDetailLabel}>Protection</Text>
+                  <Text style={[styles.previewDetailValue, { color: previewFile.is_private ? '#FFFC00' : '#8E8E93' }]}>
+                    {previewFile.is_private ? '🔒 E2EE Encrypted' : '🌐 Cloud storage'}
+                  </Text>
+                </View>
+                {previewFile.telegram_message_id && (
+                  <View style={styles.previewDetailRow}>
+                    <Text style={styles.previewDetailLabel}>Message ID</Text>
+                    <Text style={styles.previewDetailValue}>#{previewFile.telegram_message_id}</Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         </Modal>
       )}
