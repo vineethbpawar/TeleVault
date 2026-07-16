@@ -56,6 +56,17 @@ async function resolveWebBlobUrl(webBlobUri: string): Promise<string> {
   return '';
 }
 
+function isWebValidUri(uri: string | null | undefined): boolean {
+  if (!uri) return false;
+  return (
+    uri.startsWith('http://') ||
+    uri.startsWith('https://') ||
+    uri.startsWith('blob:') ||
+    uri.startsWith('data:') ||
+    uri.startsWith('webblob:')
+  );
+}
+
 export const previewCacheService = {
   async getCachedPreview(fileId: string): Promise<string | null> {
     try {
@@ -70,7 +81,7 @@ export const previewCacheService = {
       }
 
       if (Platform.OS === 'web') {
-        if (url && (url.startsWith('blob:') || url.startsWith('file://') || url.startsWith('content://') || url.startsWith('ph://') || url.startsWith('assets-library://'))) {
+        if (url && !isWebValidUri(url)) {
           // Revoke/evict transient blob URLs or native files that don't belong on Web
           await cacheRemoveItem(CACHE_PREFIX + fileId);
           return null;
@@ -172,7 +183,7 @@ export const previewCacheService = {
     let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
     if (resolvedLocalUri) {
       if (Platform.OS === 'web') {
-        if (resolvedLocalUri.startsWith('file://') || resolvedLocalUri.startsWith('content://') || resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
+        if (!isWebValidUri(resolvedLocalUri)) {
           resolvedLocalUri = null;
         } else if (resolvedLocalUri.startsWith('webblob:')) {
           resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
@@ -255,7 +266,7 @@ export const previewCacheService = {
       let resolvedLocalUri = file.local_uri || file.local_thumbnail_uri || file.overlay_metadata?.local_uri;
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
-          if (resolvedLocalUri.startsWith('file://') || resolvedLocalUri.startsWith('content://') || resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
+          if (!isWebValidUri(resolvedLocalUri)) {
             // Ignore native file paths on Web
           } else {
             if (resolvedLocalUri.startsWith('webblob:')) {
@@ -372,7 +383,7 @@ export const previewCacheService = {
       let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
-          if (resolvedLocalUri.startsWith('file://') || resolvedLocalUri.startsWith('content://') || resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
+          if (!isWebValidUri(resolvedLocalUri)) {
             // Ignore native file paths on Web
           } else {
             if (resolvedLocalUri.startsWith('webblob:')) {
@@ -449,7 +460,7 @@ export const previewCacheService = {
 
       if (file.local_thumbnail_uri) {
         if (Platform.OS === 'web') {
-          if (file.local_thumbnail_uri.startsWith('file://') || file.local_thumbnail_uri.startsWith('content://') || file.local_thumbnail_uri.startsWith('ph://') || file.local_thumbnail_uri.startsWith('assets-library://')) {
+          if (!isWebValidUri(file.local_thumbnail_uri)) {
             // Ignore native file paths on Web
           } else {
             let thumbUri = file.local_thumbnail_uri;
@@ -482,7 +493,7 @@ export const previewCacheService = {
           const cachedThumb = await cacheGetItem(`televault_vid_thumb_${file.id}`);
           if (cachedThumb) {
             if (Platform.OS === 'web') {
-              if (cachedThumb.startsWith('file://') || cachedThumb.startsWith('content://') || cachedThumb.startsWith('ph://') || cachedThumb.startsWith('assets-library://')) {
+              if (!isWebValidUri(cachedThumb)) {
                 // Ignore native paths in web cache
               } else {
                 let resolvedThumb = cachedThumb;
@@ -561,7 +572,7 @@ export const previewCacheService = {
     let resolvedLocalUri = file.local_uri || file.local_thumbnail_uri || file.overlay_metadata?.local_uri;
     if (resolvedLocalUri) {
       if (Platform.OS === 'web') {
-        if (resolvedLocalUri.startsWith('file://') || resolvedLocalUri.startsWith('content://') || resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
+        if (!isWebValidUri(resolvedLocalUri)) {
           // Ignore native file paths on Web
         } else {
           if (resolvedLocalUri.startsWith('webblob:')) {
