@@ -1,6 +1,6 @@
 const sw = self as any;
 
-const CACHE_NAME = 'televault-cache-v5';
+const CACHE_NAME = 'televault-cache-v6';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -37,6 +37,12 @@ sw.addEventListener('activate', (event: any) => {
 
 sw.addEventListener('fetch', (event: any) => {
   const requestUrl = new URL(event.request.url);
+
+  // Do not intercept or cache any API endpoints
+  if (requestUrl.pathname.startsWith('/api/')) {
+    return;
+  }
+
   if (
     requestUrl.hostname === 'api.telegram.org' ||
     requestUrl.hostname.includes('supabase.co')
