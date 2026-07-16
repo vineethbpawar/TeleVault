@@ -191,6 +191,31 @@ function showWebShareOverlay(
   `;
   container.appendChild(nameText);
 
+  const isStandalone = 
+    (window.navigator as any).standalone || 
+    window.matchMedia('(display-mode: standalone)').matches;
+
+  if (isStandalone) {
+    const warningCard = document.createElement('div');
+    warningCard.style.cssText = `
+      background: rgba(255, 59, 48, 0.12);
+      border: 1px solid rgba(255, 59, 48, 0.25);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #FF453A;
+      line-height: 1.4;
+      text-align: left;
+    `;
+    warningCard.innerHTML = `
+      ⚠️ <b>App Limitation:</b> Mobile operating systems block file downloads and video sharing inside installed Home Screen apps (PWAs).
+      <br/><br/>
+      To download or share this file, please open TeleVault in your mobile <b>Safari</b> or <b>Chrome browser app</b> instead, where downloads are fully supported!
+    `;
+    container.appendChild(warningCard);
+  }
+
   // 0. Render Image/Video preview if applicable
   const ext = fileName.split('.').pop()?.toLowerCase();
   const isImg = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext || '');
