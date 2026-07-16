@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Modal, Platform, AppState, ScrollView, RefreshControl, Dimensions, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Plus, FolderPlus, Upload, ArrowLeft, Folder, ChevronRight, MoreVertical, Search, ArrowUpDown, Lock, FileText, HardDrive, Star, Image as ImageIcon, Video, Trash2, Edit, CheckSquare, X, Share2, CloudUpload } from 'lucide-react-native';
+import { Plus, FolderPlus, Upload, ArrowLeft, Folder, ChevronRight, ChevronLeft, MoreVertical, Search, ArrowUpDown, Lock, FileText, HardDrive, Star, Image as ImageIcon, Video, Trash2, Edit, CheckSquare, X, Share2, CloudUpload, AlertTriangle } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -16,6 +16,7 @@ import PinLockModal from '../components/PinLockModal';
 import UploadProgress from '../components/UploadProgress';
 import { fileOpenService } from '../services/fileOpenService';
 import { previewCacheService } from '../services/previewCacheService';
+import VideoPlayer from '../components/VideoPlayer';
 
 const Alert = {
   alert: (
@@ -219,6 +220,14 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
   const [dialogMode, setDialogMode] = useState<'create_folder' | 'rename_folder' | 'rename_file'>('create_folder');
   const [dialogInput, setDialogInput] = useState('');
 
+  // Custom Google Drive-like Preview states
+  const [previewFile, setPreviewFile] = useState<any | null>(null);
+  const [previewIndex, setPreviewIndex] = useState<number>(-1);
+  const [resolvedPreviewUri, setResolvedPreviewUri] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [openingDoc, setOpeningDoc] = useState<boolean>(false);
+
   // Bulk Selection states
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -305,16 +314,120 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
       return;
     }
 
-    if (targetFile.file_type === 'image' || targetFile.file_type === 'video') {
-      const mediaList = files.filter(f => f.file_type === 'image' || f.file_type === 'video');
-      const idx = mediaList.findIndex(f => f.id === targetFile.id);
-      navigation.navigate('MemoriesViewer', {
-        files: mediaList,
-        initialIndex: idx >= 0 ? idx : 0,
-      });
-    } else {
-      navigation.navigate('FileDetails', { file: targetFile });
+    const idx = processedFiles.findIndex(f => f.id === targetFile.id);
+    setPreviewIndex(idx);
+    setPreviewFile(targetFile);
+  };
+
+  useEffect(() => {
+    if (!previewFile) {
+      setResolvedPreviewUri(null);
+      setPreviewError(null);
+      return;
     }
+
+    let active = true;
+    setPreviewLoading(true);
+    setPreviewError(null);
+
+    const isImage = previewFile.file_type === 'image' ||
+      (previewFile.mime_type && previewFile.mime_type.startsWith('image/')) ||
+      (previewFile.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(previewFile.file_name));
+    const isVideo = previewFile.file_type === 'video';
+
+    previewCacheService.resolveFilePreview({
+      id: previewFile.id,
+      file_name: previewFile.file_name,
+      file_type: isImage ? 'image' : (isVideo ? 'video' : 'document'),
+      mime_type: previewFile.mime_type,
+      local_thumbnail_uri: previewFile.local_thumbnail_uri,
+      telegram_file_id: previewFile.telegram_file_id,
+      is_private: previewFile.is_private,
+      overlay_metadata: previewFile.overlay_metadata,
+    }, false)
+    .then(res => {
+      if (active) {
+        if (res.previewUri) {
+          setResolvedPreviewUri(res.previewUri);
+        } else if (res.playableUri) {
+          setResolvedPreviewUri(res.playableUri);
+        } else {
+          setPreviewError('Failed to resolve preview.');
+        }
+        setPreviewLoading(false);
+      }
+    })
+    .catch(err => {
+      if (active) {
+        setPreviewError(err.message || 'Failed to resolve preview.');
+        setPreviewLoading(false);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [previewFile?.id]);
+
+  const handleNextPreview = () => {
+    if (previewIndex >= 0 && previewIndex < processedFiles.length - 1) {
+      const nextIndex = previewIndex + 1;
+      setPreviewIndex(nextIndex);
+      setPreviewFile(processedFiles[nextIndex]);
+    }
+  };
+
+  const handlePrevPreview = () => {
+    if (previewIndex > 0) {
+      const prevIndex = previewIndex - 1;
+      setPreviewIndex(prevIndex);
+      setPreviewFile(processedFiles[prevIndex]);
+    }
+  };
+
+  const handleToggleFavorite = async () => {
+    if (!previewFile) return;
+    try {
+      const updated = await fileService.toggleFavoriteFile(previewFile.id, !previewFile.is_favorite);
+      setPreviewFile(updated);
+      loadContent(false);
+      showToast(updated.is_favorite ? 'Added to favorites.' : 'Removed from favorites.');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to toggle favorite.');
+    }
+  };
+
+  const handleOpenFile = async () => {
+    if (!previewFile) return;
+    setOpeningDoc(true);
+    try {
+      await fileOpenService.openDocument(previewFile as any);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to open file.');
+    } finally {
+      setOpeningDoc(false);
+    }
+  };
+
+  const handleDeletePreviewFile = () => {
+    if (!previewFile) return;
+    Alert.alert('Confirm Delete', 'Permanently delete this file?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await fileService.bulkDelete([previewFile.id], true);
+            setPreviewFile(null);
+            loadContent(false);
+            showToast('File deleted.');
+          } catch (err: any) {
+            Alert.alert('Error', err.message || 'Failed to delete file.');
+          }
+        }
+      }
+    ]);
   };
 
   const toggleSelectId = (id: string) => {
@@ -950,6 +1063,151 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
           </View>
         </View>
       </Modal>
+
+      {/* Custom Google Drive Preview Modal */}
+      {previewFile && (
+        <Modal
+          visible={previewFile !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPreviewFile(null)}
+        >
+          <View style={styles.previewBackdrop}>
+            {/* Top Toolbar */}
+            <View style={[styles.previewHeader, { paddingTop: insets.top > 0 ? insets.top + 6 : 16 }]}>
+              <TouchableOpacity onPress={() => setPreviewFile(null)} style={styles.previewBackBtn}>
+                <ArrowLeft size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+              
+              <Text style={styles.previewTitle} numberOfLines={1}>
+                {previewFile.file_name}
+              </Text>
+
+              <View style={styles.previewActions}>
+                <TouchableOpacity onPress={handleToggleFavorite} style={styles.previewActionBtn}>
+                  <Star
+                    size={20}
+                    color={previewFile.is_favorite ? '#FFFC00' : '#FFFFFF'}
+                    fill={previewFile.is_favorite ? '#FFFC00' : 'none'}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleOpenFile}
+                  disabled={openingDoc}
+                  style={styles.previewActionBtn}
+                >
+                  {openingDoc ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Share2 size={20} color="#FFFFFF" />
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={handleDeletePreviewFile} style={styles.previewActionBtn}>
+                  <Trash2 size={20} color="#FF3B30" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Viewport Center */}
+            <View style={styles.previewViewport}>
+              {previewLoading ? (
+                <ActivityIndicator size="large" color="#FFFC00" />
+              ) : previewError ? (
+                <View style={styles.previewErrorBox}>
+                  <AlertTriangle size={48} color="#FF3B30" style={{ marginBottom: 12 }} />
+                  <Text style={styles.previewErrorText}>{previewError}</Text>
+                </View>
+              ) : resolvedPreviewUri ? (
+                (() => {
+                  const isImage = previewFile.file_type === 'image' ||
+                    (previewFile.mime_type && previewFile.mime_type.startsWith('image/')) ||
+                    (previewFile.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(previewFile.file_name));
+                  const isVideo = previewFile.file_type === 'video';
+
+                  if (isImage) {
+                    return (
+                      <Image
+                        source={{ uri: resolvedPreviewUri }}
+                        style={styles.previewImage}
+                        resizeMode="contain"
+                      />
+                    );
+                  } else if (isVideo) {
+                    return (
+                      <VideoPlayer
+                        source={resolvedPreviewUri}
+                        style={styles.previewVideo}
+                      />
+                    );
+                  } else {
+                    return (
+                      <View style={styles.previewDocCard}>
+                        <FileText size={64} color="#007AFF" style={{ marginBottom: 16 }} />
+                        <Text style={styles.previewDocTitle} numberOfLines={2}>
+                          {previewFile.file_name}
+                        </Text>
+                        <Text style={styles.previewDocMeta}>
+                          {previewFile.mime_type || 'application/octet-stream'}
+                        </Text>
+                        <TouchableOpacity style={styles.previewOpenBtn} onPress={handleOpenFile}>
+                          <Text style={styles.previewOpenBtnText}>Open File</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  }
+                })()
+              ) : (
+                <View style={styles.previewErrorBox}>
+                  <CloudUpload size={48} color="#FFFC00" style={{ marginBottom: 12 }} />
+                  <Text style={styles.previewErrorText}>File is enqueued for upload...</Text>
+                </View>
+              )}
+
+              {/* Navigation Arrows */}
+              {previewIndex > 0 && (
+                <TouchableOpacity style={styles.previewArrowLeft} onPress={handlePrevPreview}>
+                  <ChevronLeft size={36} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+              {previewIndex < processedFiles.length - 1 && (
+                <TouchableOpacity style={styles.previewArrowRight} onPress={handleNextPreview}>
+                  <ChevronRight size={36} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Bottom details pane */}
+            <View style={[styles.previewDetailsPane, { paddingBottom: insets.bottom > 0 ? insets.bottom + 12 : 20 }]}>
+              <View style={styles.previewDetailRow}>
+                <Text style={styles.previewDetailLabel}>Size</Text>
+                <Text style={styles.previewDetailValue}>
+                  {previewFile.file_size ? (previewFile.file_size / (1024 * 1024)).toFixed(2) + ' MB' : '0 B'}
+                </Text>
+              </View>
+              <View style={styles.previewDetailRow}>
+                <Text style={styles.previewDetailLabel}>Date</Text>
+                <Text style={styles.previewDetailValue}>
+                  {previewFile.created_at ? new Date(previewFile.created_at).toLocaleDateString() : 'N/A'}
+                </Text>
+              </View>
+              <View style={styles.previewDetailRow}>
+                <Text style={styles.previewDetailLabel}>Protection</Text>
+                <Text style={[styles.previewDetailValue, { color: previewFile.is_private ? '#FFFC00' : '#8E8E93' }]}>
+                  {previewFile.is_private ? '🔒 E2EE Encrypted' : '🌐 Cloud storage'}
+                </Text>
+              </View>
+              {previewFile.telegram_message_id && (
+                <View style={styles.previewDetailRow}>
+                  <Text style={styles.previewDetailLabel}>Message ID</Text>
+                  <Text style={styles.previewDetailValue}>#{previewFile.telegram_message_id}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 };
@@ -1337,6 +1595,139 @@ const styles = StyleSheet.create({
   foldersScroll: {
     paddingHorizontal: 12,
     paddingBottom: 8,
+  },
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: '#090A14',
+    justifyContent: 'space-between',
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1C1C1E',
+  },
+  previewBackBtn: {
+    padding: 4,
+  },
+  previewTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    flex: 1,
+    marginHorizontal: 16,
+  },
+  previewActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  previewActionBtn: {
+    marginLeft: 16,
+    padding: 4,
+  },
+  previewViewport: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    paddingHorizontal: 40,
+  },
+  previewImage: {
+    width: '100%',
+    height: '85%',
+  },
+  previewVideo: {
+    width: '100%',
+    height: '85%',
+  },
+  previewDocCard: {
+    backgroundColor: '#1C1C1E',
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 320,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+  },
+  previewDocTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  previewDocMeta: {
+    color: '#8E8E93',
+    fontSize: 13,
+    marginBottom: 20,
+  },
+  previewOpenBtn: {
+    backgroundColor: '#FFFC00',
+    borderRadius: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+  },
+  previewOpenBtnText: {
+    color: '#000000',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  previewErrorBox: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  previewErrorText: {
+    color: '#8E8E93',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  previewArrowLeft: {
+    position: 'absolute',
+    left: 8,
+    top: '50%',
+    transform: [{ translateY: -18 }],
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 6,
+    borderRadius: 20,
+  },
+  previewArrowRight: {
+    position: 'absolute',
+    right: 8,
+    top: '50%',
+    transform: [{ translateY: -18 }],
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 6,
+    borderRadius: 20,
+  },
+  previewDetailsPane: {
+    backgroundColor: '#0F1123',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  previewDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  previewDetailLabel: {
+    color: '#8E8E93',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  previewDetailValue: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
 export default DriveContainer;
