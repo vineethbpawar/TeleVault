@@ -228,6 +228,7 @@ export const uploadQueueService = {
     console.log(`[QueueService] Processing queue item: ${pendingItem.file_name}`);
 
     // Safeguard check: If the file is already uploaded in Supabase, skip duplicate Telegram upload
+    // Self-healing check: If the file record no longer exists in Supabase (deleted by user), remove from queue!
     if (pendingItem.db_file_id) {
       try {
         const { data: dbFile, error: dbError } = await supabase
@@ -236,7 +237,13 @@ export const uploadQueueService = {
           .eq('id', pendingItem.db_file_id)
           .maybeSingle();
 
-        if (dbFile && !dbError && dbFile.telegram_file_id) {
+        if (!dbFile || dbError) {
+          console.log(`[QueueService] File ${pendingItem.file_name} no longer exists in database (deleted). Removing from queue.`);
+          await this.removeUploadQueueItem(itemId);
+          return;
+        }
+
+        if (dbFile.telegram_file_id) {
           console.log(`[QueueService] File ${pendingItem.file_name} is already uploaded in Supabase. Skipping duplicate Telegram upload.`);
           await this.updateUploadQueueItem(itemId, {
             status: 'completed',
@@ -246,7 +253,7 @@ export const uploadQueueService = {
           return;
         }
       } catch (err) {
-        console.warn('[QueueService] Pre-upload duplicate check failed:', err);
+        console.warn('[QueueService] Pre-upload database check failed:', err);
       }
     }
 
