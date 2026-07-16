@@ -1,6 +1,6 @@
 const sw = self as any;
 
-const CACHE_NAME = 'televault-cache-v7';
+const CACHE_NAME = 'televault-cache-v8';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -37,11 +37,6 @@ sw.addEventListener('activate', (event: any) => {
 
 sw.addEventListener('fetch', (event: any) => {
   const requestUrl = new URL(event.request.url);
-
-  // Do not intercept or cache any API endpoints
-  if (requestUrl.pathname.startsWith('/api/')) {
-    return;
-  }
 
   // Do not intercept external database and Telegram API requests (bypasses CORS blocks)
   if (

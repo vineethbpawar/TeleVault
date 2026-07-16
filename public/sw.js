@@ -1,6 +1,6 @@
 "use strict";
 const sw = self;
-const CACHE_NAME = 'televault-cache-v7';
+const CACHE_NAME = 'televault-cache-v8';
 const STATIC_ASSETS = [
     '/',
     '/index.html',
@@ -28,10 +28,6 @@ sw.addEventListener('activate', (event) => {
 });
 sw.addEventListener('fetch', (event) => {
     const requestUrl = new URL(event.request.url);
-    // Do not intercept or cache any API endpoints
-    if (requestUrl.pathname.startsWith('/api/')) {
-        return;
-    }
     // Do not intercept external database and Telegram API requests (bypasses CORS blocks)
     if (requestUrl.hostname === 'api.telegram.org' ||
         requestUrl.hostname.includes('supabase.co')) {
