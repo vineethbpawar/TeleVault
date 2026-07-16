@@ -1626,10 +1626,12 @@ const styles = StyleSheet.create({
   previewImage: {
     width: '100%',
     height: '85%',
+    alignSelf: 'stretch',
   },
   previewVideo: {
     width: '100%',
     height: '85%',
+    alignSelf: 'stretch',
   },
   previewDocCard: {
     backgroundColor: '#1C1C1E',

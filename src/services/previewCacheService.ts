@@ -558,7 +558,7 @@ export const previewCacheService = {
     }
 
     // 3. Document / other resolution
-    let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
+    let resolvedLocalUri = file.local_uri || file.local_thumbnail_uri || file.overlay_metadata?.local_uri;
     if (resolvedLocalUri) {
       if (Platform.OS === 'web') {
         if (resolvedLocalUri.startsWith('file://') || resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
