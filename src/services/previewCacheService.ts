@@ -330,7 +330,10 @@ export const previewCacheService = {
               const proxiedUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(url)}`;
               previewUri = await encryptionService.decryptFile(proxiedUrl, fileName, file.mime_type);
             } else {
-              previewUri = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
+              const downloadUrl = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
+              const res = await fetch(downloadUrl, { signal });
+              const blob = await res.blob();
+              previewUri = URL.createObjectURL(blob);
             }
           } else {
             if (file.is_private) {
@@ -419,7 +422,10 @@ export const previewCacheService = {
                 }
               } else {
                 if (Platform.OS === 'web') {
-                  playableUri = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
+                  const downloadUrl = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
+                  const res = await fetch(downloadUrl, { signal });
+                  const blob = await res.blob();
+                  playableUri = URL.createObjectURL(blob);
                 } else {
                   const localCachePath = `${FileSystem.cacheDirectory}cache_${file.id}_${fileName}`;
                   await FileSystem.downloadAsync(url, localCachePath);
@@ -612,7 +618,10 @@ export const previewCacheService = {
               const proxiedUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(url)}`;
               previewUri = await encryptionService.decryptFile(proxiedUrl, fileName, file.mime_type);
             } else {
-              previewUri = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
+              const downloadUrl = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
+              const res = await fetch(downloadUrl, { signal });
+              const blob = await res.blob();
+              previewUri = URL.createObjectURL(blob);
             }
           } else {
             if (file.is_private) {
