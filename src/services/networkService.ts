@@ -14,7 +14,7 @@ export const networkService = {
       });
       
       clearTimeout(timeoutId);
-      return res.status >= 200 && res.status < 400;
+      return res.status >= 200 && res.status < 500;
     } catch (_) {
       return false;
     }

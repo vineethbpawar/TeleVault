@@ -40,6 +40,7 @@ import { securityService } from '../services/securityService';
 import { PinLockModal } from '../components/PinLockModal';
 
 import { networkService } from '../services/networkService';
+import { GlobalUploadTracker } from '../components/GlobalUploadTracker';
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
@@ -308,6 +309,8 @@ export const AppNavigator: React.FC = () => {
           undismissable={true}
         />
       )}
+
+      {session && <GlobalUploadTracker />}
     </>
   );
 };
