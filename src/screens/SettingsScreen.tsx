@@ -77,6 +77,7 @@ import { showToast } from '../components/ToastBanner';
 import * as LocalAuthentication from 'expo-local-authentication';
 import PinLockModal from '../components/PinLockModal';
 import UploadProgress from '../components/UploadProgress';
+import { UploadQueueBadge } from '../components/UploadQueueBadge';
 import TeleVaultLogo from '../components/TeleVaultLogo';
 
 type Props = CompositeScreenProps<
@@ -508,6 +509,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Settings</Text>
+        <UploadQueueBadge />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -1187,7 +1189,9 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,
     height: 56,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   headerTitle: {
     color: '#FFFFFF',

@@ -11,6 +11,7 @@ import { showToast } from '../components/ToastBanner';
 import PinLockModal from '../components/PinLockModal';
 import { fileOpenService } from '../services/fileOpenService';
 import { uploadQueueService } from '../services/uploadQueueService';
+import { UploadQueueBadge } from '../components/UploadQueueBadge';
 
 interface GalleryContainerProps {
   navigation: any;
@@ -349,6 +350,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
             style={styles.searchInput}
           />
         </View>
+        <UploadQueueBadge />
         <TouchableOpacity
           style={[styles.bulkSelectToggleBtn, isSelectionMode && styles.bulkSelectToggleBtnActive]}
           onPress={toggleSelectionMode}
