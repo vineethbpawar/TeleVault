@@ -226,6 +226,30 @@ export const uploadQueueService = {
   async processQueueItem(pendingItem: UploadQueueItem): Promise<void> {
     const itemId = pendingItem.id;
     console.log(`[QueueService] Processing queue item: ${pendingItem.file_name}`);
+
+    // Safeguard check: If the file is already uploaded in Supabase, skip duplicate Telegram upload
+    if (pendingItem.db_file_id) {
+      try {
+        const { data: dbFile, error: dbError } = await supabase
+          .from('files')
+          .select('telegram_file_id')
+          .eq('id', pendingItem.db_file_id)
+          .maybeSingle();
+
+        if (dbFile && !dbError && dbFile.telegram_file_id) {
+          console.log(`[QueueService] File ${pendingItem.file_name} is already uploaded in Supabase. Skipping duplicate Telegram upload.`);
+          await this.updateUploadQueueItem(itemId, {
+            status: 'completed',
+            stage: 'Completed',
+            progress: 100,
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn('[QueueService] Pre-upload duplicate check failed:', err);
+      }
+    }
+
     let tempEncryptedUri: string | null = null;
     const controller = new AbortController();
     activeUploadRegistry.registerAbortController(itemId, controller);
