@@ -70,6 +70,15 @@ function isWebValidUri(uri: string | null | undefined): boolean {
 export const previewCacheService = {
   async getCachedPreview(fileId: string): Promise<string | null> {
     try {
+      if (Platform.OS === 'web') {
+        const { getWebBlob } = require('./webBlobStore');
+        const blob = await getWebBlob('preview_' + fileId);
+        if (blob) {
+          return URL.createObjectURL(blob);
+        }
+        // Fallback to checking string cache (for legacy webblob references)
+      }
+
       const stored = await cacheGetItem(CACHE_PREFIX + fileId);
       if (!stored) return null;
 
@@ -119,6 +128,16 @@ export const previewCacheService = {
 
   async setCachedPreview(fileId: string, url: string): Promise<void> {
     try {
+      if (Platform.OS === 'web') {
+        if (url && url.startsWith('blob:')) {
+          const res = await fetch(url);
+          const blob = await res.blob();
+          const { setWebBlob } = require('./webBlobStore');
+          await setWebBlob('preview_' + fileId, blob);
+        }
+        return;
+      }
+
       const entry = {
         url,
         timestamp: Date.now(),
