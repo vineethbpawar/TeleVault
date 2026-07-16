@@ -2,6 +2,283 @@ import * as Sharing from 'expo-sharing';
 import { telegramService } from './telegramService';
 import { Alert, Platform } from 'react-native';
 
+function showWebLoadingOverlay() {
+  const existing = document.getElementById('televault-web-share-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'televault-web-share-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(9, 10, 20, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 99999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #FFFFFF;
+  `;
+
+  const container = document.createElement('div');
+  container.style.cssText = `
+    width: 90%;
+    max-width: 320px;
+    background: #121324;
+    border: 1px solid rgba(255, 252, 0, 0.15);
+    border-radius: 24px;
+    padding: 28px;
+    text-align: center;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  `;
+
+  const spinner = document.createElement('div');
+  spinner.style.cssText = `
+    width: 40px;
+    height: 40px;
+    border: 4px solid rgba(255, 252, 0, 0.1);
+    border-top: 4px solid #FFFC00;
+    border-radius: 50%;
+    margin: 0 auto 20px auto;
+    animation: televault-spin 1s linear infinite;
+  `;
+
+  const text = document.createElement('p');
+  text.innerText = 'Downloading & Decrypting...';
+  text.style.cssText = `
+    margin: 0;
+    font-size: 15px;
+    font-weight: 500;
+    color: #FFFFFF;
+  `;
+
+  container.appendChild(spinner);
+  container.appendChild(text);
+  overlay.appendChild(container);
+  document.body.appendChild(overlay);
+
+  const styleSheet = document.createElement('style');
+  styleSheet.innerText = `
+    @keyframes televault-spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  `;
+  document.head.appendChild(styleSheet);
+}
+
+function showWebErrorOverlay(errorMsg: string) {
+  const overlay = document.getElementById('televault-web-share-overlay');
+  if (!overlay) return;
+
+  overlay.innerHTML = '';
+
+  const container = document.createElement('div');
+  container.style.cssText = `
+    width: 90%;
+    max-width: 340px;
+    background: #121324;
+    border: 1px solid rgba(255, 59, 48, 0.2);
+    border-radius: 24px;
+    padding: 28px;
+    text-align: center;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  `;
+
+  const title = document.createElement('h3');
+  title.innerText = 'Export Failed';
+  title.style.cssText = `
+    margin: 0 0 8px 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #FF3B30;
+  `;
+
+  const text = document.createElement('p');
+  text.innerText = errorMsg;
+  text.style.cssText = `
+    margin: 0 0 20px 0;
+    font-size: 14px;
+    color: #8E8E93;
+    word-break: break-all;
+  `;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.innerText = 'Dismiss';
+  closeBtn.style.cssText = `
+    width: 100%;
+    background: #FF3B30;
+    color: #FFFFFF;
+    border: none;
+    padding: 12px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+  `;
+  closeBtn.onclick = () => overlay.remove();
+
+  container.appendChild(title);
+  container.appendChild(text);
+  container.appendChild(closeBtn);
+  overlay.appendChild(container);
+}
+
+function showWebShareOverlay(
+  fileName: string,
+  blobUrl: string,
+  fileObj: File,
+  isPrivate: boolean
+) {
+  const existing = document.getElementById('televault-web-share-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'televault-web-share-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(9, 10, 20, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 99999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #FFFFFF;
+    animation: televault-fadeIn 0.25s ease;
+  `;
+
+  const container = document.createElement('div');
+  container.style.cssText = `
+    width: 90%;
+    max-width: 400px;
+    background: #121324;
+    border: 1px solid rgba(255, 252, 0, 0.15);
+    border-radius: 24px;
+    padding: 28px;
+    text-align: center;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    animation: televault-slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  `;
+
+  const title = document.createElement('h3');
+  title.innerText = isPrivate ? 'Decrypted File Ready' : 'File Export Ready';
+  title.style.cssText = `
+    margin: 0 0 8px 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: #FFFC00;
+  `;
+  container.appendChild(title);
+
+  const nameText = document.createElement('p');
+  nameText.innerText = fileName;
+  nameText.style.cssText = `
+    margin: 0 0 24px 0;
+    font-size: 14px;
+    color: #8E8E93;
+    word-break: break-all;
+  `;
+  container.appendChild(nameText);
+
+  // 1. Download Link Button (synchronous standard href download)
+  const downloadBtn = document.createElement('a');
+  downloadBtn.href = blobUrl;
+  downloadBtn.download = fileName;
+  downloadBtn.innerText = 'Download to Device';
+  downloadBtn.style.cssText = `
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    background: #FFFC00;
+    color: #000000;
+    text-decoration: none;
+    padding: 14px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 12px;
+    text-align: center;
+    cursor: pointer;
+  `;
+  container.appendChild(downloadBtn);
+
+  // 2. Share Button (synchronous user-triggered navigator.share)
+  const shareBtn = document.createElement('button');
+  shareBtn.innerText = 'Share to Apps / WhatsApp';
+  shareBtn.style.cssText = `
+    display: block;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.08);
+    color: #FFFFFF;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    padding: 14px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 20px;
+    cursor: pointer;
+  `;
+  shareBtn.onclick = async () => {
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [fileObj] })) {
+      try {
+        await navigator.share({
+          files: [fileObj],
+          title: fileName,
+        });
+      } catch (err) {
+        console.warn('Native share failed or closed:', err);
+      }
+    } else {
+      alert('Native sharing is not supported by your browser/PWA environment for this file.');
+    }
+  };
+  container.appendChild(shareBtn);
+
+  // 3. Cancel Button
+  const closeBtn = document.createElement('button');
+  closeBtn.innerText = 'Close';
+  closeBtn.style.cssText = `
+    background: transparent;
+    border: none;
+    color: #8E8E93;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  `;
+  closeBtn.onclick = () => {
+    overlay.remove();
+    window.URL.revokeObjectURL(blobUrl);
+  };
+  container.appendChild(closeBtn);
+
+  overlay.appendChild(container);
+  document.body.appendChild(overlay);
+
+  const styleSheet = document.createElement('style');
+  styleSheet.innerText = `
+    @keyframes televault-fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes televault-slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  `;
+  document.head.appendChild(styleSheet);
+}
+
 export const fileOpenService = {
   /**
    * Universal document opener/sharer.
@@ -13,41 +290,27 @@ export const fileOpenService = {
     }
 
     try {
-      // Download file to cache
-      let cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
-      
-      // Decrypt if E2EE private
-      if (file.is_private) {
-        const { encryptionService } = require('./encryptionService');
-        cachedUri = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type);
-      }
-
       if (Platform.OS === 'web') {
+        showWebLoadingOverlay();
         try {
-          // 1. For public files, download directly from Telegram to bypass Vercel's 4.5MB response size limit.
+          let cleanUrl = '';
           if (!file.is_private) {
             const directUrl = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id);
-            const cleanUrl = directUrl.includes('telegram-proxy')
+            cleanUrl = directUrl.includes('telegram-proxy')
               ? decodeURIComponent(directUrl.split('?url=')[1])
               : directUrl;
-
-            const downloadAnchor = document.createElement('a');
-            downloadAnchor.href = cleanUrl;
-            downloadAnchor.download = file.file_name;
-            downloadAnchor.target = '_blank';
-            document.body.appendChild(downloadAnchor);
-            downloadAnchor.click();
-            document.body.removeChild(downloadAnchor);
-            return;
+          } else {
+            const cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
+            const { encryptionService } = require('./encryptionService');
+            cleanUrl = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type);
           }
 
-          // 2. Private/Encrypted files require javascript download & decryption
-          const response = await fetch(cachedUri);
+          const response = await fetch(cleanUrl);
           if (!response.ok) {
             throw new Error(`Failed to fetch media file: ${response.statusText}`);
           }
           const mediaBlob = await response.blob();
-          
+
           let mimeType = file.mime_type;
           if (!mimeType) {
             const ext = file.file_name.split('.').pop()?.toLowerCase();
@@ -60,39 +323,21 @@ export const fileOpenService = {
           const fileObj = new File([mediaBlob], file.file_name, { type: mimeType });
           const blobUrl = window.URL.createObjectURL(fileObj);
 
-          // Web Share API support check (iOS Safari / Android Chrome PWAs support this)
-          if (navigator.share && navigator.canShare && navigator.canShare({ files: [fileObj] })) {
-            try {
-              await navigator.share({
-                files: [fileObj],
-                title: file.file_name,
-              });
-              window.URL.revokeObjectURL(blobUrl);
-              return;
-            } catch (shareErr) {
-              console.warn('Native share failed, falling back to download:', shareErr);
-            }
-          }
-
-          // Fallback to downloading
-          const downloadAnchor = document.createElement('a');
-          downloadAnchor.href = blobUrl;
-          downloadAnchor.download = file.file_name;
-          document.body.appendChild(downloadAnchor);
-          downloadAnchor.click();
-          document.body.removeChild(downloadAnchor);
-          window.URL.revokeObjectURL(blobUrl);
+          showWebShareOverlay(file.file_name, blobUrl, fileObj, !!file.is_private);
         } catch (err: any) {
-          console.error('PWA Download/Share Engine Failure:', err);
-          // Fallback to direct download link on failure
-          const link = document.createElement('a');
-          link.href = cachedUri;
-          link.download = file.file_name;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
+          console.error('PWA Share Overlay Error:', err);
+          showWebErrorOverlay(err.message || 'Failed to download or decrypt file.');
         }
         return;
+      }
+
+      // Download file to cache
+      let cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
+      
+      // Decrypt if E2EE private
+      if (file.is_private) {
+        const { encryptionService } = require('./encryptionService');
+        cachedUri = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type);
       }
 
       const isSharingAvailable = await Sharing.isAvailableAsync();
