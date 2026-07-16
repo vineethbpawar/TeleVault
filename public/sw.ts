@@ -1,6 +1,6 @@
 const sw = self as any;
 
-const CACHE_NAME = 'televault-cache-v6';
+const CACHE_NAME = 'televault-cache-v7';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -43,11 +43,12 @@ sw.addEventListener('fetch', (event: any) => {
     return;
   }
 
+  // Do not intercept external database and Telegram API requests (bypasses CORS blocks)
   if (
     requestUrl.hostname === 'api.telegram.org' ||
     requestUrl.hostname.includes('supabase.co')
   ) {
-    return event.respondWith(fetch(event.request));
+    return;
   }
 
   if (event.request.method !== 'GET') return;
