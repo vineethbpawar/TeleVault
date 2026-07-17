@@ -44,6 +44,117 @@ const Alert = {
   }
 };
 
+let pdfjsPromise: Promise<any> | null = null;
+
+function loadPdfJs(): Promise<any> {
+  if (pdfjsPromise) return pdfjsPromise;
+  pdfjsPromise = new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') {
+      reject(new Error('Window undefined'));
+      return;
+    }
+    if ((window as any).pdfjsLib) {
+      resolve((window as any).pdfjsLib);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js';
+    script.onload = () => {
+      const pdfjsLib = (window as any).pdfjsLib;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+      resolve(pdfjsLib);
+    };
+    script.onerror = (e) => reject(e);
+    document.head.appendChild(script);
+  });
+  return pdfjsPromise;
+}
+
+const WebPdfViewer: React.FC<{ url: string }> = ({ url }) => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+
+    loadPdfJs()
+      .then(async (pdfjsLib) => {
+        const loadingTask = pdfjsLib.getDocument(url);
+        const pdf = await loadingTask.promise;
+        if (!active) return;
+        setLoading(false);
+
+        const container = containerRef.current;
+        if (!container) return;
+        container.innerHTML = '';
+
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          if (!active) break;
+          const page = await pdf.getPage(pageNum);
+          const viewport = page.getViewport({ scale: 1.5 });
+
+          const canvas = document.createElement('canvas');
+          canvas.style.cssText = 'width: 100%; margin-bottom: 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: block;';
+          const context = canvas.getContext('2d');
+          if (context) {
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            container.appendChild(canvas);
+
+            const renderContext = {
+              canvasContext: context,
+              viewport: viewport,
+            };
+            await page.render(renderContext).promise;
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('PDF rendering error:', err);
+        if (active) {
+          setError(err.message || 'Failed to render PDF.');
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [url]);
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#FFFC00" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+        <Text style={{ color: '#FF3B30', textAlign: 'center' }}>{error}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        width: '100%',
+        height: '100%',
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        padding: '8px',
+      }}
+    />
+  );
+};
+
 export const DriveFileGridItem: React.FC<{
   file: any;
   size: number;
@@ -1171,16 +1282,17 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
                     );
                   } else if (isPdf && Platform.OS === 'web') {
                     return (
-                      <iframe
-                        src={resolvedPreviewUri}
-                        style={{
-                          width: '100%',
-                          height: '75vh',
-                          border: 'none',
-                          borderRadius: 12,
-                          backgroundColor: '#FFFFFF',
-                        }}
-                      />
+                      <View style={{
+                        width: '100%',
+                        height: '75vh',
+                        backgroundColor: '#1C1C1E',
+                        borderRadius: 12,
+                        padding: 8,
+                        borderWidth: 1,
+                        borderColor: '#2C2C2E',
+                      } as any}>
+                        <WebPdfViewer url={resolvedPreviewUri} />
+                      </View>
                     );
                   } else if (isText && Platform.OS === 'web') {
                     return (
