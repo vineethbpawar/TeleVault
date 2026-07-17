@@ -84,7 +84,16 @@ async function uploadFileHelper(
 
     let telegramDirectUrl = `https://api.telegram.org/bot${botToken}/${endpoint}`;
     if (Platform.OS === 'web') {
-      telegramDirectUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(telegramDirectUrl)}`;
+      // For file upload endpoints (sendVideo, sendPhoto, sendDocument) POST directly to
+      // api.telegram.org to bypass Vercel's 4.5 MB body-size limit and 10 s function
+      // timeout that cause uploads to hang at 58%.  Telegram returns
+      // Access-Control-Allow-Origin: * on its Bot API, so direct browser POSTs work.
+      // Only non-upload GET/metadata calls use the Vercel proxy for CORS safety.
+      const isUploadEndpoint = ['sendVideo', 'sendPhoto', 'sendDocument', 'sendAnimation', 'sendAudio', 'sendVoice'].includes(endpoint);
+      if (!isUploadEndpoint) {
+        telegramDirectUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(telegramDirectUrl)}`;
+      }
+      // Upload endpoints POST directly — no proxy needed.
     }
     let tgResult: any;
 
