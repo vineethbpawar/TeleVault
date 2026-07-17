@@ -17,6 +17,7 @@ import UploadProgress from '../components/UploadProgress';
 import { fileOpenService } from '../services/fileOpenService';
 import { previewCacheService } from '../services/previewCacheService';
 import VideoPlayer from '../components/VideoPlayer';
+import { DocumentReaderModal } from '../components/DocumentReaderModal';
 
 const Alert = {
   alert: (
@@ -344,6 +345,7 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
   const [showDetails, setShowDetails] = useState<boolean>(false);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [loadingText, setLoadingText] = useState<boolean>(false);
+  const [docReaderVisible, setDocReaderVisible] = useState<boolean>(false);
 
   // Bulk Selection states
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -1088,6 +1090,18 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
         />
       )}
 
+      {/* In-app Document Reader */}
+      {docReaderVisible && previewFile && resolvedPreviewUri && (
+        <DocumentReaderModal
+          visible={docReaderVisible}
+          onClose={() => setDocReaderVisible(false)}
+          fileUrl={resolvedPreviewUri}
+          fileName={previewFile.file_name || 'Document'}
+          mimeType={previewFile.mime_type}
+          onExport={handleOpenFile}
+        />
+      )}
+
       {/* Floating Plus Actions Modal */}
       <Modal transparent visible={fabMenuVisible} animationType="slide">
         <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={() => setFabMenuVisible(false)}>
@@ -1323,8 +1337,22 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
                         <Text style={styles.previewDocMeta}>
                           {previewFile.mime_type || 'application/octet-stream'}
                         </Text>
-                        <TouchableOpacity style={styles.previewOpenBtn} onPress={handleOpenFile}>
-                          <Text style={styles.previewOpenBtnText}>Open File</Text>
+                        <TouchableOpacity
+                          style={styles.previewOpenBtn}
+                          onPress={() => setDocReaderVisible(true)}
+                        >
+                          <FileText size={16} color="#000000" style={{ marginRight: 6 }} />
+                          <Text style={styles.previewOpenBtnText}>Read Document</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.previewOpenBtn, { backgroundColor: 'rgba(255,255,255,0.08)', marginTop: 8 }]}
+                          onPress={handleOpenFile}
+                          disabled={openingDoc}
+                        >
+                          {openingDoc
+                            ? <ActivityIndicator size="small" color="#FFFFFF" />
+                            : <Text style={[styles.previewOpenBtnText, { color: '#EBEBF5' }]}>Open Externally</Text>
+                          }
                         </TouchableOpacity>
                       </View>
                     );
