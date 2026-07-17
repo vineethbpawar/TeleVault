@@ -122,7 +122,9 @@ const ViewerItem = React.memo<{
       {/* Dynamic Lens Overlays */}
       {(() => {
         const lens = file.overlay_metadata?.lens || 'none';
-        if (lens === 'none' || lens === 'original') return null;
+        // 'baked' means the lens stamp was already composited into the image/video
+        // pixels by PreviewScreen — skip live overlay to avoid double-rendering.
+        if (lens === 'none' || lens === 'original' || lens === 'baked') return null;
 
         const createdDate = file.created_at ? new Date(file.created_at) : new Date();
         const timeString = createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

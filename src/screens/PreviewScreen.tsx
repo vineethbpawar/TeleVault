@@ -836,6 +836,19 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
       }
 
       const metaData = getPackagedMetadata(finalThumbUri);
+
+      // If the lens/overlays were burned (baked) into the image or web video pixels,
+      // mark lens as 'baked' so ViewerContainer does NOT re-render a live overlay
+      // on top of the already-composited media. Native videos skip baking (no FFmpeg),
+      // so they keep the original lens value for the live viewer overlay.
+      const lensBakedIntoMedia =
+        hasOverlays &&
+        bakedUri !== uri && // baking actually ran and produced a new URI
+        (type !== 'video' || Platform.OS === 'web'); // images always baked; web videos baked; native videos NOT
+      if (lensBakedIntoMedia) {
+        metaData.lens = 'baked';
+      }
+
       const dbRecord = await fileService.saveFileMetadata({
         folder_id: null,
         file_name: fileName,
