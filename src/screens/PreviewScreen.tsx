@@ -28,6 +28,7 @@ import { MediaOverlayItem } from '../types/camera';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showToast } from '../components/ToastBanner';
+import { captureRef } from 'react-native-view-shot';
 
 
 type Props = NativeStackScreenProps<AppStackParamList, 'Preview'>;
@@ -124,6 +125,11 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
   // Touch State for Dragging
   const touchStartRef = useRef({ x: 0, y: 0, overlayX: 0, overlayY: 0 });
   const activeOverlayIdRef = useRef<string | null>(null);
+
+  // Preview container ref for native ViewShot capture
+  const previewContainerRef = useRef<View>(null);
+  // Capturing state — hides delete buttons from baked output
+  const [isCapturing, setIsCapturing] = useState(false);
 
   // Fetch local file info
   useEffect(() => {
@@ -332,6 +338,156 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     locationText: locationText || null,
   });
 
+  /**
+   * Bake lenses, filters, text overlays and drawings permanently into the photo.
+   * Web:    HTML5 Canvas compositing → data URI → Blob
+   * Native: react-native-view-shot captureRef of the preview container
+   * Returns the new URI of the composited image (only for photos).
+   */
+  const captureCompositeImage = async (): Promise<string> => {
+    if (Platform.OS === 'web') {
+      return new Promise<string>((resolve, reject) => {
+        const W = containerSize.width;
+        const H = containerSize.height;
+        const canvas = document.createElement('canvas');
+        canvas.width = W;
+        canvas.height = H;
+        const ctx = canvas.getContext('2d')!;
+
+        const img = new window.Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          // 1. Draw base image (with rotation)
+          ctx.save();
+          ctx.translate(W / 2, H / 2);
+          ctx.rotate((rotation * Math.PI) / 180);
+          if (blurActive) {
+            ctx.filter = 'blur(20px)';
+          }
+          ctx.drawImage(img, -W / 2, -H / 2, W, H);
+          ctx.filter = 'none';
+          ctx.restore();
+
+          // 2. Color filter overlay
+          if (selectedFilter.color !== 'transparent') {
+            ctx.fillStyle = selectedFilter.color;
+            ctx.fillRect(0, 0, W, H);
+          }
+
+          // 3. Lens stamp (bottom-right, matching textOverlayWrapper: bottom=120, right=20)
+          if (defaultLens && defaultLens !== 'none' && defaultLens !== 'original') {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const dateStr = now.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+            const locTxt = locationText || 'Current Location';
+            let stampLines: string[] = [];
+            if (defaultLens === 'time') stampLines = [`🕒 ${timeStr}`];
+            else if (defaultLens === 'date') stampLines = [`📅 ${dateStr}`];
+            else if (defaultLens === 'time_date') stampLines = [`⏰ ${timeStr}`, `📅 ${dateStr}`];
+            else if (defaultLens === 'location') stampLines = [`📍 ${locTxt}`];
+            else if (defaultLens === 'date_location') stampLines = [`📍 ${locTxt}`, `📅 ${dateStr}`];
+
+            if (stampLines.length > 0) {
+              const fontSize = 15;
+              const lineHeight = 22;
+              ctx.font = `800 ${fontSize}px -apple-system, sans-serif`;
+              const maxLineW = stampLines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
+              const padX = 12, padY = 8;
+              const bgW = maxLineW + padX * 2;
+              const bgH = stampLines.length * lineHeight + padY * 2 - (lineHeight - fontSize);
+              const bgX = W - bgW - 20;
+              const bgY = H - 120 - bgH;
+              // Background pill
+              ctx.fillStyle = 'rgba(0,0,0,0.65)';
+              ctx.beginPath();
+              const r = 16;
+              ctx.moveTo(bgX + r, bgY);
+              ctx.lineTo(bgX + bgW - r, bgY);
+              ctx.quadraticCurveTo(bgX + bgW, bgY, bgX + bgW, bgY + r);
+              ctx.lineTo(bgX + bgW, bgY + bgH - r);
+              ctx.quadraticCurveTo(bgX + bgW, bgY + bgH, bgX + bgW - r, bgY + bgH);
+              ctx.lineTo(bgX + r, bgY + bgH);
+              ctx.quadraticCurveTo(bgX, bgY + bgH, bgX, bgY + bgH - r);
+              ctx.lineTo(bgX, bgY + r);
+              ctx.quadraticCurveTo(bgX, bgY, bgX + r, bgY);
+              ctx.closePath();
+              ctx.fill();
+              // Text
+              ctx.fillStyle = '#FFFC00';
+              ctx.textAlign = 'right';
+              stampLines.forEach((line, i) => {
+                ctx.fillText(line, bgX + bgW - padX, bgY + padY + fontSize + i * lineHeight);
+              });
+              ctx.textAlign = 'left';
+            }
+          }
+
+          // 4. Text / emoji / sticker overlays
+          overlays.forEach(o => {
+            ctx.save();
+            const scale = o.scale || 1;
+            if (o.emoji !== null) {
+              const fs = 32 * scale;
+              ctx.font = `${fs}px sans-serif`;
+              ctx.fillText(o.emoji!, o.x, o.y + fs);
+            } else if (o.type === 'text') {
+              const fs = 18 * scale;
+              ctx.font = `bold ${fs}px sans-serif`;
+              ctx.fillStyle = o.color || '#FFFFFF';
+              ctx.fillText(o.text || '', o.x, o.y + fs);
+            } else {
+              // Sticker card
+              const cardW = 150, cardH = 36, cardR = 18;
+              ctx.fillStyle = 'rgba(0,0,0,0.6)';
+              ctx.beginPath();
+              ctx.moveTo(o.x + cardR, o.y);
+              ctx.lineTo(o.x + cardW - cardR, o.y);
+              ctx.quadraticCurveTo(o.x + cardW, o.y, o.x + cardW, o.y + cardR);
+              ctx.lineTo(o.x + cardW, o.y + cardH - cardR);
+              ctx.quadraticCurveTo(o.x + cardW, o.y + cardH, o.x + cardW - cardR, o.y + cardH);
+              ctx.lineTo(o.x + cardR, o.y + cardH);
+              ctx.quadraticCurveTo(o.x, o.y + cardH, o.x, o.y + cardH - cardR);
+              ctx.lineTo(o.x, o.y + cardR);
+              ctx.quadraticCurveTo(o.x, o.y, o.x + cardR, o.y);
+              ctx.closePath();
+              ctx.fill();
+              ctx.font = '13px sans-serif';
+              ctx.fillStyle = '#FFFC00';
+              ctx.fillText(o.text || '', o.x + 24, o.y + 24);
+            }
+            ctx.restore();
+          });
+
+          // 5. Freehand drawing lines
+          drawingLines.forEach(line => {
+            if (line.points.length < 2) return;
+            ctx.beginPath();
+            ctx.strokeStyle = line.color;
+            ctx.lineWidth = 6;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.moveTo(line.points[0].x, line.points[0].y);
+            for (let i = 1; i < line.points.length; i++) {
+              ctx.lineTo(line.points[i].x, line.points[i].y);
+            }
+            ctx.stroke();
+          });
+
+          resolve(canvas.toDataURL('image/jpeg', 0.95));
+        };
+        img.onerror = reject;
+        img.src = uri;
+      });
+    } else {
+      // Native: capture the rendered preview view via react-native-view-shot
+      const bakedUri = await captureRef(previewContainerRef, {
+        format: 'jpg',
+        quality: 0.95,
+      });
+      return bakedUri;
+    }
+  };
+
   const handleQueueUpload = async (destination: 'memories' | 'drive' | 'private_drive') => {
     try {
       const config = await telegramService.getTelegramConfig();
@@ -371,6 +527,25 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     showToast(`Saving to ${destination === 'memories' ? 'Memories' : 'Drive'}...`);
 
     (async () => {
+      // ── Bake overlays into photos ──────────────────────────────────────────
+      // For images: burn the lens stamp, filter, text overlays and drawings
+      // permanently into the JPEG before upload.
+      // Videos require FFmpeg for frame-by-frame compositing; skip baking.
+      let bakedUri = uri;
+      if (type !== 'video') {
+        try {
+          setIsCapturing(true);
+          // Small delay to let React flush the isCapturing state (hides delete buttons)
+          await new Promise(r => setTimeout(r, 80));
+          bakedUri = await captureCompositeImage();
+        } catch (bakeErr) {
+          console.warn('[PreviewScreen] Lens baking failed, using original URI:', bakeErr);
+          bakedUri = uri;
+        } finally {
+          setIsCapturing(false);
+        }
+      }
+
       let localThumbnailUri: string | null = null;
       if (type === 'video') {
         try {
@@ -417,7 +592,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
       }
 
       const itemId = Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
-      let finalUri = uri;
+      let finalUri = bakedUri;  // Use baked URI (photo) or original (video)
       let finalThumbUri = localThumbnailUri;
 
       if (Platform.OS === 'web') {
@@ -692,9 +867,11 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
             </View>
           )}
 
-          <TouchableOpacity style={styles.deleteOverlayBtn} onPress={() => deleteOverlay(o.id)}>
-            <X size={10} color="#FFFFFF" />
-          </TouchableOpacity>
+          {!isCapturing && (
+            <TouchableOpacity style={styles.deleteOverlayBtn} onPress={() => deleteOverlay(o.id)}>
+              <X size={10} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
         </View>
       );
     });
@@ -706,6 +883,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
 
       {/* Main Preview Container Full Screen */}
       <View
+        ref={previewContainerRef}
         style={[
           styles.previewContainer,
           type === 'video' ? {} : { transform: [{ rotate: `${rotation}deg` }] }
