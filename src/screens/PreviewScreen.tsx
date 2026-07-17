@@ -598,11 +598,17 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
       if (Platform.OS === 'web') {
         const { setWebBlob } = require('../services/webBlobStore');
         let mainBlob: Blob | null = null;
-        if (uri.startsWith('data:')) {
-          mainBlob = dataURItoBlob(uri);
-        } else if (uri.startsWith('blob:')) {
+
+        // Use bakedUri (composited image with lens/overlays burned in).
+        // On Web, captureCompositeImage() returns a data: URI.
+        // Fall back to original uri for videos (not baked).
+        const sourceUri = bakedUri;
+
+        if (sourceUri.startsWith('data:')) {
+          mainBlob = dataURItoBlob(sourceUri);
+        } else if (sourceUri.startsWith('blob:')) {
           try {
-            mainBlob = await fetch(uri).then(r => r.blob());
+            mainBlob = await fetch(sourceUri).then(r => r.blob());
           } catch (_) {}
         }
 
@@ -624,6 +630,12 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
             await setWebBlob(`thumb_${itemId}`, thumbBlob);
             finalThumbUri = `webblob:thumb_${itemId}`;
           }
+        }
+      } else {
+        // Native: captureRef returns a file:// path. Use it directly as finalUri.
+        // For videos bakedUri === uri (no baking), so this is a no-op for videos.
+        if (bakedUri !== uri && bakedUri.startsWith('file://')) {
+          finalUri = bakedUri;
         }
       }
 
