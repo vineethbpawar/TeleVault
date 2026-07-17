@@ -296,6 +296,9 @@ export const DriveFileGridItem: React.FC<{
   );
 });
 
+// Session-level in-memory cache for instant first-paint (root folder only)
+let sessionDriveCache: { folders: DriveFolder[]; files: DriveFile[] } | null = null;
+
 export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFocused, isPrivateMode }) => {
   const insets = useSafeAreaInsets();
 
@@ -370,7 +373,17 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
 
   // Load database metadata
   const loadContent = useCallback(async (showSpinner = true) => {
-    if (showSpinner) setLoading(true);
+    const isRootFolder = !currentFolder;
+
+    // Instant-load: for root folder, show cached data immediately on first open
+    if (showSpinner && isRootFolder && sessionDriveCache && !isPrivateMode) {
+      setFolders(sessionDriveCache.folders);
+      setFiles(sessionDriveCache.files);
+      setLoading(false); // show stale data — real fetch still runs
+    } else if (showSpinner) {
+      setLoading(true);
+    }
+
     try {
       const folderId = currentFolder ? currentFolder.id : null;
       
@@ -383,6 +396,11 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
           : fileService.fetchDriveFiles(folderId),
       ]);
       
+      // Cache root-folder results for next navigation
+      if (isRootFolder && !isPrivateMode) {
+        sessionDriveCache = { folders: fetchedFolders, files: fetchedFiles };
+      }
+
       setFolders(fetchedFolders);
       setFiles(fetchedFiles);
     } catch (err) {

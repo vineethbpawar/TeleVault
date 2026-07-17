@@ -12,6 +12,10 @@ import PinLockModal from '../components/PinLockModal';
 import { fileOpenService } from '../services/fileOpenService';
 import { uploadQueueService } from '../services/uploadQueueService';
 import { UploadQueueBadge } from '../components/UploadQueueBadge';
+import { previewCacheService } from '../services/previewCacheService';
+
+// Session-level in-memory cache for instant first-paint
+let sessionMemoriesCache: GalleryItem[] | null = null;
 
 interface GalleryContainerProps {
   navigation: any;
@@ -79,10 +83,36 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
 
-    if (showSpinner && itemsRef.current.length === 0) setLoading(true);
+    // Instant-load: show cached data immediately so grid paints in <100ms
+    if (showSpinner && itemsRef.current.length === 0) {
+      if (sessionMemoriesCache && sessionMemoriesCache.length > 0) {
+        setItems(sessionMemoriesCache);
+        setLoading(false); // show stale data, spinner off — real fetch still runs
+      } else {
+        setLoading(true);
+      }
+    }
+
     try {
       const data = await fileService.fetchMemories();
+      sessionMemoriesCache = data; // persist for next navigation
+
+      // Pre-warm IndexedDB → in-memory blob cache BEFORE setState so MemoryItem
+      // gets instant thumbnails on first render (locally-saved snaps only, no network)
+      if (Platform.OS === 'web' && data.length > 0) {
+        previewCacheService.prewarmFromIndexedDB(data).catch(() => {});
+      }
+
       setItems(data);
+
+      // Background: pre-warm preview thumbnails for first screenful of items
+      // Deferred 1.5s so UI renders first (per AGENTS.md lazy startup rule)
+      if (data.length > 0) {
+        setTimeout(() => {
+          const toWarm = data.slice(0, 24); // first ~3 rows
+          previewCacheService.pregenerateThumbnailsInBackground(toWarm).catch(() => {});
+        }, 1500);
+      }
     } catch (err) {
       console.error('[GalleryContainer] Failed to load memories:', err);
     } finally {

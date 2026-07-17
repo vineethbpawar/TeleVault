@@ -62,6 +62,7 @@ class ConcurrencyQueue {
 }
 
 const previewQueue = new ConcurrencyQueue();
+previewQueue['maxConcurrency'] = 4; // increased from 2 for faster parallel thumbnail loading
 
 async function cacheRemoveItem(key: string): Promise<void> {
   if (Platform.OS === 'web') {
@@ -118,6 +119,49 @@ export const previewCacheService = {
       return inMemoryBlobCache.get(fileId) || null;
     }
     return null;
+  },
+
+  /**
+   * Pre-warm the in-memory blob cache from IndexedDB for a batch of file IDs.
+   * Call this early (on app start / tab focus) so MemoryItem gets instant
+   * thumbnails without waiting for resolveFilePreview to run.
+   */
+  async prewarmFromIndexedDB(files: { id: string; telegram_file_id?: string | null }[]): Promise<void> {
+    if (Platform.OS !== 'web') return;
+    const { getWebBlob } = require('./webBlobStore');
+    const tasks = files.map(async (file) => {
+      // Skip files already in memory cache
+      const cacheKey = file.id;
+      if (inMemoryBlobCache.has(cacheKey)) return;
+
+      // Try main file blob first (set by PreviewScreen on save)
+      let blob: Blob | null = await getWebBlob(cacheKey).catch(() => null);
+
+      // Fallback: preview_ prefix used by previewCacheService.setCachedPreview
+      if (!blob) {
+        blob = await getWebBlob('preview_' + cacheKey).catch(() => null);
+      }
+
+      // Fallback: thumbnail stored under thumb_ prefix
+      if (!blob) {
+        blob = await getWebBlob('thumb_' + cacheKey).catch(() => null);
+      }
+
+      if (blob) {
+        const blobUrl = URL.createObjectURL(blob);
+        inMemoryBlobCache.set(cacheKey, blobUrl);
+        // Also index by telegram_file_id for compatibility with getCachedPreview
+        if (file.telegram_file_id) {
+          inMemoryBlobCache.set(file.telegram_file_id, blobUrl);
+        }
+      }
+    });
+
+    // Run in parallel batches of 8
+    const BATCH = 8;
+    for (let i = 0; i < tasks.length; i += BATCH) {
+      await Promise.allSettled(tasks.slice(i, i + BATCH));
+    }
   },
 
   async getCachedPreview(fileId: string): Promise<string | null> {
