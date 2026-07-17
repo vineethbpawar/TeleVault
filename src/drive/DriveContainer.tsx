@@ -173,19 +173,21 @@ export const DriveFileGridItem: React.FC<{
   isSelectionMode: boolean;
   onSelectToggle: () => void;
 }> = React.memo(({ file, size, onPress, onMorePress, isSelected, isSelectionMode, onSelectToggle }) => {
+  const isVideo = file.file_type === 'video';
+  const isImage = file.file_type === 'image' ||
+    (file.mime_type && file.mime_type.startsWith('image/')) ||
+    (file.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(file.file_name));
+
   const [imgUri, setImgUri] = useState<string | null>(() => {
+    if (!isImage && !isVideo) return null;
     return previewCacheService.getInMemoryPreview(file.telegram_file_id || file.id);
   });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
-    const isImage = file.file_type === 'image' ||
-      (file.mime_type && file.mime_type.startsWith('image/')) ||
-      (file.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(file.file_name));
-    const isVideo = file.file_type === 'video';
 
-    if (isImage || isVideo || file.local_thumbnail_uri || file.telegram_file_id) {
+    if (isImage || isVideo) {
       setLoading(true);
       previewCacheService.resolveFilePreview(file, false, undefined, (generatedUri) => {
         if (active) {
@@ -207,11 +209,6 @@ export const DriveFileGridItem: React.FC<{
       active = false;
     };
   }, [file.id, file.local_thumbnail_uri, file.telegram_file_id]);
-
-  const isVideo = file.file_type === 'video';
-  const isImage = file.file_type === 'image' ||
-    (file.mime_type && file.mime_type.startsWith('image/')) ||
-    (file.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(file.file_name));
 
   return (
     <TouchableOpacity
