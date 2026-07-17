@@ -75,6 +75,10 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     const focusTimeoutRef = useRef<any>(null);
 
     useEffect(() => {
+      const prevent = (e: Event) => {
+        e.preventDefault();
+      };
+
       // Prevent multi-touch browser zoom on Web
       const preventZoom = (e: TouchEvent) => {
         if (e.touches.length > 1) {
@@ -82,14 +86,28 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
         }
       };
 
+      const wheel = (e: WheelEvent) => {
+        if (e.ctrlKey) {
+          e.preventDefault();
+        }
+      };
+
       if (Platform.OS === 'web') {
         document.addEventListener('touchstart', preventZoom, { passive: false });
+        document.addEventListener('gesturestart', prevent, { passive: false });
+        document.addEventListener('gesturechange', prevent, { passive: false });
+        document.addEventListener('gestureend', prevent, { passive: false });
+        window.addEventListener('wheel', wheel, { passive: false });
       }
 
       return () => {
         if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
         if (Platform.OS === 'web') {
           document.removeEventListener('touchstart', preventZoom);
+          document.removeEventListener('gesturestart', prevent);
+          document.removeEventListener('gesturechange', prevent);
+          document.removeEventListener('gestureend', prevent);
+          window.removeEventListener('wheel', wheel);
         }
       };
     }, []);
@@ -294,6 +312,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
     touchAction: 'none',
+    overscrollBehavior: 'contain',
   } as any,
   stampOverlay: {
     position: 'absolute',
