@@ -65,13 +65,18 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
   const [captionModalVisible, setCaptionModalVisible] = useState(false);
 
   const isFetchingRef = React.useRef(false);
+  const itemsRef = React.useRef<GalleryItem[]>([]);
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   // Load files from metadata database
   const loadMemories = useCallback(async (showSpinner = true) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
 
-    if (showSpinner && items.length === 0) setLoading(true);
+    if (showSpinner && itemsRef.current.length === 0) setLoading(true);
     try {
       const data = await fileService.fetchMemories();
       setItems(data);
@@ -82,7 +87,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
       setRefreshing(false);
       isFetchingRef.current = false;
     }
-  }, [items.length]);
+  }, []);
 
   // Auth State change listener to reload memories when session completes restoration
   useEffect(() => {
