@@ -225,6 +225,8 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [openingDoc, setOpeningDoc] = useState<boolean>(false);
   const [showDetails, setShowDetails] = useState<boolean>(false);
+  const [textContent, setTextContent] = useState<string | null>(null);
+  const [loadingText, setLoadingText] = useState<boolean>(false);
 
   // Bulk Selection states
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -351,6 +353,41 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
       active = false;
     };
   }, [previewFile?.id]);
+
+  useEffect(() => {
+    if (!resolvedPreviewUri || !previewFile) {
+      setTextContent(null);
+      return;
+    }
+
+    const isText = previewFile.mime_type?.startsWith('text/') ||
+      (previewFile.file_name && /\.(txt|log|json|csv|md|js|ts|html|css|xml|yaml|yml)$/i.test(previewFile.file_name));
+
+    if (isText && Platform.OS === 'web') {
+      let active = true;
+      setLoadingText(true);
+      fetch(resolvedPreviewUri)
+        .then(res => res.text())
+        .then(text => {
+          if (active) {
+            setTextContent(text);
+            setLoadingText(false);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setTextContent('Failed to load document content.');
+            setLoadingText(false);
+          }
+        });
+
+      return () => {
+        active = false;
+      };
+    } else {
+      setTextContent(null);
+    }
+  }, [resolvedPreviewUri, previewFile?.id]);
 
   const handleNextPreview = () => {
     if (previewIndex >= 0 && previewIndex < processedFiles.length - 1) {
@@ -1114,7 +1151,9 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
                   const isVideo = previewFile.file_type === 'video';
                   const isPdf = previewFile.mime_type === 'application/pdf' ||
                     (previewFile.file_name && /\.pdf$/i.test(previewFile.file_name));
-
+                  const isText = previewFile.mime_type?.startsWith('text/') ||
+                    (previewFile.file_name && /\.(txt|log|json|csv|md|js|ts|html|css|xml|yaml|yml)$/i.test(previewFile.file_name));
+ 
                   if (isImage) {
                     return (
                       <Image
@@ -1142,6 +1181,33 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
                           backgroundColor: '#FFFFFF',
                         }}
                       />
+                    );
+                  } else if (isText && Platform.OS === 'web') {
+                    return (
+                      <View style={{
+                        width: '100%',
+                        height: '75vh',
+                        backgroundColor: '#121324',
+                        borderRadius: 12,
+                        padding: 16,
+                        borderWidth: 1,
+                        borderColor: 'rgba(255, 252, 0, 0.15)',
+                      } as any}>
+                        {loadingText ? (
+                          <ActivityIndicator size="large" color="#FFFC00" />
+                        ) : (
+                          <ScrollView showsVerticalScrollIndicator={true}>
+                            <Text style={{
+                              color: '#E5E5EA',
+                              fontFamily: 'monospace',
+                              fontSize: 13,
+                              lineHeight: 18,
+                            } as any}>
+                              {textContent}
+                            </Text>
+                          </ScrollView>
+                        )}
+                      </View>
                     );
                   } else {
                     return (
