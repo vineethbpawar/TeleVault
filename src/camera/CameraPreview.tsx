@@ -1,5 +1,5 @@
-import React, { useRef, useImperativeHandle, forwardRef, useState } from 'react';
-import { View, StyleSheet, Text, Platform } from 'react-native';
+import React, { useRef, useImperativeHandle, forwardRef, useState, useEffect } from 'react';
+import { View, StyleSheet, Text, Platform, Animated as RNAnimated } from 'react-native';
 import { CameraView } from 'expo-camera';
 import * as FileSystem from 'expo-file-system/legacy';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
@@ -21,6 +21,47 @@ export interface CameraPreviewRef {
   stopRecording: () => Promise<CaptureResult>;
 }
 
+const FocusRing: React.FC<{ x: number; y: number }> = ({ x, y }) => {
+  const scale = useRef(new RNAnimated.Value(1.5)).current;
+  const opacity = useRef(new RNAnimated.Value(1)).current;
+
+  useEffect(() => {
+    scale.setValue(1.5);
+    opacity.setValue(1);
+    RNAnimated.parallel([
+      RNAnimated.timing(scale, {
+        toValue: 1.0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      RNAnimated.timing(opacity, {
+        toValue: 0,
+        duration: 800,
+        delay: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [x, y]);
+
+  return (
+    <RNAnimated.View
+      style={{
+        position: 'absolute',
+        left: x - 30,
+        top: y - 30,
+        width: 60,
+        height: 60,
+        borderWidth: 1.5,
+        borderColor: '#FFFC00',
+        borderRadius: 8,
+        transform: [{ scale }],
+        opacity,
+        zIndex: 9999,
+      }}
+    />
+  );
+};
+
 export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
   ({ facing, flash, lens, zoomShared, onReady, locationText }, ref) => {
     const cameraRef = useRef<CameraView | null>(null);
@@ -28,6 +69,16 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     const [zoomScale, setZoomScale] = useState(0);
     const [cameraMode, setCameraMode] = useState<'picture' | 'video'>('picture');
     const recordingPromiseRef = useRef<Promise<any> | null>(null);
+
+    const [focusTarget, setFocusTarget] = useState<{ x: number; y: number } | null>(null);
+    const [autoFocusMode, setAutoFocusMode] = useState<'on' | 'off'>('off');
+    const focusTimeoutRef = useRef<any>(null);
+
+    useEffect(() => {
+      return () => {
+        if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
+      };
+    }, []);
 
     useAnimatedReaction(
       () => zoomShared.value,
@@ -49,6 +100,22 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
         const newZoom = baseZoom.value + (event.scale - 1) * 0.45;
         zoomShared.value = Math.max(0, Math.min(1, newZoom));
       });
+
+    // Focus on Tap Gesture
+    const tapGesture = Gesture.Tap()
+      .onEnd((event) => {
+        runOnJS((x: number, y: number) => {
+          setFocusTarget({ x, y });
+          setAutoFocusMode('on');
+          if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
+          focusTimeoutRef.current = setTimeout(() => {
+            setFocusTarget(null);
+            setAutoFocusMode('off');
+          }, 1000);
+        })(event.x, event.y);
+      });
+
+    const combinedGesture = Gesture.Simultaneous(pinchGesture, tapGesture);
 
     useImperativeHandle(ref, () => ({
       takePicture: async (): Promise<CaptureResult> => {
@@ -143,7 +210,7 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     }));
 
     return (
-      <GestureDetector gesture={pinchGesture}>
+      <GestureDetector gesture={combinedGesture}>
         <View style={styles.container}>
           <CameraView
             ref={cameraRef as any}
@@ -153,9 +220,12 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
             enableTorch={flash === 'on'}
             onCameraReady={onReady}
             zoom={zoomScale}
+            autofocus={autoFocusMode}
             videoQuality="2160p"
             videoStabilizationMode="auto"
           />
+
+          {focusTarget && <FocusRing x={focusTarget.x} y={focusTarget.y} />}
 
           {/* Date/Time/Location Overlays */}
           {lens === 'time' && (
