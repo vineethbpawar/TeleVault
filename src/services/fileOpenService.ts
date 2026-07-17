@@ -357,22 +357,58 @@ export const fileOpenService = {
    * Universal document opener/sharer.
    * Downloads the file from Telegram if necessary, decrypts if private, then opens the native Share dialog (or system viewer).
    */
-  async openDocument(file: { telegram_file_id: string | null; file_name: string; is_private?: boolean | null; mime_type?: string | null }): Promise<void> {
-    if (!file.telegram_file_id) {
-      throw new Error('This file cannot be downloaded (No Telegram file ID).');
-    }
-
+  async openDocument(file: { 
+    id?: string;
+    telegram_file_id: string | null; 
+    file_name: string; 
+    is_private?: boolean | null; 
+    mime_type?: string | null;
+    local_thumbnail_uri?: string | null;
+    overlay_metadata?: any;
+  }): Promise<void> {
     try {
       if (Platform.OS === 'web') {
         showWebLoadingOverlay();
         try {
+          const { getWebBlob } = require('./webBlobStore');
+          let localBlob: Blob | null = null;
+          
+          if (file.id) {
+            localBlob = await getWebBlob(file.id);
+          }
+          if (!localBlob && file.local_thumbnail_uri && file.local_thumbnail_uri.startsWith('webblob:')) {
+            const key = file.local_thumbnail_uri.split(':')[1];
+            const cleanKey = key.replace(/^thumb_/, '');
+            localBlob = await getWebBlob(cleanKey);
+          }
+          if (!localBlob && file.overlay_metadata?.local_uri && file.overlay_metadata.local_uri.startsWith('webblob:')) {
+            const key = file.overlay_metadata.local_uri.split(':')[1];
+            localBlob = await getWebBlob(key);
+          }
+          if (!localBlob && file.id) {
+            localBlob = await getWebBlob('preview_' + file.id);
+          }
+
           let cleanUrl = '';
-          if (!file.is_private) {
-            cleanUrl = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id);
+          if (localBlob) {
+            if (file.is_private) {
+              const tempUrl = URL.createObjectURL(localBlob);
+              const { encryptionService } = require('./encryptionService');
+              cleanUrl = await encryptionService.decryptFile(tempUrl, file.file_name, file.mime_type);
+            } else {
+              cleanUrl = URL.createObjectURL(localBlob);
+            }
           } else {
-            const cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
-            const { encryptionService } = require('./encryptionService');
-            cleanUrl = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type);
+            if (!file.telegram_file_id) {
+              throw new Error('This file cannot be downloaded (No Telegram file ID and not found in local cache).');
+            }
+            if (!file.is_private) {
+              cleanUrl = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id);
+            } else {
+              const cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
+              const { encryptionService } = require('./encryptionService');
+              cleanUrl = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type);
+            }
           }
 
           const response = await fetch(cleanUrl);
@@ -401,7 +437,9 @@ export const fileOpenService = {
         return;
       }
 
-      // Download file to cache
+      if (!file.telegram_file_id) {
+        throw new Error('This file cannot be downloaded (No Telegram file ID).');
+      }
       let cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
       
       // Decrypt if E2EE private
