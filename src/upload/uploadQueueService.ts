@@ -164,7 +164,7 @@ export const uploadQueueService = {
       }
 
       const settings = await settingsService.getSettings();
-      const maxConcurrency = settings.uploadMode === 'Fast' ? 2 : 1;
+      const maxConcurrency = settings.uploadMode === 'Fast' ? 3 : 1;
 
       const queue = await this.getUploadQueue();
       const activeItems = queue.filter(item => item.status === 'uploading' || item.status === ('processing' as any));
@@ -181,16 +181,14 @@ export const uploadQueueService = {
         return;
       }
 
-      for (const pendingItem of pendingItems) {
-        if (activeCount >= maxConcurrency) {
-          break;
-        }
+      const uploadingIds = new Set(activeItems.map(item => item.id));
+      const itemsToUpload = pendingItems.filter(item => !uploadingIds.has(item.id));
 
-        // Concurrency protection: do not parallelize chunked large file uploads
-        if (pendingItem.upload_mode === 'chunked' && activeCount > 0) {
-          continue;
-        }
+      if (itemsToUpload.length === 0) {
+        return;
+      }
 
+      const uploadWorker = async (pendingItem: UploadQueueItem) => {
         // Physical file check for native platforms to prevent stalls on cleared cache items
         if (Platform.OS !== 'web') {
           try {
@@ -202,16 +200,13 @@ export const uploadQueueService = {
                 stage: 'File Not Found (Unrecoverable)',
                 error_message: 'The cached local media file is missing on this device.',
               });
-              continue;
+              return;
             }
           } catch (fileError) {
             console.error('[QueueService] File validation check failed:', fileError);
           }
         }
 
-        activeCount++;
-        
-        // Isolated Try-Catch Transaction Loop
         try {
           await this.processQueueItem(pendingItem);
         } catch (itemError: any) {
@@ -221,10 +216,26 @@ export const uploadQueueService = {
             stage: 'Failed',
             error_message: itemError.message || String(itemError),
           });
-        } finally {
-          activeCount--;
         }
+      };
+
+      const promises: Promise<void>[] = [];
+      let currentAllocated = activeCount;
+      for (const pendingItem of itemsToUpload) {
+        if (currentAllocated >= maxConcurrency) {
+          break;
+        }
+
+        // Concurrency protection: do not parallelize chunked large file uploads
+        if (pendingItem.upload_mode === 'chunked' && currentAllocated > 0) {
+          continue;
+        }
+
+        currentAllocated++;
+        promises.push(uploadWorker(pendingItem));
       }
+
+      await Promise.all(promises);
     } finally {
       isProcessingQueue = false;
     }
