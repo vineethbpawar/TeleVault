@@ -44,8 +44,29 @@ const ViewerItem = React.memo<{
     };
   }, [file]);
 
-  if (loading) {
+  const renderPressableContent = (content: React.ReactNode) => {
     return (
+      <Pressable
+        style={styles.itemContainer}
+        onPress={(e) => {
+          const x = e.nativeEvent.pageX;
+          if (x < width * 0.3) {
+            onTapLeft();
+          } else {
+            onTapRight();
+          }
+        }}
+        onLongPress={onHoldStart}
+        onPressOut={onHoldEnd}
+        delayLongPress={250}
+      >
+        {content}
+      </Pressable>
+    );
+  };
+
+  if (loading) {
+    return renderPressableContent(
       <View style={styles.itemCenter}>
         <ActivityIndicator size="large" color="#FFFC00" />
       </View>
@@ -53,7 +74,7 @@ const ViewerItem = React.memo<{
   }
 
   if (!resolvedUri) {
-    return (
+    return renderPressableContent(
       <View style={styles.itemCenter}>
         <Text style={{ color: '#8E8E93' }}>Unable to load media</Text>
       </View>
@@ -425,7 +446,19 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
           const isNearby = isCurrent || isPrev || isNext;
 
           if (!isNearby) {
-            return <View style={{ width, height, backgroundColor: '#000000' }} />;
+            return (
+              <Pressable
+                style={{ width, height, backgroundColor: '#000000' }}
+                onPress={(e) => {
+                  const x = e.nativeEvent.pageX;
+                  if (x < width * 0.3) {
+                    goToPrevious();
+                  } else {
+                    goToNext();
+                  }
+                }}
+              />
+            );
           }
 
           return (
@@ -440,7 +473,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
             />
           );
         }}
-        windowSize={3}
+        windowSize={5}
         maxToRenderPerBatch={1}
         updateCellsBatchingPeriod={100}
         initialNumToRender={1}
