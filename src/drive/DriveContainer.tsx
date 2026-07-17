@@ -1289,20 +1289,6 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
                         style={styles.previewVideo}
                       />
                     );
-                  } else if (isPdf && Platform.OS === 'web') {
-                    return (
-                      <View style={{
-                        width: '100%',
-                        height: '75vh',
-                        backgroundColor: '#1C1C1E',
-                        borderRadius: 12,
-                        padding: 8,
-                        borderWidth: 1,
-                        borderColor: '#2C2C2E',
-                      } as any}>
-                        <WebPdfViewer url={resolvedPreviewUri} />
-                      </View>
-                    );
                   } else if (isText && Platform.OS === 'web') {
                     return (
                       <View style={{
