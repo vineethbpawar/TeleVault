@@ -485,6 +485,197 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  /**
+   * Bake lenses, filters, overlays and drawings into a video on Web
+   * using Canvas frame-by-frame compositing + MediaRecorder.
+   * Audio is preserved via WebAudio routing.
+   * Returns a new blob: URL for the composited video.
+   * Native: returns original URI (FFmpeg required — not bundled).
+   */
+  const bakeVideoWithOverlays = async (): Promise<string> => {
+    if (Platform.OS !== 'web') {
+      return uri; // native fallback
+    }
+    return new Promise<string>((resolve, reject) => {
+      const videoEl = document.createElement('video');
+      videoEl.crossOrigin = 'anonymous';
+      videoEl.playsInline = true;
+      videoEl.muted = false;
+      videoEl.preload = 'auto';
+      videoEl.src = uri;
+
+      videoEl.onloadedmetadata = () => {
+        const VW = videoEl.videoWidth || containerSize.width;
+        const VH = videoEl.videoHeight || containerSize.height;
+        const scaleX = VW / containerSize.width;
+        const scaleY = VH / containerSize.height;
+        const sc = Math.max(scaleX, scaleY);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = VW;
+        canvas.height = VH;
+        const ctx = canvas.getContext('2d')!;
+
+        // Choose best supported MIME type
+        const mimeType = (
+          ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+            .find(t => MediaRecorder.isTypeSupported(t))
+        ) || 'video/webm';
+
+        const canvasStream = (canvas as any).captureStream(30) as MediaStream;
+
+        // Preserve audio from the video element via WebAudio
+        let combinedStream: MediaStream = canvasStream;
+        try {
+          const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const src = audioCtx.createMediaElementSource(videoEl);
+          const dest = audioCtx.createMediaStreamDestination();
+          src.connect(dest);
+          src.connect(audioCtx.destination);
+          combinedStream = new MediaStream([
+            ...canvasStream.getVideoTracks(),
+            ...dest.stream.getAudioTracks(),
+          ]);
+        } catch (audioErr) {
+          console.warn('[VideoLensBake] Audio capture not available, proceeding muted:', audioErr);
+        }
+
+        const recorder = new MediaRecorder(combinedStream, { mimeType });
+        const chunks: Blob[] = [];
+        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+        recorder.onstop = () => {
+          const finalMime = mimeType.split(';')[0];
+          const blob = new Blob(chunks, { type: finalMime });
+          resolve(URL.createObjectURL(blob));
+        };
+        recorder.onerror = (e: any) => reject(e.error || new Error('MediaRecorder error'));
+
+        // Helper: draw current overlays onto ctx at video resolution
+        const drawOverlaysOnCtx = () => {
+          // 1. Color filter
+          if (selectedFilter.color !== 'transparent') {
+            ctx.fillStyle = selectedFilter.color;
+            ctx.fillRect(0, 0, VW, VH);
+          }
+
+          // 2. Lens stamp (bottom-right pill)
+          if (defaultLens && defaultLens !== 'none' && defaultLens !== 'original') {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const dateStr = now.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+            const locTxt = locationText || 'Current Location';
+            const stampLines: string[] = [];
+            if (defaultLens === 'time') stampLines.push(`\uD83D\uDD52 ${timeStr}`);
+            else if (defaultLens === 'date') stampLines.push(`\uD83D\uDCC5 ${dateStr}`);
+            else if (defaultLens === 'time_date') { stampLines.push(`\u23F0 ${timeStr}`); stampLines.push(`\uD83D\uDCC5 ${dateStr}`); }
+            else if (defaultLens === 'location') stampLines.push(`\uD83D\uDCCD ${locTxt}`);
+            else if (defaultLens === 'date_location') { stampLines.push(`\uD83D\uDCCD ${locTxt}`); stampLines.push(`\uD83D\uDCC5 ${dateStr}`); }
+
+            if (stampLines.length > 0) {
+              const fontSize = 15 * sc;
+              const lineHeight = 22 * sc;
+              ctx.font = `800 ${fontSize}px -apple-system, sans-serif`;
+              const maxLW = stampLines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
+              const padX = 12 * scaleX, padY = 8 * scaleY;
+              const bgW = maxLW + padX * 2;
+              const bgH = stampLines.length * lineHeight + padY * 2 - (lineHeight - fontSize);
+              const bgX = VW - bgW - 20 * scaleX;
+              const bgY = VH - 120 * scaleY - bgH;
+              const r = 16 * Math.min(scaleX, scaleY);
+              ctx.fillStyle = 'rgba(0,0,0,0.65)';
+              ctx.beginPath();
+              ctx.moveTo(bgX + r, bgY); ctx.lineTo(bgX + bgW - r, bgY);
+              ctx.quadraticCurveTo(bgX + bgW, bgY, bgX + bgW, bgY + r);
+              ctx.lineTo(bgX + bgW, bgY + bgH - r);
+              ctx.quadraticCurveTo(bgX + bgW, bgY + bgH, bgX + bgW - r, bgY + bgH);
+              ctx.lineTo(bgX + r, bgY + bgH);
+              ctx.quadraticCurveTo(bgX, bgY + bgH, bgX, bgY + bgH - r);
+              ctx.lineTo(bgX, bgY + r);
+              ctx.quadraticCurveTo(bgX, bgY, bgX + r, bgY);
+              ctx.closePath(); ctx.fill();
+              ctx.fillStyle = '#FFFC00';
+              ctx.textAlign = 'right';
+              stampLines.forEach((line, i) => {
+                ctx.fillText(line, bgX + bgW - padX, bgY + padY + fontSize + i * lineHeight);
+              });
+              ctx.textAlign = 'left';
+            }
+          }
+
+          // 3. Text / emoji / sticker overlays
+          overlays.forEach(o => {
+            ctx.save();
+            const scale = o.scale || 1;
+            const sx = o.x * scaleX, sy = o.y * scaleY;
+            if (o.emoji !== null) {
+              const fs = 32 * scale * sc;
+              ctx.font = `${fs}px sans-serif`;
+              ctx.fillText(o.emoji!, sx, sy + fs);
+            } else if (o.type === 'text') {
+              const fs = 18 * scale * sc;
+              ctx.font = `bold ${fs}px sans-serif`;
+              ctx.fillStyle = o.color || '#FFFFFF';
+              ctx.fillText(o.text || '', sx, sy + fs);
+            } else {
+              const cW = 150 * scaleX, cH = 36 * scaleY, cR = 18 * Math.min(scaleX, scaleY);
+              ctx.fillStyle = 'rgba(0,0,0,0.6)';
+              ctx.beginPath();
+              ctx.moveTo(sx + cR, sy); ctx.lineTo(sx + cW - cR, sy);
+              ctx.quadraticCurveTo(sx + cW, sy, sx + cW, sy + cR);
+              ctx.lineTo(sx + cW, sy + cH - cR);
+              ctx.quadraticCurveTo(sx + cW, sy + cH, sx + cW - cR, sy + cH);
+              ctx.lineTo(sx + cR, sy + cH);
+              ctx.quadraticCurveTo(sx, sy + cH, sx, sy + cH - cR);
+              ctx.lineTo(sx, sy + cR);
+              ctx.quadraticCurveTo(sx, sy, sx + cR, sy);
+              ctx.closePath(); ctx.fill();
+              ctx.font = `${13 * sc}px sans-serif`;
+              ctx.fillStyle = '#FFFC00';
+              ctx.fillText(o.text || '', sx + 24 * scaleX, sy + 24 * scaleY);
+            }
+            ctx.restore();
+          });
+
+          // 4. Freehand drawing lines
+          drawingLines.forEach(line => {
+            if (line.points.length < 2) return;
+            ctx.beginPath();
+            ctx.strokeStyle = line.color;
+            ctx.lineWidth = 6 * sc;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.moveTo(line.points[0].x * scaleX, line.points[0].y * scaleY);
+            for (let i = 1; i < line.points.length; i++) {
+              ctx.lineTo(line.points[i].x * scaleX, line.points[i].y * scaleY);
+            }
+            ctx.stroke();
+          });
+        };
+
+        let animFrameId: number;
+        const drawFrame = () => {
+          if (videoEl.ended) {
+            cancelAnimationFrame(animFrameId);
+            if (recorder.state === 'recording') setTimeout(() => recorder.stop(), 200);
+            return;
+          }
+          ctx.clearRect(0, 0, VW, VH);
+          ctx.drawImage(videoEl, 0, 0, VW, VH);
+          drawOverlaysOnCtx();
+          animFrameId = requestAnimationFrame(drawFrame);
+        };
+
+        recorder.start(100);
+        videoEl.play().then(() => { drawFrame(); }).catch(reject);
+        videoEl.onended = () => {
+          cancelAnimationFrame(animFrameId);
+          if (recorder.state === 'recording') setTimeout(() => recorder.stop(), 200);
+        };
+      };
+      videoEl.onerror = reject;
+    });
+  };
+
   const handleQueueUpload = async (destination: 'memories' | 'drive' | 'private_drive') => {
     try {
       const config = await telegramService.getTelegramConfig();
@@ -524,17 +715,25 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     showToast(`Saving to ${destination === 'memories' ? 'Memories' : 'Drive'}...`);
 
     (async () => {
-      // ── Bake overlays into photos ──────────────────────────────────────────
-      // For images: burn the lens stamp, filter, text overlays and drawings
-      // permanently into the JPEG before upload.
-      // Videos require FFmpeg for frame-by-frame compositing; skip baking.
+      // ── Bake overlays into photos and videos ────────────────────────────
+      // Photos: HTML5 Canvas composite (Web) / react-native-view-shot (Native)
+      // Videos: Canvas frame-by-frame + MediaRecorder (Web only)
+      //         Native video baking requires FFmpeg — falls back to original.
       let bakedUri = uri;
-      if (type !== 'video') {
+      const hasOverlays = overlays.length > 0 || drawingLines.length > 0 ||
+        (defaultLens && defaultLens !== 'none' && defaultLens !== 'original') ||
+        selectedFilter.color !== 'transparent';
+
+      if (hasOverlays) {
         try {
           setIsCapturing(true);
-          // Small delay to let React flush the isCapturing state (hides delete buttons)
           await new Promise(r => setTimeout(r, 80));
-          bakedUri = await captureCompositeImage();
+          if (type === 'video') {
+            showToast('Baking lens into video...');
+            bakedUri = await bakeVideoWithOverlays();
+          } else {
+            bakedUri = await captureCompositeImage();
+          }
         } catch (bakeErr) {
           console.warn('[PreviewScreen] Lens baking failed, using original URI:', bakeErr);
           bakedUri = uri;
