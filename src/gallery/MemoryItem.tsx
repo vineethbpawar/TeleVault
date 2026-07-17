@@ -27,7 +27,7 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
           if (active) {
             setImgUri(generatedUri);
           }
-        })
+        }, 'low')
         .then((res) => {
           if (active && res.previewUri) {
             setImgUri(res.previewUri);

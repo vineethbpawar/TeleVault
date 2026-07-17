@@ -19,6 +19,50 @@ async function cacheSetItem(key: string, value: string): Promise<void> {
   return await AsyncStorage.setItem(key, value);
 }
 
+class ConcurrencyQueue {
+  private activeCount = 0;
+  private maxConcurrency = 2;
+  private queue: (() => Promise<any>)[] = [];
+
+  async run<T>(task: () => Promise<T>): Promise<T> {
+    if (this.activeCount < this.maxConcurrency) {
+      this.activeCount++;
+      try {
+        return await task();
+      } finally {
+        this.activeCount--;
+        this.next();
+      }
+    }
+
+    return new Promise<T>((resolve, reject) => {
+      this.queue.push(async () => {
+        try {
+          const res = await task();
+          resolve(res);
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+  }
+
+  private next() {
+    if (this.queue.length > 0 && this.activeCount < this.maxConcurrency) {
+      const nextTask = this.queue.shift();
+      if (nextTask) {
+        this.activeCount++;
+        nextTask().finally(() => {
+          this.activeCount--;
+          this.next();
+        });
+      }
+    }
+  }
+}
+
+const previewQueue = new ConcurrencyQueue();
+
 async function cacheRemoveItem(key: string): Promise<void> {
   if (Platform.OS === 'web') {
     return await webDbService.removeItem(key);
@@ -735,7 +779,8 @@ export const previewCacheService = {
     },
     forceRefresh = false,
     signal?: AbortSignal,
-    onThumbnailGenerated?: (uri: string) => void
+    onThumbnailGenerated?: (uri: string) => void,
+    priority: 'high' | 'low' = 'high'
   ): Promise<{
     type: 'image' | 'video' | 'document' | 'unknown';
     previewUri?: string;
@@ -743,7 +788,12 @@ export const previewCacheService = {
     fallbackIcon: string;
     error?: string;
   }> {
-    return this.resolveFilePreviewInternal(file, forceRefresh, signal, onThumbnailGenerated);
+    if (priority === 'high') {
+      return this.resolveFilePreviewInternal(file, forceRefresh, signal, onThumbnailGenerated);
+    }
+    return previewQueue.run(() =>
+      this.resolveFilePreviewInternal(file, forceRefresh, signal, onThumbnailGenerated)
+    );
   },
 
   async forceRepairPreview(fileId: string, file: any): Promise<{ previewUri?: string; playableUri?: string } | null> {

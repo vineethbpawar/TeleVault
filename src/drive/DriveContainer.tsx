@@ -182,7 +182,7 @@ export const DriveFileGridItem: React.FC<{
         if (active) {
           setImgUri(generatedUri);
         }
-      }).then(res => {
+      }, 'low').then(res => {
         if (active) {
           if (res.previewUri) {
             setImgUri(res.previewUri);
