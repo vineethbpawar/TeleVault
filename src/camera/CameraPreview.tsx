@@ -1,5 +1,5 @@
 import React, { useRef, useImperativeHandle, forwardRef, useState, useEffect } from 'react';
-import { View, StyleSheet, Text, Platform, Animated as RNAnimated } from 'react-native';
+import { View, StyleSheet, Text, Platform, Animated as RNAnimated, Pressable } from 'react-native';
 import { CameraView } from 'expo-camera';
 import * as FileSystem from 'expo-file-system/legacy';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
@@ -75,8 +75,22 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     const focusTimeoutRef = useRef<any>(null);
 
     useEffect(() => {
+      // Prevent multi-touch browser zoom on Web
+      const preventZoom = (e: TouchEvent) => {
+        if (e.touches.length > 1) {
+          e.preventDefault();
+        }
+      };
+
+      if (Platform.OS === 'web') {
+        document.addEventListener('touchstart', preventZoom, { passive: false });
+      }
+
       return () => {
         if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
+        if (Platform.OS === 'web') {
+          document.removeEventListener('touchstart', preventZoom);
+        }
       };
     }, []);
 
@@ -210,8 +224,20 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     }));
 
     return (
-      <GestureDetector gesture={combinedGesture}>
-        <View style={styles.container}>
+      <GestureDetector gesture={pinchGesture}>
+        <Pressable
+          onPress={(e: any) => {
+            const { pageX, pageY } = e.nativeEvent;
+            setFocusTarget({ x: pageX, y: pageY });
+            setAutoFocusMode('on');
+            if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
+            focusTimeoutRef.current = setTimeout(() => {
+              setFocusTarget(null);
+              setAutoFocusMode('off');
+            }, 1000);
+          }}
+          style={styles.container}
+        >
           <CameraView
             ref={cameraRef as any}
             style={StyleSheet.absoluteFill}
@@ -257,7 +283,7 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
               </Text>
             </View>
           )}
-        </View>
+        </Pressable>
       </GestureDetector>
     );
   }
@@ -267,7 +293,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
-  },
+    touchAction: 'none',
+  } as any,
   stampOverlay: {
     position: 'absolute',
     bottom: 150,
