@@ -64,6 +64,9 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
   const [captionText, setCaptionText] = useState('');
   const [captionModalVisible, setCaptionModalVisible] = useState(false);
 
+  // Export / share in-progress state (separate from loading so the grid stays visible)
+  const [exporting, setExporting] = useState(false);
+
   const isFetchingRef = React.useRef(false);
   const itemsRef = React.useRef<GalleryItem[]>([]);
 
@@ -270,7 +273,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
     // (per AGENTS.md: web downloads must be initiated from a direct user-click event)
     if (Platform.OS === 'web') {
       try {
-        setLoading(true);
+        setExporting(true);
         for (const file of selectedFiles) {
           await fileOpenService.openDocument(file).catch(err => {
             console.warn('Failed to share file in loop:', err);
@@ -282,7 +285,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
       } catch (err: any) {
         showAlert('Error', (err as any).message || 'Export failed.');
       } finally {
-        setLoading(false);
+        setExporting(false);
       }
       return;
     }
@@ -298,7 +301,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
         text: 'Export',
         onPress: async () => {
           try {
-            setLoading(true);
+            setExporting(true);
             for (const file of selectedFiles) {
               await fileOpenService.openDocument(file).catch(err => {
                 console.warn('Failed to share file in loop:', err);
@@ -310,7 +313,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
           } catch (err: any) {
             showAlert('Error', err.message || 'Export failed.');
           } finally {
-            setLoading(false);
+            setExporting(false);
           }
         }
       }
@@ -321,13 +324,13 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
   const handleExportSingleFile = async (item: GalleryItem) => {
     setActiveMenuFile(null);
     try {
-      setLoading(true);
+      setExporting(true);
       await fileOpenService.openDocument(item);
       showToast(Platform.OS === 'web' ? 'Download ready.' : 'File shared successfully.');
     } catch (err: any) {
       showAlert('Export Failed', err.message || 'Could not export this file.');
     } finally {
-      setLoading(false);
+      setExporting(false);
     }
   };
 
