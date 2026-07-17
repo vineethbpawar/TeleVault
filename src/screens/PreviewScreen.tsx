@@ -163,11 +163,8 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   }, [uri]);
 
-  useEffect(() => {
-    if (defaultLens === 'location' || defaultLens === 'time') {
-      handleAddSticker(defaultLens);
-    }
-  }, [defaultLens]);
+
+
 
   const handleRotate = () => setRotation((prev) => (prev + 90) % 360);
   const handleBlurToggle = () => setBlurActive((prev) => !prev);
