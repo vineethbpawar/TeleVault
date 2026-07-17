@@ -93,6 +93,8 @@ export type AppStackParamList = {
     files: TeleVaultFile[];
     initialIndex: number;
   };
+  CallHistory: undefined;
 };
+
 
 

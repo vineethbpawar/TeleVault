@@ -1038,6 +1038,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         <ConversationHeader
           otherFullName={otherFullName || null}
           otherUsername={otherUsername}
+          otherUserId={otherUserId}
           isOnline={isOtherOnline}
           onBack={() => navigation.goBack()}
           onProfilePress={() =>

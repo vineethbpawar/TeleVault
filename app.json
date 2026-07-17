@@ -34,7 +34,14 @@
         "CAMERA",
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE",
+        "MODIFY_AUDIO_SETTINGS",
+        "BLUETOOTH",
+        "BLUETOOTH_CONNECT",
+        "WAKE_LOCK",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PROJECTION",
+        "MANAGE_OWN_CALLS"
       ]
     },
     "web": {
@@ -47,6 +54,7 @@
       "expo-background-task",
       "expo-sharing",
       "expo-video",
+      "@config-plugins/react-native-webrtc",
       [
         "expo-splash-screen",
         {

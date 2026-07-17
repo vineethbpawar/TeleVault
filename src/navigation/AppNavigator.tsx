@@ -32,6 +32,8 @@ import UserProfileScreen from '../screens/UserProfileScreen';
 import MyProfileScreen from '../screens/MyProfileScreen';
 import SendToScreen from '../screens/SendToScreen';
 import ChatCameraScreen from '../screens/ChatCameraScreen';
+import CallHistoryScreen from '../screens/CallHistoryScreen';
+import CallOverlay from '../components/CallOverlay';
 import { Session } from '@supabase/supabase-js';
 import { authEvents } from '../utils/authEvent';
 import { telegramService } from '../services/telegramService';
@@ -287,6 +289,7 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="MyProfile" component={MyProfileScreen} />
               <Stack.Screen name="SendTo" component={SendToScreen} />
               <Stack.Screen name="ChatCamera" component={ChatCameraScreen} />
+              <Stack.Screen name="CallHistory" component={CallHistoryScreen} />
               <Stack.Screen
                 name="MemoriesViewer"
                 component={MemoriesViewerScreen}
@@ -313,6 +316,9 @@ export const AppNavigator: React.FC = () => {
           undismissable={true}
         />
       )}
+
+      {/* Global call overlay - handles incoming calls and active call UI */}
+      {session && hasUsername && <CallOverlay />}
     </>
   );
 };
