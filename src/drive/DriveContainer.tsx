@@ -82,7 +82,9 @@ const WebPdfViewer: React.FC<{ url: string }> = ({ url }) => {
 
     loadPdfJs()
       .then(async (pdfjsLib) => {
-        const loadingTask = pdfjsLib.getDocument(url);
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
         const pdf = await loadingTask.promise;
         if (!active) return;
         setLoading(false);
