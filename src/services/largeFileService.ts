@@ -249,97 +249,115 @@ export const largeFileService = {
 
     const totalChunks = largeFile.total_chunks;
 
-    for (const chunk of chunks) {
-      if (chunk.status === 'completed') {
-        continue;
-      }
+    const pendingChunks = chunks.filter((c: any) => c.status !== 'completed');
 
-      if (signal?.aborted) {
-        throw new Error('Upload aborted by user');
-      }
+    if (pendingChunks.length > 0) {
+      const CONCURRENCY_LIMIT = Platform.OS === 'web' ? 3 : 2;
+      let errorOccurred: Error | null = null;
+      let currentIndex = 0;
 
-      await supabase
-        .from('large_file_chunks')
-        .update({ status: 'uploading', error_message: null })
-        .eq('id', chunk.id);
+      const uploadWorker = async (): Promise<void> => {
+        while (currentIndex < pendingChunks.length && !errorOccurred && !signal?.aborted) {
+          const chunk = pendingChunks[currentIndex++];
+          if (!chunk) break;
 
-      let tempUri = '';
-      try {
-        const currentCompletedCount = chunks.filter((c: any) => c.status === 'completed').length;
-        if (onProgress) {
-          onProgress({
-            largeFileId,
-            totalChunks,
-            uploadedChunks: currentCompletedCount,
-            progressPercent: Math.round((currentCompletedCount / totalChunks) * 100),
-            status: 'uploading',
-          });
-        }
+          await supabase
+            .from('large_file_chunks')
+            .update({ status: 'uploading', error_message: null })
+            .eq('id', chunk.id);
 
-        tempUri = await this.sliceChunk(localUri, chunk.chunk_index, largeFile.total_size, largeFile.chunk_size);
-
-        if (signal?.aborted) {
-          throw new Error('Upload aborted by user');
-        }
-
-        const uploadResult = await this.uploadChunkToTelegram(tempUri, {
-          large_file_id: largeFileId,
-          chunk_index: chunk.chunk_index,
-          chunk_file_name: chunk.chunk_file_name,
-          original_file_name: largeFile.original_file_name,
-          total_chunks: totalChunks,
-        }, signal, itemId);
-
-        await supabase
-          .from('large_file_chunks')
-          .update({
-            status: 'completed',
-            telegram_message_id: uploadResult.telegramMessageId,
-            telegram_file_id: uploadResult.telegramFileId,
-            uploaded_at: new Date().toISOString(),
-          })
-          .eq('id', chunk.id);
-
-        try {
-          await deleteFileHelper(tempUri);
-        } catch (_) {}
-
-        chunk.status = 'completed';
-
-        const newCompletedCount = chunks.filter((c: any) => c.status === 'completed').length;
-        if (onProgress) {
-          onProgress({
-            largeFileId,
-            totalChunks,
-            uploadedChunks: newCompletedCount,
-            progressPercent: Math.round((newCompletedCount / totalChunks) * 100),
-            status: 'uploading',
-          });
-        }
-      } catch (err: any) {
-        console.error(`Chunk ${chunk.chunk_index} upload failed:`, err);
-
-        await supabase
-          .from('large_file_chunks')
-          .update({
-            status: 'failed',
-            retry_count: (chunk.retry_count || 0) + 1,
-            error_message: err.message || 'Chunk upload failed',
-          })
-          .eq('id', chunk.id);
-
-        await supabase
-          .from('large_files')
-          .update({ status: 'failed' })
-          .eq('id', largeFileId);
-
-        if (tempUri) {
+          let tempUri = '';
           try {
-            await deleteFileHelper(tempUri);
-          } catch (_) {}
-        }
+            const currentCompletedCount = chunks.filter((c: any) => c.status === 'completed').length;
+            if (onProgress) {
+              onProgress({
+                largeFileId,
+                totalChunks,
+                uploadedChunks: currentCompletedCount,
+                progressPercent: Math.round((currentCompletedCount / totalChunks) * 100),
+                status: 'uploading',
+              });
+            }
 
-        throw err;
+            tempUri = await this.sliceChunk(localUri, chunk.chunk_index, largeFile.total_size, largeFile.chunk_size);
+
+            if (signal?.aborted) {
+              throw new Error('Upload aborted by user');
+            }
+
+            const uploadResult = await this.uploadChunkToTelegram(tempUri, {
+              large_file_id: largeFileId,
+              chunk_index: chunk.chunk_index,
+              chunk_file_name: chunk.chunk_file_name,
+              original_file_name: largeFile.original_file_name,
+              total_chunks: totalChunks,
+            }, signal, itemId);
+
+            await supabase
+              .from('large_file_chunks')
+              .update({
+                status: 'completed',
+                telegram_message_id: uploadResult.telegramMessageId,
+                telegram_file_id: uploadResult.telegramFileId,
+                uploaded_at: new Date().toISOString(),
+              })
+              .eq('id', chunk.id);
+
+            try {
+              await deleteFileHelper(tempUri);
+            } catch (_) {}
+
+            chunk.status = 'completed';
+
+            const newCompletedCount = chunks.filter((c: any) => c.status === 'completed').length;
+            if (onProgress) {
+              onProgress({
+                largeFileId,
+                totalChunks,
+                uploadedChunks: newCompletedCount,
+                progressPercent: Math.round((newCompletedCount / totalChunks) * 100),
+                status: 'uploading',
+              });
+            }
+          } catch (err: any) {
+            console.error(`Chunk ${chunk.chunk_index} upload failed:`, err);
+
+            await supabase
+              .from('large_file_chunks')
+              .update({
+                status: 'failed',
+                retry_count: (chunk.retry_count || 0) + 1,
+                error_message: err.message || 'Chunk upload failed',
+              })
+              .eq('id', chunk.id);
+
+            await supabase
+              .from('large_files')
+              .update({ status: 'failed' })
+              .eq('id', largeFileId);
+
+            if (tempUri) {
+              try {
+                await deleteFileHelper(tempUri);
+              } catch (_) {}
+            }
+
+            errorOccurred = err;
+            throw err;
+          }
+        }
+      };
+
+      const workers: Promise<void>[] = [];
+      const limit = Math.min(CONCURRENCY_LIMIT, pendingChunks.length);
+      for (let i = 0; i < limit; i++) {
+        workers.push(uploadWorker());
+      }
+
+      await Promise.all(workers);
+
+      if (errorOccurred) {
+        throw errorOccurred;
       }
     }
 
