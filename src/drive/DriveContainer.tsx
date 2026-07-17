@@ -59,9 +59,16 @@ function loadPdfJs(): Promise<any> {
     }
     const script = document.createElement('script');
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js';
-    script.onload = () => {
+    script.onload = async () => {
       const pdfjsLib = (window as any).pdfjsLib;
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+      try {
+        const workerRes = await fetch('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js');
+        const workerBlob = new Blob([await workerRes.text()], { type: 'application/javascript' });
+        pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(workerBlob);
+      } catch (err) {
+        console.warn('Failed to load inline worker, falling back to CDN url:', err);
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+      }
       resolve(pdfjsLib);
     };
     script.onerror = (e) => reject(e);
@@ -148,7 +155,7 @@ const WebPdfViewer: React.FC<{ url: string }> = ({ url }) => {
       ref={containerRef}
       style={{
         width: '100%',
-        height: '100%',
+        height: '75vh',
         overflowY: 'auto',
         WebkitOverflowScrolling: 'touch',
         padding: '8px',
