@@ -1620,6 +1620,7 @@ const styles = StyleSheet.create({
   previewViewport: {
     flex: 1,
     width: '100%',
+    minHeight: 1,
     alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',

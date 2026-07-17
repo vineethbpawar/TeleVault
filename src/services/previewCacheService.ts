@@ -57,8 +57,8 @@ async function resolveWebBlobUrl(webBlobUri: string): Promise<string> {
   return '';
 }
 
-function isWebValidUri(uri: string | null | undefined): boolean {
-  if (!uri) return false;
+function isWebValidUri(uri: any): boolean {
+  if (typeof uri !== 'string') return false;
   return (
     uri.startsWith('http://') ||
     uri.startsWith('https://') ||
@@ -300,7 +300,7 @@ export const previewCacheService = {
       let resolvedLocalUri = file.local_uri || file.local_thumbnail_uri || file.overlay_metadata?.local_uri;
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
-          if (file.telegram_file_id && resolvedLocalUri.startsWith('blob:')) {
+          if (file.telegram_file_id && typeof resolvedLocalUri === 'string' && resolvedLocalUri.startsWith('blob:')) {
             resolvedLocalUri = null;
           }
         }
@@ -310,7 +310,7 @@ export const previewCacheService = {
           if (!isWebValidUri(resolvedLocalUri)) {
             // Ignore native file paths on Web
           } else {
-            if (resolvedLocalUri.startsWith('webblob:')) {
+            if (typeof resolvedLocalUri === 'string' && resolvedLocalUri.startsWith('webblob:')) {
               resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
             }
             if (resolvedLocalUri) {
@@ -424,7 +424,7 @@ export const previewCacheService = {
       let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
-          if (file.telegram_file_id && resolvedLocalUri.startsWith('blob:')) {
+          if (file.telegram_file_id && typeof resolvedLocalUri === 'string' && resolvedLocalUri.startsWith('blob:')) {
             resolvedLocalUri = null;
           }
         }
@@ -434,7 +434,7 @@ export const previewCacheService = {
           if (!isWebValidUri(resolvedLocalUri)) {
             // Ignore native file paths on Web
           } else {
-            if (resolvedLocalUri.startsWith('webblob:')) {
+            if (typeof resolvedLocalUri === 'string' && resolvedLocalUri.startsWith('webblob:')) {
               resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
             }
             playableUri = resolvedLocalUri;
