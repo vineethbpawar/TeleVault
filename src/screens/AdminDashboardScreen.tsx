@@ -5,12 +5,12 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
   ScrollView,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Shield, Users, AlertTriangle, FileText, Check, Trash2, ArrowLeft } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
@@ -166,7 +166,7 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
   if (isAdmin === false) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.container}>
         <AppHeader title="Admin Panel" showBackButton={true} />
         <View style={styles.center}>
           <Shield size={64} color="#FF453A" style={{ marginBottom: 16 }} />
@@ -180,7 +180,7 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.container}>
         <AppHeader title="Admin Dashboard" showBackButton={true} />
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#FFFC00" />
@@ -190,7 +190,7 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.container}>
       <AppHeader title="Admin Controls" showBackButton={true} />
 
       <ScrollView

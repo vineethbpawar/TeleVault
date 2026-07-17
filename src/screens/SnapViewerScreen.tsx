@@ -106,7 +106,7 @@ export const SnapViewerScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.container}>
       {/* Top Header */}
       <View style={styles.header}>
         <View style={styles.senderInfo}>

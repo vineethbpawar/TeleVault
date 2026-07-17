@@ -4,7 +4,6 @@ import {
   StyleSheet,
   View,
   Text,
-  SafeAreaView,
   ScrollView,
   Switch,
   TouchableOpacity,

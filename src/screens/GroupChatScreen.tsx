@@ -355,7 +355,12 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
           />
         )}
 
-        <View style={{ backgroundColor: '#0F0F12', paddingBottom: keyboardVisible ? 4 : Math.max(insets.bottom, 4) }}>
+        <View style={[
+          { backgroundColor: '#0F0F12' },
+          Platform.OS === 'web'
+            ? ({ paddingBottom: keyboardVisible ? 4 : 'max(env(safe-area-inset-bottom), 4px)' } as any)
+            : { paddingBottom: keyboardVisible ? 4 : Math.max(insets.bottom, 4) },
+        ]}>
           <View style={styles.inputContainer}>
             <TouchableOpacity style={styles.inputCameraBtn} onPress={handleSnapPress}>
               <Camera size={24} color="#FFFFFF" />

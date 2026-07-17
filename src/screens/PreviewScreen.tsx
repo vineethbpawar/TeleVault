@@ -4,7 +4,6 @@ import {
   View,
   Text,
   Image,
-  SafeAreaView,
   TouchableOpacity,
   ScrollView,
   Alert,

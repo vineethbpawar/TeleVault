@@ -6,10 +6,10 @@ import {
   TextInput,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Search, MessageSquare, Send, Camera, UserPlus, UserCheck, ShieldAlert, MoreVertical } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -368,7 +368,7 @@ export const UserSearchScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.container}>
       <AppHeader title={isPickerMode ? 'Send Snap To...' : 'Search Users'} showBackButton={true} />
 
       <View style={styles.searchContainer}>

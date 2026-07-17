@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Modal, SafeAreaView, Alert, TextInput, ActivityIndicator, Platform } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Modal, Alert, TextInput, ActivityIndicator, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Delete, X, Lock, Fingerprint } from 'lucide-react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { securityService } from '../services/securityService';
@@ -348,7 +349,7 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false}>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.container}>
         {/* Header Close button */}
         {!undismissable && (
           <View style={styles.header}>

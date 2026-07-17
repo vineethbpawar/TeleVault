@@ -38,6 +38,7 @@ import { telegramService } from '../services/telegramService';
 import { Alert, AppState, AppStateStatus, Platform, View, Text } from 'react-native';
 import { securityService } from '../services/securityService';
 import { PinLockModal } from '../components/PinLockModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { networkService } from '../services/networkService';
 
@@ -50,6 +51,7 @@ export const AppNavigator: React.FC = () => {
   const [restoringConfig, setRestoringConfig] = useState(false);
   const [appLocked, setAppLocked] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     // 1. Initial connectivity check
@@ -240,6 +242,9 @@ export const AppNavigator: React.FC = () => {
         <View style={{
           backgroundColor: '#FF453A',
           paddingVertical: 8,
+          paddingTop: Platform.OS === 'web'
+            ? ('calc(8px + env(safe-area-inset-top))' as any)
+            : 8 + insets.top,
           alignItems: 'center',
           justifyContent: 'center',
           flexDirection: 'row',

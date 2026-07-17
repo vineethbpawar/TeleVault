@@ -1090,7 +1090,12 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
           )}
         </View>
 
-        <View style={{ backgroundColor: '#0A0A0A', paddingBottom: keyboardVisible ? 4 : Math.max(insets.bottom, 4) }}>
+        <View style={[
+          { backgroundColor: '#0A0A0A' },
+          Platform.OS === 'web'
+            ? ({ paddingBottom: keyboardVisible ? 4 : 'max(env(safe-area-inset-bottom), 4px)' } as any)
+            : { paddingBottom: keyboardVisible ? 4 : Math.max(insets.bottom, 4) },
+        ]}>
           <MessageComposer
             onSend={handleSend}
             onCameraPress={handleSnapPress}
@@ -1191,7 +1196,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         animationType="slide"
         onRequestClose={() => setShowMediaPicker(false)}
       >
-        <SafeAreaView style={styles.pickerModalContainer}>
+        <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.pickerModalContainer}>
           <View style={styles.pickerHeader}>
             <Text style={styles.pickerTitle}>Send Snap from Memories</Text>
             <TouchableOpacity onPress={() => setShowMediaPicker(false)} style={styles.pickerCloseBtn}>
