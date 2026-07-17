@@ -323,6 +323,8 @@ export const previewCacheService = {
       media_url?: string | null;
       telegram_file_id?: string | null;
       is_private?: boolean | null;
+      is_chunked?: boolean | null;
+      large_file_id?: string | null;
       overlay_metadata?: any;
     },
     forceRefresh = false,
@@ -420,7 +422,19 @@ export const previewCacheService = {
           const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
           
           let previewUri = url;
-          if (Platform.OS === 'web') {
+          if (file.is_chunked && file.large_file_id) {
+            const { largeFileDownloadService } = require('./largeFileDownloadService');
+            const rebuildResult = await largeFileDownloadService.downloadAndRebuildLargeFile(
+              file.large_file_id,
+              file.is_private,
+              file.mime_type
+            );
+            if (rebuildResult.success && rebuildResult.localUri) {
+              previewUri = rebuildResult.localUri;
+            } else {
+              throw new Error(rebuildResult.message || 'Failed to rebuild chunked file.');
+            }
+          } else if (Platform.OS === 'web') {
             if (file.is_private) {
               const { encryptionService } = require('./encryptionService');
               const proxiedUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(url)}`;

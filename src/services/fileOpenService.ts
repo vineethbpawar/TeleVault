@@ -365,6 +365,8 @@ export const fileOpenService = {
     mime_type?: string | null;
     local_thumbnail_uri?: string | null;
     overlay_metadata?: any;
+    is_chunked?: boolean | null;
+    large_file_id?: string | null;
   }): Promise<void> {
     try {
       if (Platform.OS === 'web') {
@@ -399,15 +401,29 @@ export const fileOpenService = {
               cleanUrl = URL.createObjectURL(localBlob);
             }
           } else {
-            if (!file.telegram_file_id) {
-              throw new Error('This file cannot be downloaded (No Telegram file ID and not found in local cache).');
-            }
-            if (!file.is_private) {
-              cleanUrl = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id);
+            if (file.is_chunked && file.large_file_id) {
+              const { largeFileDownloadService } = require('./largeFileDownloadService');
+              const rebuildResult = await largeFileDownloadService.downloadAndRebuildLargeFile(
+                file.large_file_id,
+                file.is_private,
+                file.mime_type
+              );
+              if (rebuildResult.success && rebuildResult.localUri) {
+                cleanUrl = rebuildResult.localUri;
+              } else {
+                throw new Error(rebuildResult.message || 'Failed to rebuild chunked file.');
+              }
             } else {
-              const cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
-              const { encryptionService } = require('./encryptionService');
-              cleanUrl = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type);
+              if (!file.telegram_file_id) {
+                throw new Error('This file cannot be downloaded (No Telegram file ID and not found in local cache).');
+              }
+              if (!file.is_private) {
+                cleanUrl = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id);
+              } else {
+                const cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
+                const { encryptionService } = require('./encryptionService');
+                cleanUrl = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type);
+              }
             }
           }
 
@@ -437,15 +453,30 @@ export const fileOpenService = {
         return;
       }
 
-      if (!file.telegram_file_id) {
-        throw new Error('This file cannot be downloaded (No Telegram file ID).');
-      }
-      let cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
-      
-      // Decrypt if E2EE private
-      if (file.is_private) {
-        const { encryptionService } = require('./encryptionService');
-        cachedUri = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type);
+      let cachedUri = '';
+      if ((file as any).is_chunked && (file as any).large_file_id) {
+        const { largeFileDownloadService } = require('./largeFileDownloadService');
+        const rebuildResult = await largeFileDownloadService.downloadAndRebuildLargeFile(
+          (file as any).large_file_id,
+          file.is_private,
+          file.mime_type
+        );
+        if (rebuildResult.success && rebuildResult.localUri) {
+          cachedUri = rebuildResult.localUri;
+        } else {
+          throw new Error(rebuildResult.message || 'Failed to rebuild chunked file.');
+        }
+      } else {
+        if (!file.telegram_file_id) {
+          throw new Error('This file cannot be downloaded (No Telegram file ID).');
+        }
+        cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
+        
+        // Decrypt if E2EE private
+        if (file.is_private) {
+          const { encryptionService } = require('./encryptionService');
+          cachedUri = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type);
+        }
       }
 
       const isSharingAvailable = await Sharing.isAvailableAsync();
@@ -467,7 +498,28 @@ export const fileOpenService = {
   /**
    * Helper to download the file directly to device cache without opening sharing sheet.
    */
-  async downloadToCache(file: { telegram_file_id: string | null; file_name: string; is_private?: boolean | null; mime_type?: string | null }): Promise<string> {
+  async downloadToCache(file: { 
+    id?: string;
+    telegram_file_id: string | null; 
+    file_name: string; 
+    is_private?: boolean | null; 
+    mime_type?: string | null;
+    is_chunked?: boolean | null;
+    large_file_id?: string | null;
+  }): Promise<string> {
+    if (file.is_chunked && file.large_file_id) {
+      const { largeFileDownloadService } = require('./largeFileDownloadService');
+      const rebuildResult = await largeFileDownloadService.downloadAndRebuildLargeFile(
+        file.large_file_id,
+        file.is_private,
+        file.mime_type
+      );
+      if (rebuildResult.success && rebuildResult.localUri) {
+        return rebuildResult.localUri;
+      } else {
+        throw new Error(rebuildResult.message || 'Failed to rebuild chunked file.');
+      }
+    }
     if (!file.telegram_file_id) {
       throw new Error('Telegram file ID is missing.');
     }
