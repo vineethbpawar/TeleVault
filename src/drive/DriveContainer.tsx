@@ -592,6 +592,24 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
     setOptionsVisible(true);
   };
 
+  const handleDownloadSelectedItem = async () => {
+    if (!selectedItem || selectedItem.type !== 'file') return;
+    setOptionsVisible(false);
+    const driveFile = files.find(f => f.id === selectedItem.id);
+    if (!driveFile) {
+      Alert.alert('Error', 'File not found in current view.');
+      return;
+    }
+    setOpeningDoc(true);
+    try {
+      await fileOpenService.openDocument(driveFile as any);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to download file.');
+    } finally {
+      setOpeningDoc(false);
+    }
+  };
+
   // Launch File Selection pickers
   const handleUploadTrigger = async (source: 'camera' | 'document') => {
     setFabMenuVisible(false);
@@ -809,6 +827,28 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
       return;
     }
 
+    // On web: trigger download DIRECTLY from this synchronous user-click handler
+    // (per AGENTS.md: web downloads must be initiated from a direct user-click event)
+    if (Platform.OS === 'web') {
+      try {
+        setLoading(true);
+        for (const file of selectedFiles) {
+          await fileOpenService.openDocument(file as any).catch(err => {
+            console.warn('Failed to share file in loop:', err);
+          });
+        }
+        setSelectedIds(new Set());
+        setIsSelectionMode(false);
+        showToast('Files downloaded.');
+      } catch (err: any) {
+        Alert.alert('Error', err.message || 'Export failed.');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // On native: confirm then share via system sheet
     const confirmMsg = selectedFiles.length === 1
       ? 'Export/Share this file?'
       : `Export/Share these ${selectedFiles.length} files sequentially?`;
@@ -827,7 +867,7 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
             }
             setSelectedIds(new Set());
             setIsSelectionMode(false);
-            showToast(Platform.OS === 'web' ? 'Files downloaded.' : 'Files exported successfully.');
+            showToast('Files exported successfully.');
           } catch (err: any) {
             Alert.alert('Error', err.message || 'Export failed.');
           } finally {
@@ -1137,6 +1177,13 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
                 <Edit size={18} color="#FFFFFF" style={{ marginRight: 12 }} />
                 <Text style={styles.sheetRowText}>Rename</Text>
               </TouchableOpacity>
+
+              {selectedItem.type === 'file' && (
+                <TouchableOpacity style={styles.sheetRow} onPress={handleDownloadSelectedItem}>
+                  <Share2 size={18} color="#FFFC00" style={{ marginRight: 12 }} />
+                  <Text style={[styles.sheetRowText, { color: '#FFFC00' }]}>Download / Share</Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity style={[styles.sheetRow, { borderBottomWidth: 0 }]} onPress={handleDeleteItem}>
                 <Trash2 size={18} color="#FF3B30" style={{ marginRight: 12 }} />

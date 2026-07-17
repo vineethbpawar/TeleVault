@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Search, Star, Lock, Grid, Trash2, Edit, CheckSquare, X, Share2 } from 'lucide-react-native';
+import { Search, Star, Lock, Grid, Trash2, Edit, CheckSquare, X, Share2, Download } from 'lucide-react-native';
 
 import { MemoryGrid } from './MemoryGrid';
 import { GalleryItem, FilterType } from './types';
@@ -266,6 +266,28 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
     const selectedFiles = items.filter(f => ids.includes(f.id));
     if (selectedFiles.length === 0) return;
 
+    // On web: trigger download DIRECTLY from this synchronous user-click handler
+    // (per AGENTS.md: web downloads must be initiated from a direct user-click event)
+    if (Platform.OS === 'web') {
+      try {
+        setLoading(true);
+        for (const file of selectedFiles) {
+          await fileOpenService.openDocument(file).catch(err => {
+            console.warn('Failed to share file in loop:', err);
+          });
+        }
+        setSelectedIds(new Set());
+        setIsSelectionMode(false);
+        showToast('Files downloaded.');
+      } catch (err: any) {
+        showAlert('Error', (err as any).message || 'Export failed.');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // On native: confirm then share via system sheet
     const confirmMsg = selectedFiles.length === 1
       ? 'Export/Share this file?'
       : `Export/Share these ${selectedFiles.length} files sequentially?`;
@@ -284,7 +306,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
             }
             setSelectedIds(new Set());
             setIsSelectionMode(false);
-            showToast(Platform.OS === 'web' ? 'Files downloaded.' : 'Files exported successfully.');
+            showToast('Files exported successfully.');
           } catch (err: any) {
             showAlert('Error', err.message || 'Export failed.');
           } finally {
@@ -293,6 +315,20 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
         }
       }
     ]);
+  };
+
+  // Single file download/share (from long-press context menu)
+  const handleExportSingleFile = async (item: GalleryItem) => {
+    setActiveMenuFile(null);
+    try {
+      setLoading(true);
+      await fileOpenService.openDocument(item);
+      showToast(Platform.OS === 'web' ? 'Download ready.' : 'File shared successfully.');
+    } catch (err: any) {
+      showAlert('Export Failed', err.message || 'Could not export this file.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleBulkTrash = async () => {
@@ -495,6 +531,14 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
               >
                 <Edit size={18} color="#FFFFFF" style={{ marginRight: 12 }} />
                 <Text style={styles.sheetRowText}>Edit Caption</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.sheetRow}
+                onPress={() => handleExportSingleFile(activeMenuFile)}
+              >
+                <Download size={18} color="#FFFC00" style={{ marginRight: 12 }} />
+                <Text style={[styles.sheetRowText, { color: '#FFFC00' }]}>Download / Share</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
