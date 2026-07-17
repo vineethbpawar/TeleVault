@@ -1112,6 +1112,8 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
                     (previewFile.mime_type && previewFile.mime_type.startsWith('image/')) ||
                     (previewFile.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(previewFile.file_name));
                   const isVideo = previewFile.file_type === 'video';
+                  const isPdf = previewFile.mime_type === 'application/pdf' ||
+                    (previewFile.file_name && /\.pdf$/i.test(previewFile.file_name));
 
                   if (isImage) {
                     return (
@@ -1126,6 +1128,19 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
                       <VideoPlayer
                         source={resolvedPreviewUri}
                         style={styles.previewVideo}
+                      />
+                    );
+                  } else if (isPdf && Platform.OS === 'web') {
+                    return (
+                      <iframe
+                        src={resolvedPreviewUri}
+                        style={{
+                          width: '100%',
+                          height: '75vh',
+                          border: 'none',
+                          borderRadius: 12,
+                          backgroundColor: '#FFFFFF',
+                        }}
                       />
                     );
                   } else {

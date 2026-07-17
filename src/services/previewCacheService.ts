@@ -620,10 +620,17 @@ export const previewCacheService = {
     let resolvedLocalUri = file.local_uri || file.local_thumbnail_uri || file.overlay_metadata?.local_uri;
     if (resolvedLocalUri) {
       if (Platform.OS === 'web') {
+        if (file.telegram_file_id && typeof resolvedLocalUri === 'string' && resolvedLocalUri.startsWith('blob:')) {
+          resolvedLocalUri = null;
+        }
+      }
+    }
+    if (resolvedLocalUri) {
+      if (Platform.OS === 'web') {
         if (!isWebValidUri(resolvedLocalUri)) {
           // Ignore native file paths on Web
         } else {
-          if (resolvedLocalUri.startsWith('webblob:')) {
+          if (typeof resolvedLocalUri === 'string' && resolvedLocalUri.startsWith('webblob:')) {
             resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
           }
           if (resolvedLocalUri) {
