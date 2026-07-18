@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { supabase } from '../lib/supabase';
 import { AppStackParamList } from '../types/navigation';
+import * as ExpoSplash from 'expo-splash-screen';
 import AuthNavigator from './AuthNavigator';
 import MainTabs from './MainTabs';
 import TelegramConnectScreen from '../screens/TelegramConnectScreen';
@@ -37,7 +38,7 @@ import CallOverlay from '../components/CallOverlay';
 import { Session } from '@supabase/supabase-js';
 import { authEvents } from '../utils/authEvent';
 import { telegramService } from '../services/telegramService';
-import { Alert, AppState, AppStateStatus, Platform, View, Text } from 'react-native';
+import { Alert, AppState, AppStateStatus, Platform, View, Text, StyleSheet } from 'react-native';
 import { securityService } from '../services/securityService';
 import { PinLockModal } from '../components/PinLockModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -54,6 +55,15 @@ export const AppNavigator: React.FC = () => {
   const [appLocked, setAppLocked] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const insets = useSafeAreaInsets();
+
+  // Safety net: always hide the native splash after 5 seconds max,
+  // in case auth/network check hangs (e.g. no connectivity on first launch)
+  useEffect(() => {
+    const safetyTimer = setTimeout(() => {
+      ExpoSplash.hideAsync().catch(() => {});
+    }, 5000);
+    return () => clearTimeout(safetyTimer);
+  }, []);
 
   useEffect(() => {
     // 1. Initial connectivity check
@@ -141,11 +151,18 @@ export const AppNavigator: React.FC = () => {
 
   const checkUsername = async (userId: string, email?: string) => {
     try {
-      const { data, error } = await supabase
+      // 4-second safety timeout for profile check to prevent hangs on startup
+      const profilePromise = supabase
         .from('profiles')
         .select('username')
         .eq('id', userId)
         .maybeSingle();
+
+      const timeoutPromise = new Promise<any>((resolve) =>
+        setTimeout(() => resolve({ data: { username: 'offline_user' }, error: null }), 4000)
+      );
+
+      const { data, error } = await Promise.race([profilePromise, timeoutPromise]);
 
       if (error) {
         console.error('Fetch profile username error:', error);
@@ -181,6 +198,8 @@ export const AppNavigator: React.FC = () => {
         await checkUsername(currSession.user.id, currSession.user.email);
         setRestoringConfig(false);
         setLoading(false);
+        // Hide the native splash screen now that auth is resolved
+        ExpoSplash.hideAsync().catch(() => {});
 
         // Defer Telegram initialization to the background to speed up startup
         telegramService.initConfig().then(async () => {
@@ -200,11 +219,18 @@ export const AppNavigator: React.FC = () => {
       } else {
         setHasUsername(null);
         setLoading(false);
+        // Hide the native splash screen for the unauthenticated path too
+        ExpoSplash.hideAsync().catch(() => {});
       }
     };
 
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+    // Get initial session with 3-second safety timeout
+    const sessionPromise = supabase.auth.getSession();
+    const sessionTimeout = new Promise<any>((resolve) =>
+      setTimeout(() => resolve({ data: { session: null } }), 3000)
+    );
+
+    Promise.race([sessionPromise, sessionTimeout]).then(({ data: { session: initialSession } }) => {
       setSession(initialSession);
       checkUserAndSession(initialSession);
     });
@@ -239,21 +265,14 @@ export const AppNavigator: React.FC = () => {
   }
 
   return (
-    <>
+    <View style={navigatorStyles.root}>
       {!isOnline && (
-        <View style={{
-          backgroundColor: '#FF453A',
-          paddingVertical: 8,
+        <View style={[navigatorStyles.offlineBanner, {
           paddingTop: Platform.OS === 'web'
             ? ('calc(8px + env(safe-area-inset-top))' as any)
             : 8 + insets.top,
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexDirection: 'row',
-          zIndex: 9999,
-          position: 'relative',
-        }}>
-          <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>
+        }]}>
+          <Text style={navigatorStyles.offlineText}>
             ⚠️ Offline Mode — Some features may be unavailable.
           </Text>
         </View>
@@ -319,8 +338,29 @@ export const AppNavigator: React.FC = () => {
 
       {/* Global call overlay - handles incoming calls and active call UI */}
       {session && hasUsername && <CallOverlay />}
-    </>
+    </View>
   );
 };
+
+const navigatorStyles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  offlineBanner: {
+    backgroundColor: '#FF453A',
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    zIndex: 9999,
+    position: 'relative',
+  },
+  offlineText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+});
 
 export default AppNavigator;

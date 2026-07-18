@@ -337,6 +337,271 @@ const TextReader: React.FC<{ fileUrl: string; isMarkdown: boolean }> = ({ fileUr
   );
 };
 
+// ─── Native Document Reader (Android/iOS) ─────────────────────────────────────
+
+const getPdfTemplate = (base64: string) => `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    body { margin: 0; padding: 0; background-color: #0A0A0F; color: #FFFFFF; font-family: -apple-system, sans-serif; }
+    #canvas-container { display: flex; flex-direction: column; align-items: center; padding: 12px; gap: 16px; }
+    canvas { max-width: 100%; box-shadow: 0 4px 12px rgba(0,0,0,0.6); background: white; border-radius: 4px; }
+    .loading { text-align: center; padding: 40px; font-size: 16px; color: #FFFC00; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Generating preview...</div>
+  <div id="canvas-container"></div>
+  <script>
+    try {
+      const pdfjsLib = window['pdfjs-dist/build/pdf'];
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      
+      const base64Data = \`${base64}\`;
+      const binaryData = atob(base64Data);
+      const len = binaryData.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+          bytes[i] = binaryData.charCodeAt(i);
+      }
+      
+      pdfjsLib.getDocument({ data: bytes }).promise.then(function(pdf) {
+          document.getElementById('loading').style.display = 'none';
+          const container = document.getElementById('canvas-container');
+          
+          let pageIndex = 1;
+          function renderNextPage() {
+              if (pageIndex > pdf.numPages) return;
+              
+              const canvas = document.createElement('canvas');
+              container.appendChild(canvas);
+              
+              pdf.getPage(pageIndex).then(function(page) {
+                  const viewport = page.getViewport({ scale: 1.5 });
+                  canvas.height = viewport.height;
+                  canvas.width = viewport.width;
+                  const context = canvas.getContext('2d');
+                  
+                  page.render({ canvasContext: context, viewport: viewport }).promise.then(function() {
+                      pageIndex++;
+                      renderNextPage();
+                  });
+              });
+          }
+          renderNextPage();
+      }).catch(function(error) {
+          document.getElementById('loading').innerText = 'Error: ' + error.message;
+      });
+    } catch (err) {
+      document.getElementById('loading').innerText = 'Failed: ' + err.message;
+    }
+  </script>
+</body>
+</html>
+`;
+
+const getDocxTemplate = (base64: string) => `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <style>
+    body { 
+      margin: 0; 
+      padding: 20px; 
+      background-color: #0A0A0F; 
+      color: #E5E5EA; 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .loading { text-align: center; padding: 40px; font-size: 16px; color: #FFFC00; font-weight: 600; }
+    p { margin-bottom: 16px; }
+    h1, h2, h3, h4 { color: #FFFFFF; margin-top: 24px; margin-bottom: 12px; }
+    a { color: #FFFC00; }
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Reading Document...</div>
+  <div id="content"></div>
+  <script>
+    try {
+      const base64Data = \`${base64}\`;
+      const binaryData = atob(base64Data);
+      const len = binaryData.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+          bytes[i] = binaryData.charCodeAt(i);
+      }
+      
+      window.mammoth.convertToHtml({ arrayBuffer: bytes.buffer })
+        .then(function(result) {
+          document.getElementById('loading').style.display = 'none';
+          document.getElementById('content').innerHTML = result.value;
+        })
+        .catch(function(err) {
+          document.getElementById('loading').innerText = 'Conversion Error: ' + err.message;
+        });
+    } catch (err) {
+      document.getElementById('loading').innerText = 'Failed: ' + err.message;
+    }
+  </script>
+</body>
+</html>
+`;
+
+const getMarkdownTemplate = (base64Markdown: string) => `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    body { 
+      margin: 0; 
+      padding: 20px; 
+      background-color: #0A0A0F; 
+      color: #E5E5EA; 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .loading { text-align: center; padding: 40px; font-size: 16px; color: #FFFC00; }
+    pre { background: #12121C; padding: 12px; border-radius: 8px; overflow-x: auto; }
+    code { font-family: monospace; font-size: 13px; color: #FFFC00; }
+    h1, h2, h3, h4 { color: #FFFFFF; margin-top: 24px; margin-bottom: 12px; }
+    a { color: #FFFC00; }
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Loading...</div>
+  <div id="content"></div>
+  <script>
+    try {
+      const base64Data = \`${base64Markdown}\`;
+      const utf8Text = decodeURIComponent(escape(atob(base64Data)));
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('content').innerHTML = window.marked.parse(utf8Text);
+    } catch (err) {
+      document.getElementById('loading').innerText = 'Error: ' + err.message;
+    }
+  </script>
+</body>
+</html>
+`;
+
+const getTextTemplate = (base64Text: string) => `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
+  <style>
+    body { 
+      margin: 0; 
+      padding: 20px; 
+      background-color: #0A0A0F; 
+      color: #E5E5EA; 
+      font-family: monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body><script>
+    try {
+      const base64Data = \`${base64Text}\`;
+      const utf8Text = decodeURIComponent(escape(atob(base64Data)));
+      document.body.innerText = utf8Text;
+    } catch (err) {
+      document.body.innerText = 'Error: ' + err.message;
+    }
+</script></body>
+</html>
+`;
+
+const NativeDocReader: React.FC<{ fileUrl: string; docType: 'pdf' | 'docx' | 'markdown' | 'text' | 'unknown' }> = ({ fileUrl, docType }) => {
+  const [html, setHtml] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const loadFile = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const FileSystem = require('expo-file-system/legacy');
+
+        let template = '';
+        if (docType === 'pdf' || docType === 'docx') {
+          const base64Data = await FileSystem.readAsStringAsync(fileUrl, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          if (!active) return;
+          template = docType === 'pdf' ? getPdfTemplate(base64Data) : getDocxTemplate(base64Data);
+        } else {
+          const textContent = await FileSystem.readAsStringAsync(fileUrl, {
+            encoding: FileSystem.EncodingType.UTF8,
+          });
+          if (!active) return;
+          const base64Text = btoa(unescape(encodeURIComponent(textContent)));
+          template = docType === 'markdown' ? getMarkdownTemplate(base64Text) : getTextTemplate(base64Text);
+        }
+
+        setHtml(template);
+        setLoading(false);
+      } catch (err: any) {
+        console.error('NativeDocReader load error:', err);
+        if (active) {
+          setError(err.message || 'Failed to load file content.');
+          setLoading(false);
+        }
+      }
+    };
+
+    loadFile();
+    return () => {
+      active = false;
+    };
+  }, [fileUrl, docType]);
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#FFFC00" />
+        <Text style={styles.loadingText}>Reading Document…</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    );
+  }
+
+  const { WebView } = require('react-native-webview');
+  return (
+    <WebView
+      originWhitelist={['*']}
+      source={{ html: html || '' }}
+      style={{ flex: 1, backgroundColor: '#0A0A0F' }}
+      javaScriptEnabled={true}
+      domStorageEnabled={true}
+      scalesPageToFit={true}
+    />
+  );
+};
+
 // ─── Main DocumentReaderModal ────────────────────────────────────────────────
 
 export const DocumentReaderModal: React.FC<DocumentReaderProps> = ({
@@ -354,15 +619,17 @@ export const DocumentReaderModal: React.FC<DocumentReaderProps> = ({
     if (!fileUrl) return null;
 
     if (Platform.OS !== 'web') {
-      // Native: show unsupported message — system viewer used instead
-      return (
-        <View style={styles.centered}>
-          <FileText size={64} color="#007AFF" style={{ marginBottom: 16 }} />
-          <Text style={styles.unsupportedTitle}>{shortName}</Text>
-          <Text style={styles.unsupportedSub}>In-app reading is available on Web PWA.</Text>
-          <Text style={styles.unsupportedSub}>Use "Export" to open in your device's app.</Text>
-        </View>
-      );
+      if (docType === 'unknown') {
+        return (
+          <View style={styles.centered}>
+            <FileText size={64} color="#8E8E93" style={{ marginBottom: 16 }} />
+            <Text style={styles.unsupportedTitle}>{shortName}</Text>
+            <Text style={styles.unsupportedSub}>Preview not available for this file type.</Text>
+            <Text style={styles.unsupportedSub}>Use "Export" to open externally.</Text>
+          </View>
+        );
+      }
+      return <NativeDocReader fileUrl={fileUrl} docType={docType} />;
     }
 
     switch (docType) {

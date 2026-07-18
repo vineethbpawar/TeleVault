@@ -6,6 +6,13 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastBanner } from './src/components/ToastBanner';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as ExpoSplash from 'expo-splash-screen';
+
+// Keep the native splash screen visible while auth state loads.
+// AppNavigator will call ExpoSplash.hideAsync() once ready.
+ExpoSplash.preventAutoHideAsync().catch(() => {
+  // Already hidden or error — safe to ignore
+});
 
 export const navigationRef = createNavigationContainerRef();
 

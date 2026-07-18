@@ -24,16 +24,20 @@ const ViewerItem = React.memo<{
 }>(({ file, isActive, paused, onTapLeft, onTapRight, onHoldStart, onHoldEnd }) => {
   const [resolvedUri, setResolvedUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setMediaError(null);
 
     previewCacheService.resolveFilePreview(file).then(res => {
       if (active) {
         const uri = res.playableUri || res.previewUri;
         if (uri) {
           setResolvedUri(uri);
+        } else if ((res as any).error) {
+          setMediaError((res as any).error);
         }
         setLoading(false);
       }
@@ -75,8 +79,11 @@ const ViewerItem = React.memo<{
 
   if (!resolvedUri) {
     return renderPressableContent(
-      <View style={styles.itemCenter}>
-        <Text style={{ color: '#8E8E93' }}>Unable to load media</Text>
+      <View style={[styles.itemCenter, { paddingHorizontal: 32 }]}>
+        <Text style={{ color: '#FF3B30', fontSize: 18, textAlign: 'center', marginBottom: 10 }}>⚠️ Can't Play Video</Text>
+        <Text style={{ color: '#8E8E93', fontSize: 13, textAlign: 'center', lineHeight: 20 }}>
+          {mediaError || 'Unable to load media'}
+        </Text>
       </View>
     );
   }

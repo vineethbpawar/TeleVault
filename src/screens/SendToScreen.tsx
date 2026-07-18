@@ -150,7 +150,7 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
           setSending(false);
         }
       } else {
-        const MediaLibrary = require('expo-media-library');
+        const MediaLibrary = require('expo-media-library/legacy');
         const { status } = await MediaLibrary.requestPermissionsAsync();
         if (status === 'granted') {
           await MediaLibrary.saveToLibraryAsync(mediaUri);
@@ -215,7 +215,7 @@ export const SendToScreen: React.FC<Props> = ({ navigation, route }) => {
           let localSharePath = mediaUri;
           
           if (mediaUri.startsWith('http')) {
-            const FileSystem = require('expo-file-system');
+            const FileSystem = require('expo-file-system/legacy');
             const extension = mediaType === 'video' ? '.mp4' : '.jpg';
             localSharePath = `${FileSystem.cacheDirectory}televault_share_${Date.now()}${extension}`;
             

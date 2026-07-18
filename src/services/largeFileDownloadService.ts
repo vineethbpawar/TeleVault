@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import { LargeFileChunk } from '../types/largeFile';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
+import { File as EFSFile } from 'expo-file-system';
 import { telegramService } from './telegramService';
 
 export const largeFileDownloadService = {
@@ -58,7 +59,7 @@ export const largeFileDownloadService = {
     localUri: string | null;
   }> {
     try {
-      const { chunkCount, totalSize, originalFileName } = await this.getChunkInfo(largeFileId);
+      const { chunkCount, originalFileName } = await this.getChunkInfo(largeFileId);
       const chunks = await this.listChunks(largeFileId);
       
       const completedChunks = chunks.filter(c => c.status === 'completed');
@@ -102,11 +103,15 @@ export const largeFileDownloadService = {
           localUri,
         };
       } else {
+        // Memory-safe streaming assembly using SDK 56 File API.
+        // Write each chunk's base64 directly to the output file with append=true,
+        // so we never hold more than one chunk in RAM at a time.
         const safeName = originalFileName.replace(/[^a-zA-Z0-9.-]/g, '_');
         const finalDestUri = `${FileSystem.cacheDirectory}rebuilt_${Date.now()}_${safeName}`;
 
-        const finalBuffer = new Uint8Array(totalSize);
-        let currentOffset = 0;
+        // Create the destination file upfront (empty)
+        const destFile = new EFSFile(finalDestUri);
+        destFile.create({ overwrite: true });
 
         for (let i = 0; i < completedChunks.length; i++) {
           const chunk = completedChunks[i];
@@ -114,41 +119,35 @@ export const largeFileDownloadService = {
             onProgress(Math.round((i / completedChunks.length) * 100));
           }
 
-          let chunkLocalPath = await telegramService.downloadTelegramFileToCache(chunk.telegram_file_id!, chunk.chunk_file_name);
+          // Download chunk to cache
+          let chunkLocalPath = await telegramService.downloadTelegramFileToCache(
+            chunk.telegram_file_id!,
+            chunk.chunk_file_name
+          );
+
+          // Decrypt if private
           if (isPrivate) {
             const { encryptionService } = require('./encryptionService');
-            const decryptedPath = await encryptionService.decryptFile(chunkLocalPath, chunk.chunk_file_name, mimeType || undefined);
+            const decryptedPath = await encryptionService.decryptFile(
+              chunkLocalPath,
+              chunk.chunk_file_name,
+              mimeType || undefined
+            );
             await FileSystem.deleteAsync(chunkLocalPath, { idempotent: true });
             chunkLocalPath = decryptedPath;
           }
 
-          const base64Content = await FileSystem.readAsStringAsync(chunkLocalPath, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
+          // Read the chunk as raw bytes (Uint8Array) — only one chunk in RAM at a time.
+          // Using bytes avoids base64 padding corruption at chunk boundaries.
+          const chunkFile = new EFSFile(chunkLocalPath);
+          const chunkBytes = chunkFile.bytesSync();
 
+          // Delete the temporary chunk file immediately to free disk space
           await FileSystem.deleteAsync(chunkLocalPath, { idempotent: true });
 
-          const binaryString = atob(base64Content);
-          const len = binaryString.length;
-          for (let j = 0; j < len; j++) {
-            finalBuffer[currentOffset + j] = binaryString.charCodeAt(j);
-          }
-          currentOffset += len;
+          // Append raw bytes to the destination file (no base64 boundary issues)
+          destFile.write(chunkBytes, { append: i > 0 });
         }
-
-        let binaryStr = '';
-        const chunkTotalLen = finalBuffer.byteLength;
-        const step = 65536;
-        for (let j = 0; j < chunkTotalLen; j += step) {
-          const subArray = finalBuffer.subarray(j, Math.min(j + step, chunkTotalLen));
-          binaryStr += String.fromCharCode.apply(null, subArray as any);
-        }
-        
-        const finalBase64 = btoa(binaryStr);
-
-        await FileSystem.writeAsStringAsync(finalDestUri, finalBase64, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
 
         if (onProgress) {
           onProgress(100);

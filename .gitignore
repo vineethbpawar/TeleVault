@@ -20,3 +20,4 @@ yarn-error.log*
 .env*
 supabase/.temp/
 
+APK-Runner/

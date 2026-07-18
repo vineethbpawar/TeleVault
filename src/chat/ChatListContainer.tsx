@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Alert, ScrollView, RefreshControl, Image } from 'react-native';
-import { Search, Plus, MessageSquare, Camera, Users, UserCheck, Star, Clock, User, Bell, ChevronRight, Check, Square, Play } from 'lucide-react-native';
+import { Search, Plus, MessageSquare, Camera, Users, UserCheck, Star, Clock, User, Bell, ChevronRight, Check, Square, Play, Phone } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChatListContainerProps, ChatConversation, ChatGroup, ChatStory, ChatRequest, ChatTabType } from './types';
@@ -19,6 +19,15 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<ChatTabType>('unread');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const handleTabPress = (tab: ChatTabType) => {
+    if (tab === 'calls') {
+      // Navigate directly to Call History screen
+      navigation.navigate('CallHistory');
+      return;
+    }
+    setActiveTab(tab);
+  };
 
   // Data lists
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
@@ -287,13 +296,19 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
 
       {/* Navigation tabs row */}
       <View style={styles.tabContainer}>
-        {(['unread', 'groups', 'friends', 'requests'] as const).map((tab) => {
+        {(['unread', 'groups', 'calls', 'friends', 'requests'] as const).map((tab) => {
           const isActive = activeTab === tab;
-          let label = tab.toUpperCase();
+          let label = '';
           let count = 0;
           if (tab === 'unread') {
             label = 'CHATS';
             count = unreadCount;
+          } else if (tab === 'groups') {
+            label = 'GROUPS';
+          } else if (tab === 'calls') {
+            label = 'CALLS';
+          } else if (tab === 'friends') {
+            label = 'FRIENDS';
           } else if (tab === 'requests') {
             label = 'REQUESTS';
             count = requests.length;
@@ -303,10 +318,13 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
             <TouchableOpacity
               key={tab}
               style={[styles.tabItem, isActive && styles.tabItemActive]}
-              onPress={() => setActiveTab(tab)}
+              onPress={() => handleTabPress(tab)}
             >
+              {tab === 'calls' ? (
+                <Phone size={13} color={isActive ? '#000000' : '#8E8E93'} />
+              ) : null}
               <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
-                {label} {count > 0 ? `(${count})` : ''}
+                {label}{count > 0 ? ` (${count})` : ''}
               </Text>
             </TouchableOpacity>
           );
@@ -325,9 +343,11 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
               ? filteredConversations 
               : activeTab === 'groups'
                 ? filteredGroups
-                : activeTab === 'friends'
-                  ? filteredFriends
-                  : requests
+                : activeTab === 'calls'
+                  ? []
+                  : activeTab === 'friends'
+                    ? filteredFriends
+                    : requests
           }
           keyExtractor={(item: any) => item.id}
           refreshControl={
@@ -437,7 +457,37 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
               </View>
             );
           }}
+          ListEmptyComponent={
+            activeTab === 'groups' ? (
+              <View style={styles.emptyState}>
+                <Users size={52} color="#2C2C2E" />
+                <Text style={styles.emptyStateTitle}>No Groups Yet</Text>
+                <Text style={styles.emptyStateDesc}>Tap the + button below to create your first group chat</Text>
+                <TouchableOpacity style={styles.emptyStateCta} onPress={() => navigation.navigate('CreateGroup')}>
+                  <Plus size={16} color="#000000" style={{ marginRight: 6 }} />
+                  <Text style={styles.emptyStateCtaText}>Create Group</Text>
+                </TouchableOpacity>
+              </View>
+            ) : activeTab === 'unread' ? (
+              <View style={styles.emptyState}>
+                <MessageSquare size={52} color="#2C2C2E" />
+                <Text style={styles.emptyStateTitle}>No Chats Yet</Text>
+                <Text style={styles.emptyStateDesc}>Search for users to start a conversation</Text>
+              </View>
+            ) : null
+          }
         />
+      )}
+
+      {/* Create Group FAB — visible only on groups tab */}
+      {activeTab === 'groups' && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => navigation.navigate('CreateGroup')}
+          activeOpacity={0.85}
+        >
+          <Plus size={22} color="#000000" />
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -528,21 +578,26 @@ const styles = StyleSheet.create({
   },
   tabContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
     justifyContent: 'space-between',
   },
   tabItem: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 16,
+    flex: 1,
+    marginHorizontal: 3,
+    paddingVertical: 7,
+    paddingHorizontal: 4,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabItemActive: {
     backgroundColor: '#FFFC00',
   },
   tabText: {
     color: '#8E8E93',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
   },
   tabTextActive: {
@@ -647,6 +702,57 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '800',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 90,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFC00',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#FFFC00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+  },
+  tabPhoneIcon: {
+    marginRight: 4,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingTop: 60,
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  emptyStateTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 8,
+  },
+  emptyStateDesc: {
+    color: '#8E8E93',
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 19,
+  },
+  emptyStateCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFC00',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    marginTop: 8,
+  },
+  emptyStateCtaText: {
+    color: '#000000',
+    fontWeight: '800',
+    fontSize: 14,
   },
 });
 export default ChatListContainer;

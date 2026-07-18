@@ -8,7 +8,7 @@ export type ChatGroup = Group;
 export type ChatStory = Snap;
 export type ChatRequest = FriendRequest;
 
-export type ChatTabType = 'unread' | 'friends' | 'groups' | 'requests';
+export type ChatTabType = 'unread' | 'friends' | 'groups' | 'calls' | 'requests';
 
 export interface ChatListContainerProps {
   navigation: any;

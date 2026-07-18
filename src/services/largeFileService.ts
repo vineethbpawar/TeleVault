@@ -17,7 +17,9 @@ async function deleteFileHelper(tempUri: string): Promise<void> {
 }
 
 export const NORMAL_TELEGRAM_LIMIT_BYTES = Platform.OS === 'web' ? 4 * 1024 * 1024 : 50 * 1024 * 1024;
-export const CHUNK_SIZE_BYTES = Platform.OS === 'web' ? 4 * 1024 * 1024 : 45 * 1024 * 1024;
+// Telegram Bot API getFile endpoint has a hard 20 MB download limit.
+// Keep chunks at 15 MB to stay safely under that ceiling with 5 MB margin.
+export const CHUNK_SIZE_BYTES = Platform.OS === 'web' ? 4 * 1024 * 1024 : 15 * 1024 * 1024;
 export const MAX_CHUNKED_FILE_BYTES = 500 * 1024 * 1024;
 
 export const largeFileService = {
@@ -252,7 +254,7 @@ export const largeFileService = {
     const pendingChunks = chunks.filter((c: any) => c.status !== 'completed');
 
     if (pendingChunks.length > 0) {
-      const CONCURRENCY_LIMIT = Platform.OS === 'web' ? 3 : 2;
+      const CONCURRENCY_LIMIT = Platform.OS === 'web' ? 3 : 3;
       let errorOccurred: Error | null = null;
       let currentIndex = 0;
 
@@ -280,6 +282,16 @@ export const largeFileService = {
             }
 
             tempUri = await this.sliceChunk(localUri, chunk.chunk_index, largeFile.total_size, largeFile.chunk_size);
+
+            if (largeFile.is_private) {
+              const { encryptionService } = require('./encryptionService');
+              const encrypted = await encryptionService.encryptFile(tempUri, chunk.chunk_file_name);
+              // Delete the unencrypted chunk temp file
+              try {
+                await deleteFileHelper(tempUri);
+              } catch (_) {}
+              tempUri = encrypted.uri;
+            }
 
             if (signal?.aborted) {
               throw new Error('Upload aborted by user');

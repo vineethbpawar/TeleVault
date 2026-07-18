@@ -936,7 +936,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         }
       } else {
         try {
-          const MediaLibrary = require('expo-media-library');
+          const MediaLibrary = require('expo-media-library/legacy');
           const { status } = await MediaLibrary.requestPermissionsAsync();
           if (status === 'granted') {
             await MediaLibrary.saveToLibraryAsync(uri);
@@ -959,11 +959,17 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         // Optimistically navigate first to avoid UI blocking on the thread
         if (fromChatCamera) {
           showToast('Sending snap...');
-          navigation.navigate('ChatRoom', {
-            friendId: sendToUserId,
-            friendUsername: sendToUsername,
-            conversationId: conversationId || undefined
-          } as any);
+          // Pop PreviewScreen + ChatCamera off the stack to return to the
+          // existing ChatRoom underneath — avoids pushing a duplicate ChatRoom.
+          if (navigation.canGoBack()) {
+            navigation.pop(2);
+          } else {
+            navigation.navigate('ChatRoom', {
+              friendId: sendToUserId,
+              friendUsername: sendToUsername,
+              conversationId: conversationId || undefined
+            } as any);
+          }
         } else {
           showToast('Sending snap...');
           navigation.goBack();

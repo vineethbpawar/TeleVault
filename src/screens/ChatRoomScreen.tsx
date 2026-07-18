@@ -303,11 +303,11 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
-  const subscribeToChat = (convId: string) => {
+  const subscribeToChat = async (convId: string) => {
     if (!convId) return;
 
     if (activeChannelRef.current) {
-      supabase.removeChannel(activeChannelRef.current);
+      await supabase.removeChannel(activeChannelRef.current);
       activeChannelRef.current = null;
     }
     if (reconnectTimeoutRef.current) {
@@ -319,7 +319,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
 
     const channel = supabase.channel(`chat:${convId}`, {
       config: {
-        broadcast: { self: false },
+        broadcast: { self: false, ack: true },
         presence: { key: currentUserId || 'unknown' },
       },
     });
@@ -506,7 +506,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         if (!reconnectTimeoutRef.current) {
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectTimeoutRef.current = null;
-            subscribeToChat(convId);
+            subscribeToChat(convId).catch((e) => console.warn('[Realtime] Reconnect failed:', e));
           }, 5000);
         }
       }
@@ -522,7 +522,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
       if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
         console.log('[AppState] App returned to foreground, reconnecting chat subscription...');
         if (activeId && active) {
-          subscribeToChat(activeId);
+          subscribeToChat(activeId).catch((e) => console.warn('[Realtime] Foreground reconnect failed:', e));
         }
       }
       appStateRef.current = nextAppState;
@@ -562,7 +562,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
 
         // 5. Subscribe to realtime Postgres updates
         console.log('[DEBUG_CHAT] Subscribing to realtime channel for conversation:', activeId);
-        subscribeToChat(activeId);
+        subscribeToChat(activeId).catch((e) => console.warn('[Realtime] Init subscribe failed:', e));
       } catch (error) {
         console.error('[DEBUG_CHAT] Chat room initialization failed:', error);
       } finally {

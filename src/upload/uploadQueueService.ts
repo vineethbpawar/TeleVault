@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { uploadStore } from './uploadStore';
 import { UploadQueueItem, UploadStatus } from '../types/camera';
 import { telegramService } from '../services/telegramService';
@@ -333,7 +333,7 @@ export const uploadQueueService = {
       }
 
       // 3. Client-side Zero-Knowledge E2EE Encryption
-      if (pendingItem.is_private) {
+      if (pendingItem.is_private && finalSize <= NORMAL_TELEGRAM_LIMIT_BYTES && pendingItem.upload_mode !== 'chunked') {
         await this.updateUploadQueueItem(itemId, {
           status: 'processing' as UploadStatus,
           stage: 'Encrypting...',
@@ -415,20 +415,74 @@ export const uploadQueueService = {
       // 5. Normal Telegram Media Upload stage
       await this.updateUploadQueueItem(itemId, { status: 'uploading', stage: 'Uploading...', progress: 40 });
 
-      const telegramResult = await telegramService.uploadToTelegram(
-        finalUri,
-        pendingItem.file_type,
-        pendingItem.file_name,
-        pendingItem.mime_type,
-        async (percent) => {
-          const mappedProgress = Math.round(40 + (percent / 100) * 45);
-          await this.updateUploadQueueItem(itemId, { progress: mappedProgress, stage: 'Uploading...' });
-        },
-        controller.signal,
-        itemId
-      );
+      // Slow progress ticker so the UI never appears frozen while uploadAsync runs.
+      // Increments +1% every 3 s, capped at 84% so it never overshoots the real value.
+      let tickProgress = 40;
+      const progressTicker = setInterval(async () => {
+        if (tickProgress < 84) {
+          tickProgress += 1;
+          await this.updateUploadQueueItem(itemId, { progress: tickProgress, stage: 'Uploading...' });
+        }
+      }, 3000);
+
+      let telegramResult: any;
+      try {
+        telegramResult = await telegramService.uploadToTelegram(
+          finalUri,
+          pendingItem.file_type,
+          pendingItem.file_name,
+          pendingItem.mime_type,
+          async (percent) => {
+            const mappedProgress = Math.round(40 + (percent / 100) * 45);
+            tickProgress = mappedProgress;
+            await this.updateUploadQueueItem(itemId, { progress: mappedProgress, stage: 'Uploading...' });
+          },
+          controller.signal,
+          itemId
+        );
+      } finally {
+        clearInterval(progressTicker);
+      }
 
       await this.updateUploadQueueItem(itemId, { stage: 'Uploading...', progress: 85 });
+
+      // 5b. Upload video thumbnail to Telegram (native only) so web can display it
+      // On native, local_thumbnail_uri is a file:// path that only exists on this device.
+      // Upload it as a small photo to Telegram and store its file_id prefixed with "tgthumb:".
+      let resolvedThumbnailUri: string | null = null;
+      if (
+        Platform.OS !== 'web' &&
+        pendingItem.file_type === 'video' &&
+        pendingItem.local_thumbnail_uri &&
+        !pendingItem.local_thumbnail_uri.startsWith('tgthumb:') &&
+        !pendingItem.local_thumbnail_uri.startsWith('webblob:')
+      ) {
+        try {
+          const thumbLocalPath = pendingItem.local_thumbnail_uri;
+          const thumbInfo = await FileSystem.getInfoAsync(thumbLocalPath);
+          if (thumbInfo.exists) {
+            const thumbResult = await telegramService.uploadToTelegram(
+              thumbLocalPath,
+              'image',
+              `thumb_${pendingItem.file_name.replace(/\.[^.]+$/, '')}.jpg`,
+              'image/jpeg',
+              undefined,
+              controller.signal,
+              undefined
+            );
+            resolvedThumbnailUri = `tgthumb:${thumbResult.telegramFileId}`;
+          }
+        } catch (thumbErr) {
+          console.warn('[QueueService] Failed to upload video thumbnail to Telegram:', thumbErr);
+          // Non-fatal: fall back to null so web will generate from video
+        }
+      } else if (pendingItem.file_type === 'video') {
+        resolvedThumbnailUri = pendingItem.local_thumbnail_uri || null;
+      }
+
+      // For images: use the uploaded Telegram file itself as preview source
+      const finalThumbnailUri =
+        pendingItem.file_type === 'image' ? finalUri : resolvedThumbnailUri;
 
       // 6. Supabase DB metadata synchronization
       await this.updateUploadQueueItem(itemId, {
@@ -442,7 +496,7 @@ export const uploadQueueService = {
           telegram_message_id: telegramResult.telegramMessageId,
           telegram_file_id: telegramResult.telegramFileId,
           telegram_file_unique_id: telegramResult.telegramFileUniqueId,
-          local_thumbnail_uri: pendingItem.file_type === 'image' ? finalUri : (pendingItem.local_thumbnail_uri || null),
+          local_thumbnail_uri: finalThumbnailUri,
         });
       } else {
         await fileService.saveFileMetadata({
@@ -456,7 +510,7 @@ export const uploadQueueService = {
           telegram_message_id: telegramResult.telegramMessageId,
           telegram_file_id: telegramResult.telegramFileId,
           telegram_file_unique_id: telegramResult.telegramFileUniqueId,
-          local_thumbnail_uri: pendingItem.file_type === 'image' ? finalUri : (pendingItem.local_thumbnail_uri || null),
+          local_thumbnail_uri: finalThumbnailUri,
           overlay_metadata: pendingItem.overlay_metadata,
         });
       }

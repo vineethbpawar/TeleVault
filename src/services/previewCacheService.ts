@@ -462,10 +462,7 @@ export const previewCacheService = {
               };
             }
           }
-          const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id, signal);
-          const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
-          
-          let previewUri = url;
+          // Chunked file: rebuild directly from chunks — never call getFile (> 20 MB limit)
           if (file.is_chunked && file.large_file_id) {
             const { largeFileDownloadService } = require('./largeFileDownloadService');
             const rebuildResult = await largeFileDownloadService.downloadAndRebuildLargeFile(
@@ -474,11 +471,23 @@ export const previewCacheService = {
               file.mime_type
             );
             if (rebuildResult.success && rebuildResult.localUri) {
-              previewUri = rebuildResult.localUri;
+              await this.setCachedPreview(file.telegram_file_id, rebuildResult.localUri);
+              return {
+                type: 'image',
+                previewUri: rebuildResult.localUri,
+                fallbackIcon,
+              };
             } else {
               throw new Error(rebuildResult.message || 'Failed to rebuild chunked file.');
             }
-          } else if (Platform.OS === 'web') {
+          }
+
+          const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id, signal);
+          const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
+
+          
+          let previewUri = url;
+          if (Platform.OS === 'web') {
             if (file.is_private) {
               const { encryptionService } = require('./encryptionService');
               const proxiedUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(url)}`;
@@ -559,7 +568,28 @@ export const previewCacheService = {
         playableUri = file.media_url;
       }
 
-      if (!playableUri && file.telegram_file_id) {
+      // ── Chunked video: rebuild from chunks (no getFile limit) ──────────
+      if (!playableUri && (file as any).is_chunked && (file as any).large_file_id) {
+        try {
+          const { largeFileDownloadService } = require('./largeFileDownloadService');
+          const rebuildResult = await largeFileDownloadService.downloadAndRebuildLargeFile(
+            (file as any).large_file_id,
+            file.is_private,
+            file.mime_type
+          );
+          if (rebuildResult.success && rebuildResult.localUri) {
+            playableUri = rebuildResult.localUri;
+            if (file.telegram_file_id && playableUri) {
+              await this.setCachedPreview(file.telegram_file_id, playableUri);
+            }
+          }
+        } catch (e) {
+          console.warn('[previewCacheService] Chunked video rebuild failed:', e);
+        }
+      }
+
+      // ── Non-chunked video: fetch via Telegram getFile (≤ 20 MB only) ──
+      if (!playableUri && !((file as any).is_chunked) && file.telegram_file_id) {
         try {
           const config = await telegramService.getTelegramConfig();
           if (config.botToken) {
@@ -598,7 +628,21 @@ export const previewCacheService = {
               }
             }
           }
-        } catch (e) {
+        } catch (e: any) {
+          // "file is too big" means the video is > 20 MB — cannot be served via Bot API getFile.
+          // These are old videos uploaded before chunking was enforced at 15 MB.
+          // Return gracefully so the UI can show a helpful message instead of a crash.
+          const msg: string = e?.message || String(e);
+          if (msg.includes('file is too big')) {
+            console.warn(`[previewCacheService] Video "${fileName}" is > 20 MB and cannot be fetched via Bot API. Re-upload to fix.`);
+            return {
+              type: 'video',
+              previewUri: undefined,
+              playableUri: undefined,
+              fallbackIcon,
+              error: 'This video is too large to stream on web (> 20 MB Telegram limit). Re-upload it from the Android app to fix.',
+            };
+          }
           console.warn('Failed to resolve Telegram video URL:', e);
         }
       }
@@ -609,7 +653,37 @@ export const previewCacheService = {
       let hasCachedThumb = false;
 
       if (file.local_thumbnail_uri) {
-        if (Platform.OS === 'web') {
+        // tgthumb:<file_id>  →  thumbnail uploaded to Telegram, fetch it cross-device
+        if (file.local_thumbnail_uri.startsWith('tgthumb:')) {
+          const thumbFileId = file.local_thumbnail_uri.slice('tgthumb:'.length);
+          try {
+            const cacheKey = `televault_tgthumb_${thumbFileId}`;
+            const cached = await cacheGetItem(cacheKey);
+            if (cached && (Platform.OS !== 'web' || isWebValidUri(cached))) {
+              previewUri = cached;
+              hasLocalThumb = true;
+            } else {
+              const thumbUrl = await telegramService.getTelegramFileDownloadUrl(thumbFileId, signal);
+              if (Platform.OS === 'web') {
+                const res = await fetch(thumbUrl, { signal });
+                const blob = await res.blob();
+                previewUri = URL.createObjectURL(blob);
+              } else {
+                const localPath = `${FileSystem.cacheDirectory}tgthumb_${thumbFileId}.jpg`;
+                const dl = await FileSystem.downloadAsync(thumbUrl, localPath);
+                if (dl.status >= 200 && dl.status < 300) {
+                  previewUri = dl.uri;
+                }
+              }
+              if (previewUri) {
+                await cacheSetItem(cacheKey, previewUri);
+                hasLocalThumb = true;
+              }
+            }
+          } catch (e) {
+            console.warn('[previewCacheService] tgthumb fetch failed:', e);
+          }
+        } else if (Platform.OS === 'web') {
           if (!isWebValidUri(file.local_thumbnail_uri)) {
             // Ignore native file paths on Web
           } else {

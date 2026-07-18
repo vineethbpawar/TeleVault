@@ -44,7 +44,7 @@ class SignalingService {
     const channel = supabase
       .channel(channelKey, {
         config: {
-          broadcast: { self: false },
+          broadcast: { self: false, ack: true },
           presence: { key: userId },
         },
       })
@@ -81,7 +81,7 @@ class SignalingService {
 
     const channel = supabase
       .channel(channelKey, {
-        config: { broadcast: { self: false } },
+        config: { broadcast: { self: false, ack: true } },
       })
       .on('broadcast', { event: 'incoming_call' }, ({ payload }) => {
         onEvent(payload as SignalingPayload);
@@ -135,7 +135,7 @@ class SignalingService {
 
     // Temporarily create channel just to send
     const tempChannel = supabase.channel(channelKey, {
-      config: { broadcast: { self: true } },
+      config: { broadcast: { self: true, ack: true } },
     });
 
     await new Promise<void>((resolve) => {

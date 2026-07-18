@@ -1,9 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, Animated } from 'react-native';
 import TeleVaultLogo from '../components/TeleVaultLogo';
 
 export const SplashScreen: React.FC<{ message?: string }> = ({ message }) => {
-  const fadeAnim = new Animated.Value(0);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
