@@ -738,7 +738,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         return;
       }
 
-      const mediaUrl = await snapService.resolveTelegramUrl(snap.telegram_file_id);
+      const mediaUrl = await snapService.resolveTelegramUrl(snap.telegram_file_id, snap.sender_id);
       setLoading(false);
 
       // Navigate to SnapViewer
@@ -750,6 +750,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         senderUsername: otherUsername,
         isStory: false,
         telegramFileId: snap.telegram_file_id,
+        senderId: snap.sender_id,
       });
 
       // Locally mark snap opened

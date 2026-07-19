@@ -21,7 +21,7 @@ import VideoPlayer from '../components/VideoPlayer';
 type Props = NativeStackScreenProps<AppStackParamList, 'SnapViewer'>;
 
 export const SnapViewerScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { snapId, mediaUrl, mediaType, caption, senderUsername, isStory, telegramFileId } = route.params;
+  const { snapId, mediaUrl, mediaType, caption, senderUsername, isStory, telegramFileId, senderId } = route.params;
 
   const [currentMediaUrl, setCurrentMediaUrl] = useState<string | null>(mediaUrl);
   const [loading, setLoading] = useState(false);
@@ -75,7 +75,7 @@ export const SnapViewerScreen: React.FC<Props> = ({ navigation, route }) => {
       await new Promise(resolve => setTimeout(resolve, backoffMs));
       
       try {
-        const freshUrl = await snapService.resolveTelegramUrl(telegramFileId);
+        const freshUrl = await snapService.resolveTelegramUrl(telegramFileId, senderId);
         setCurrentMediaUrl(freshUrl);
         setLoading(false);
         setError(false);
@@ -94,7 +94,7 @@ export const SnapViewerScreen: React.FC<Props> = ({ navigation, route }) => {
     setLoading(true);
     setError(false);
     try {
-      const freshUrl = await snapService.resolveTelegramUrl(telegramFileId || '');
+      const freshUrl = await snapService.resolveTelegramUrl(telegramFileId || '', senderId);
       setCurrentMediaUrl(freshUrl);
       setLoading(false);
       setError(false);

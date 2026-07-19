@@ -379,15 +379,16 @@ export const snapService = {
   /**
    * Get download URL from Telegram file ID.
    */
-  async resolveTelegramUrl(telegramFileId: string): Promise<string> {
-    const cached = this._urlCache[telegramFileId];
+  async resolveTelegramUrl(telegramFileId: string, senderId?: string): Promise<string> {
+    const cacheKey = `${telegramFileId}:${senderId || ''}`;
+    const cached = this._urlCache[cacheKey];
     // Cache for 45 minutes (Telegram links expire after 1 hour)
     if (cached && Date.now() - cached.timestamp < 45 * 60 * 1000) {
       return cached.url;
     }
 
-    const url = await telegramService.getTelegramFileDownloadUrl(telegramFileId);
-    this._urlCache[telegramFileId] = { url, timestamp: Date.now() };
+    const url = await telegramService.getTelegramFileDownloadUrl(telegramFileId, undefined, senderId);
+    this._urlCache[cacheKey] = { url, timestamp: Date.now() };
     return url;
   },
 };

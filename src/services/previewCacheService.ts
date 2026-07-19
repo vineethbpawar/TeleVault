@@ -621,8 +621,8 @@ export const previewCacheService = {
             if (cached) {
               playableUri = cached;
             } else {
-              const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id, signal);
-              const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
+              const { fileInfo, workingToken } = await telegramService.getTelegramFileInfo(file.telegram_file_id, signal);
+              const url = `https://api.telegram.org/file/bot${workingToken}/${fileInfo.file_path}`;
               
               if (file.is_private) {
                 const { encryptionService } = require('./encryptionService');
@@ -874,8 +874,8 @@ export const previewCacheService = {
               fallbackIcon,
             };
           }
-          const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id, signal);
-          const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
+          const { fileInfo, workingToken } = await telegramService.getTelegramFileInfo(file.telegram_file_id, signal);
+          const url = `https://api.telegram.org/file/bot${workingToken}/${fileInfo.file_path}`;
           
           let previewUri = url;
           if (Platform.OS === 'web') {

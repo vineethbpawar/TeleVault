@@ -59,9 +59,26 @@ const WebVideoView: React.FC<{
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
-    }
+    const video = videoRef.current;
+    if (!video || !stream) return;
+
+    video.srcObject = stream;
+    video.play().catch((err) => console.warn('[WebVideoView] Autoplay catch:', err));
+
+    const handleTrackChange = () => {
+      if (videoRef.current && stream) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
+    };
+
+    stream.addEventListener('addtrack', handleTrackChange);
+    stream.addEventListener('removetrack', handleTrackChange);
+
+    return () => {
+      stream.removeEventListener('addtrack', handleTrackChange);
+      stream.removeEventListener('removetrack', handleTrackChange);
+    };
   }, [stream]);
 
   return (
@@ -73,10 +90,35 @@ const WebVideoView: React.FC<{
       style={{
         width: '100%',
         height: '100%',
-        objectFit: objectFit || 'cover',
+        objectFit: (objectFit || 'cover') as any,
         transform: mirror ? 'scaleX(-1)' : 'none',
         ...style,
       }}
+    />
+  ) as any;
+};
+
+// Web Audio Component for remote audio stream playback
+const WebAudioView: React.FC<{
+  stream: MediaStream | null;
+}> = ({ stream }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    if (audioRef.current && stream) {
+      audioRef.current.srcObject = stream;
+      audioRef.current.play().catch((err) => console.warn('[WebAudioView] Autoplay catch:', err));
+    }
+  }, [stream]);
+
+  if (Platform.OS !== 'web' || !stream) return null;
+
+  return (
+    <audio
+      ref={audioRef}
+      autoPlay
+      playsInline
+      style={{ display: 'none' }}
     />
   ) as any;
 };
@@ -95,7 +137,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
   const connectingAnim = useRef(new Animated.Value(0.4)).current;
 
   // Draggable PiP position for local video tile
-  const pipPosition = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 130, y: 80 })).current;
+  const pipPosition = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 130, y: 100 })).current;
 
   useEffect(() => {
     const updateStreams = () => {
@@ -228,7 +270,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
       style={[
         styles.controlsDock,
         {
-          paddingBottom: insets.bottom > 0 ? insets.bottom + 12 : 20,
+          paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 24,
           opacity: isVideoCall ? controlsOpacity : 1,
         },
       ]}
@@ -330,10 +372,27 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
           <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
         )}
 
+        {/* Hidden Web Audio Element for Audio Stream */}
+        {Platform.OS === 'web' && remoteStream && (
+          <WebAudioView stream={remoteStream} />
+        )}
+
         {/* Remote Fullscreen Video Stream */}
         <View style={StyleSheet.absoluteFill}>
           {remoteStream ? (
-            renderVideoStream(remoteStream, false, StyleSheet.absoluteFill)
+            <>
+              {renderVideoStream(remoteStream, false, StyleSheet.absoluteFill)}
+              {(!remoteStream.getVideoTracks || remoteStream.getVideoTracks().length === 0) && (
+                <View style={[styles.noVideoBackground, StyleSheet.absoluteFill]}>
+                  <UserAvatar
+                    name={remoteName}
+                    avatarUrl={callState.remoteProfile?.avatar_url}
+                    size={110}
+                  />
+                  <Text style={styles.noVideoName}>{remoteName}</Text>
+                </View>
+              )}
+            </>
           ) : (
             <View style={styles.noVideoBackground}>
               <UserAvatar
@@ -393,6 +452,11 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
     <View style={styles.voiceContainer}>
       {Platform.OS !== 'web' && (
         <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      )}
+
+      {/* Hidden Web Audio Element for Remote Voice */}
+      {Platform.OS === 'web' && remoteStream && (
+        <WebAudioView stream={remoteStream} />
       )}
 
       {/* Ambient Radial Glow */}
@@ -473,6 +537,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
     backgroundColor: 'rgba(9, 11, 21, 0.65)',
+    zIndex: 9999,
   },
   topOverlayContent: {
     flexDirection: 'row',
@@ -520,6 +585,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 10,
     elevation: 10,
+    zIndex: 9998,
   },
   localVideoInner: {
     flex: 1,
@@ -613,21 +679,25 @@ const styles = StyleSheet.create({
 
   // Dock Controls
   controlsDock: {
-    width: '100%',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     alignItems: 'center',
+    zIndex: 9999,
   },
   dockBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-evenly',
-    width: '100%',
+    width: '90%',
     maxWidth: 420,
-    backgroundColor: 'rgba(25, 28, 50, 0.92)',
+    backgroundColor: 'rgba(25, 28, 50, 0.94)',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 36,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,

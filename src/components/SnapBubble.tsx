@@ -8,6 +8,7 @@ import VideoPlayer from './VideoPlayer';
 interface SnapBubbleProps {
   snap: {
     id: string;
+    sender_id?: string;
     media_type: 'image' | 'video';
     is_viewed: boolean;
     expires_at?: string;
@@ -41,17 +42,21 @@ export const SnapBubble: React.FC<SnapBubbleProps> = ({
       setLoading(true);
       const resolve = async () => {
         let fileId = snap.telegram_file_id;
-        if (!fileId && snap.id) {
+        let senderId = snap.sender_id;
+        if ((!fileId || !senderId) && snap.id) {
           const { data } = await supabase
             .from('snaps')
-            .select('telegram_file_id')
+            .select('telegram_file_id, sender_id')
             .eq('id', snap.id)
             .single();
-          if (data) fileId = data.telegram_file_id;
+          if (data) {
+            fileId = fileId || data.telegram_file_id;
+            senderId = senderId || data.sender_id;
+          }
         }
 
         if (fileId && active) {
-          const url = await snapService.resolveTelegramUrl(fileId);
+          const url = await snapService.resolveTelegramUrl(fileId, senderId);
           if (active) {
             setMediaUrl(url);
             setLoading(false);

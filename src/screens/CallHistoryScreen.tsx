@@ -2,7 +2,11 @@
  * Call History Screen
  *
  * Displays the user's call history including voice, video, missed, rejected calls.
- * Allows re-dialing from history.
+ * Features:
+ * - Live search filter & Search button in header
+ * - Quick navigate to UserSearch to start new calls
+ * - Re-dialing from call logs
+ * - Clear history action
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -15,10 +19,12 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Search, X, UserPlus, PhoneCall, Trash2, ArrowLeft } from 'lucide-react-native';
 import { AppStackParamList } from '../types/navigation';
 import { CallHistoryEntry } from '../types/call';
 import { callHistoryService } from '../services/callHistoryService';
@@ -34,6 +40,8 @@ const CallHistoryScreen: React.FC = () => {
   const [history, setHistory] = useState<CallHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -91,6 +99,20 @@ const CallHistoryScreen: React.FC = () => {
       ]
     );
   };
+
+  const handleOpenSearchUsers = () => {
+    navigation.navigate('UserSearch', { mode: 'chat' });
+  };
+
+  const filteredHistory = history.filter((item) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    const name = (item.other_user?.full_name || '').toLowerCase();
+    const username = (item.other_user?.username || '').toLowerCase();
+    const status = (item.status || '').toLowerCase();
+    const type = (item.call_type || '').toLowerCase();
+    return name.includes(q) || username.includes(q) || status.includes(q) || type.includes(q);
+  });
 
   const getCallIcon = (entry: CallHistoryEntry): string => {
     if (entry.status === 'missed') return '📵';
@@ -183,25 +205,90 @@ const CallHistoryScreen: React.FC = () => {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top > 0 ? insets.top : 12 }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <Text style={styles.backIcon}>‹</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Call History</Text>
-        {history.length > 0 && (
-          <TouchableOpacity onPress={handleClearHistory} style={styles.clearButton}>
-            <Text style={styles.clearText}>Clear</Text>
-          </TouchableOpacity>
+        {isSearchVisible ? (
+          <View style={styles.searchBarContainer}>
+            <Search size={18} color="#8E98B7" style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search calls or usernames..."
+              placeholderTextColor="#6B7FCC"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoFocus
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}>
+                <X size={16} color="#8E98B7" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={() => {
+                setIsSearchVisible(false);
+                setSearchQuery('');
+              }}
+              style={styles.cancelSearchBtn}
+            >
+              <Text style={styles.cancelSearchText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.headerRow}>
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              style={styles.iconBtn}
+            >
+              <ArrowLeft size={22} color="#FFFC00" />
+            </TouchableOpacity>
+
+            <Text style={styles.headerTitle}>Calls</Text>
+
+            <View style={styles.headerRightActions}>
+              <TouchableOpacity
+                onPress={() => setIsSearchVisible(true)}
+                style={styles.iconBtn}
+                activeOpacity={0.7}
+              >
+                <Search size={20} color="#FFFC00" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleOpenSearchUsers}
+                style={styles.iconBtn}
+                activeOpacity={0.7}
+              >
+                <UserPlus size={20} color="#FFFC00" />
+              </TouchableOpacity>
+
+              {history.length > 0 && (
+                <TouchableOpacity onPress={handleClearHistory} style={styles.iconBtn}>
+                  <Trash2 size={18} color="#FF3B30" />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
         )}
       </View>
 
+      {/* Start New Call Banner / Shortcut */}
+      <TouchableOpacity
+        style={styles.startCallBanner}
+        onPress={handleOpenSearchUsers}
+        activeOpacity={0.8}
+      >
+        <View style={styles.bannerIconWrapper}>
+          <PhoneCall size={20} color="#000000" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.bannerTitle}>Make a New Call</Text>
+          <Text style={styles.bannerSubtitle}>Search friends & users to start voice or video call</Text>
+        </View>
+      </TouchableOpacity>
+
       <FlatList
-        data={history}
+        data={filteredHistory}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         refreshControl={
@@ -212,15 +299,27 @@ const CallHistoryScreen: React.FC = () => {
           />
         }
         contentContainerStyle={
-          history.length === 0 ? styles.emptyContent : styles.listContent
+          filteredHistory.length === 0 ? styles.emptyContent : styles.listContent
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>📞</Text>
-            <Text style={styles.emptyTitle}>No call history</Text>
-            <Text style={styles.emptySubtitle}>
-              Your calls will appear here after you make or receive your first call.
+            <Text style={styles.emptyTitle}>
+              {searchQuery ? 'No matching calls found' : 'No call history'}
             </Text>
+            <Text style={styles.emptySubtitle}>
+              {searchQuery
+                ? `No calls matching "${searchQuery}"`
+                : 'Your calls will appear here after you make or receive your first call.'}
+            </Text>
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                style={styles.searchUserActionBtn}
+                onPress={handleOpenSearchUsers}
+              >
+                <Text style={styles.searchUserActionText}>Search Users to Call</Text>
+              </TouchableOpacity>
+            )}
           </View>
         }
       />
@@ -240,40 +339,92 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#1A1F38',
   },
-  backButton: {
-    width: 40,
-    height: 40,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  iconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 252, 0, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backIcon: {
-    color: '#FFFC00',
-    fontSize: 32,
-    fontWeight: '300',
-    lineHeight: 40,
-  },
   headerTitle: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
     flex: 1,
-    marginLeft: 8,
+    marginLeft: 12,
   },
-  clearButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  clearText: {
-    color: '#FF3B30',
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  searchInput: {
+    flex: 1,
+    color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
+    padding: 0,
+  },
+  cancelSearchBtn: {
+    marginLeft: 10,
+    paddingHorizontal: 6,
+  },
+  cancelSearchText: {
+    color: '#FFFC00',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  startCallBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 252, 0, 0.12)',
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 252, 0, 0.3)',
+    gap: 12,
+  },
+  bannerIconWrapper: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFFC00',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  bannerSubtitle: {
+    color: '#8E98B7',
+    fontSize: 12,
+    marginTop: 2,
   },
   listContent: {
     paddingVertical: 8,
@@ -346,6 +497,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  searchUserActionBtn: {
+    backgroundColor: '#FFFC00',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    marginTop: 8,
+  },
+  searchUserActionText: {
+    color: '#0A0D1F',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
 

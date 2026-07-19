@@ -133,34 +133,60 @@ class WebRTCPeerService {
   // ─── Local Media ───────────────────────────────────────────────────────────
 
   async getUserMedia(video: boolean, audio: boolean): Promise<MediaStream> {
+    const tryGetUserMedia = async (constraints: any): Promise<MediaStream> => {
+      return await NativeRTC.mediaDevices.getUserMedia(constraints);
+    };
+
     try {
-      const constraints: MediaStreamConstraints = {
+      const primaryConstraints = {
         audio: audio
           ? {
               echoCancellation: true,
               noiseSuppression: true,
               autoGainControl: true,
-              sampleRate: 48000,
             }
           : false,
         video: video
           ? {
               width: { ideal: 1280, max: 1920 },
               height: { ideal: 720, max: 1080 },
-              frameRate: { ideal: 30, max: 60 },
               facingMode: 'user',
             }
           : false,
       };
 
-      const stream = await NativeRTC.mediaDevices.getUserMedia(constraints as any);
+      const stream = await tryGetUserMedia(primaryConstraints);
       this.localStream = stream;
       this.emit('localStream', stream);
       return stream;
-    } catch (error) {
-      const err = new Error(`Failed to get user media: ${(error as Error).message}`);
-      this.emit('error', err);
-      throw err;
+    } catch (primaryErr) {
+      console.warn('[WebRTC] Primary getUserMedia constraints failed, trying fallback:', primaryErr);
+      try {
+        const fallbackConstraints = {
+          audio: audio ? true : false,
+          video: video ? { facingMode: 'user' } : false,
+        };
+        const stream = await tryGetUserMedia(fallbackConstraints);
+        this.localStream = stream;
+        this.emit('localStream', stream);
+        return stream;
+      } catch (fallbackErr) {
+        console.warn('[WebRTC] Secondary getUserMedia constraints failed, trying basic:', fallbackErr);
+        try {
+          const basicConstraints = {
+            audio: audio ? true : false,
+            video: video ? true : false,
+          };
+          const stream = await tryGetUserMedia(basicConstraints);
+          this.localStream = stream;
+          this.emit('localStream', stream);
+          return stream;
+        } catch (finalErr) {
+          const err = new Error(`Failed to get user media: ${(finalErr as Error).message}`);
+          this.emit('error', err);
+          throw err;
+        }
+      }
     }
   }
 
@@ -217,10 +243,33 @@ class WebRTCPeerService {
 
     // Handle remote stream
     this.pc.ontrack = (event) => {
-      const [stream] = event.streams;
-      if (stream) {
+      console.log('[WebRTC] Received remote track:', event.track.kind, event.track.id);
+      let stream = event.streams && event.streams[0];
+
+      if (!stream) {
+        if (!this.remoteStream) {
+          if (Platform.OS === 'web') {
+            this.remoteStream = new window.MediaStream();
+          } else {
+            const webrtc = require('react-native-webrtc');
+            this.remoteStream = new webrtc.MediaStream();
+          }
+        }
+        if (this.remoteStream) {
+          this.remoteStream.addTrack(event.track);
+          stream = this.remoteStream;
+        }
+      } else {
         this.remoteStream = stream;
-        this.emit('remoteStream', stream);
+      }
+
+      if (this.remoteStream) {
+        if (Platform.OS === 'web') {
+          const freshStream = new window.MediaStream(this.remoteStream.getTracks());
+          this.emit('remoteStream', freshStream);
+        } else {
+          this.emit('remoteStream', this.remoteStream);
+        }
       }
     };
 
@@ -274,7 +323,11 @@ class WebRTCPeerService {
     this.remoteDescSet = true;
     await this.drainPendingCandidates();
 
-    const answer = await this.pc.createAnswer();
+    const answer = await this.pc.createAnswer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true,
+    } as any);
+
     await this.pc.setLocalDescription(
       new NativeRTC.RTCSessionDescription(answer as any)
     );

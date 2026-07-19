@@ -837,43 +837,77 @@ export const telegramService = {
     };
   },
 
-  async getTelegramFileInfo(fileId: string, signal?: AbortSignal): Promise<any> {
-    if (fileInfoRequests.has(fileId)) {
-      return fileInfoRequests.get(fileId)!;
+  async getTelegramFileInfo(fileId: string, signal?: AbortSignal, senderId?: string): Promise<{ fileInfo: any; workingToken: string }> {
+    const cacheKey = `${fileId}:${senderId || ''}`;
+    if (fileInfoRequests.has(cacheKey)) {
+      return fileInfoRequests.get(cacheKey)!;
     }
 
     const promise = (async () => {
-      const { botToken } = await this.getTelegramConfig();
-      if (!botToken) {
+      const tokensToTry: string[] = [];
+
+      // 1. Current user's configured bot token
+      const { botToken: userToken } = await this.getTelegramConfig();
+      if (userToken) tokensToTry.push(userToken);
+
+      // 2. System default bot token
+      const systemToken = process.env.EXPO_PUBLIC_TELEGRAM_BOT_TOKEN;
+      if (systemToken && !tokensToTry.includes(systemToken)) {
+        tokensToTry.push(systemToken);
+      }
+
+      // 3. Sender's bot token from Supabase if senderId is provided
+      if (senderId) {
+        try {
+          const { data } = await supabase
+            .from('telegram_configs')
+            .select('bot_token')
+            .eq('user_id', senderId)
+            .maybeSingle();
+          if (data?.bot_token && !tokensToTry.includes(data.bot_token)) {
+            tokensToTry.push(data.bot_token);
+          }
+        } catch (err) {
+          console.warn('[Telegram API] Failed to fetch sender bot token:', err);
+        }
+      }
+
+      if (tokensToTry.length === 0) {
         throw new Error('Telegram bot token is not configured.');
       }
 
-      const url = this.getTelegramApiUrl(`getFile?file_id=${encodeURIComponent(fileId)}`, botToken);
-      const res = await fetchWithRetry(url, { signal });
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        return data.result;
-      } else {
-        throw new Error(data.description || 'Failed to locate file info on Telegram.');
+      let lastError: Error | null = null;
+
+      for (const token of tokensToTry) {
+        try {
+          const url = this.getTelegramApiUrl(`getFile?file_id=${encodeURIComponent(fileId)}`, token);
+          const res = await fetchWithRetry(url, { signal }, 2);
+          const data = await res.json();
+          if (res.ok && data.ok && data.result) {
+            return { fileInfo: data.result, workingToken: token };
+          }
+          if (data?.description) {
+            lastError = new Error(data.description);
+          }
+        } catch (err: any) {
+          lastError = err;
+        }
       }
+
+      throw lastError || new Error('Failed to locate file info on Telegram across configured tokens.');
     })();
 
-    fileInfoRequests.set(fileId, promise);
+    fileInfoRequests.set(cacheKey, promise);
     try {
       return await promise;
     } finally {
-      fileInfoRequests.delete(fileId);
+      fileInfoRequests.delete(cacheKey);
     }
   },
 
-  async getTelegramFileDownloadUrl(fileId: string, signal?: AbortSignal): Promise<string> {
-    const { botToken } = await this.getTelegramConfig();
-    if (!botToken) {
-      throw new Error('Telegram bot token is not configured.');
-    }
-
-    const fileInfo = await this.getTelegramFileInfo(fileId, signal);
-    const url = `https://api.telegram.org/file/bot${botToken}/${fileInfo.file_path}`;
+  async getTelegramFileDownloadUrl(fileId: string, signal?: AbortSignal, senderId?: string): Promise<string> {
+    const { fileInfo, workingToken } = await this.getTelegramFileInfo(fileId, signal, senderId);
+    const url = `https://api.telegram.org/file/bot${workingToken}/${fileInfo.file_path}`;
     if (Platform.OS === 'web') {
       if (typeof window !== 'undefined' && window.location) {
         const hostname = window.location.hostname;
