@@ -245,7 +245,19 @@ class CallingService {
       if (!this.currentUserId) return false;
     }
 
-    const { callId, callType, callScope, callerId, callerProfile, groupId, offerSdp } = incomingData;
+    let { callId, callType, callScope, callerId, callerProfile, groupId, offerSdp } = incomingData;
+
+    // Fallback if offerSdp was not attached directly
+    if (!offerSdp) {
+      try {
+        const dbCall = await callHistoryService.getCall(callId);
+        if (dbCall?.offer_sdp) {
+          offerSdp = dbCall.offer_sdp;
+        }
+      } catch (err) {
+        console.warn('[CallingService] Failed to fetch offerSdp from DB fallback:', err);
+      }
+    }
 
     // Stop ringtone
     audioManager.stopRingtone();
@@ -655,6 +667,8 @@ class CallingService {
 
       case 'call_accept':
         // The caller receives this when receiver accepts
+        audioManager.stopRingtone();
+        callStateStore.setStatus('connecting');
         break;
 
       case 'call_reject':

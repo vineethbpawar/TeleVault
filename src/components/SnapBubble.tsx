@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { Play, Camera, Film, Eye, Flame } from 'lucide-react-native';
 import { snapService } from '../services/snapService';
+import { supabase } from '../lib/supabase';
 import VideoPlayer from './VideoPlayer';
 
 interface SnapBubbleProps {
@@ -35,27 +36,43 @@ export const SnapBubble: React.FC<SnapBubbleProps> = ({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (isSavedInChat && snap.telegram_file_id) {
-      let active = true;
+    let active = true;
+    if (isSavedInChat) {
       setLoading(true);
-      snapService.resolveTelegramUrl(snap.telegram_file_id)
-        .then((url) => {
+      const resolve = async () => {
+        let fileId = snap.telegram_file_id;
+        if (!fileId && snap.id) {
+          const { data } = await supabase
+            .from('snaps')
+            .select('telegram_file_id')
+            .eq('id', snap.id)
+            .single();
+          if (data) fileId = data.telegram_file_id;
+        }
+
+        if (fileId && active) {
+          const url = await snapService.resolveTelegramUrl(fileId);
           if (active) {
             setMediaUrl(url);
             setLoading(false);
           }
-        })
-        .catch((err) => {
-          console.warn('Failed to resolve saved snap URL:', err);
-          if (active) setLoading(false);
-        });
+        } else if (active) {
+          setLoading(false);
+        }
+      };
+
+      resolve().catch((err) => {
+        console.warn('Failed to resolve saved snap URL:', err);
+        if (active) setLoading(false);
+      });
+
       return () => {
         active = false;
       };
     } else {
       setMediaUrl(null);
     }
-  }, [isSavedInChat, snap.telegram_file_id]);
+  }, [isSavedInChat, snap.telegram_file_id, snap.id]);
 
   // Red for photo snaps, purple for video snaps (matching Snapchat aesthetic)
   const snapColor = isVideo ? '#A352FC' : '#FF3B30';

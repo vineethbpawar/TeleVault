@@ -480,9 +480,11 @@ export const uploadQueueService = {
         resolvedThumbnailUri = pendingItem.local_thumbnail_uri || null;
       }
 
-      // For images: use the uploaded Telegram file itself as preview source
+      // For images: use the uploaded Telegram file itself as preview source for cross-platform availability
       const finalThumbnailUri =
-        pendingItem.file_type === 'image' ? finalUri : resolvedThumbnailUri;
+        pendingItem.file_type === 'image'
+          ? `tgthumb:${telegramResult.telegramFileId}`
+          : resolvedThumbnailUri;
 
       // 6. Supabase DB metadata synchronization
       await this.updateUploadQueueItem(itemId, {

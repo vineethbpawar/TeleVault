@@ -1,15 +1,12 @@
 /**
  * Active Call Screen
  *
- * The main call UI displayed during an active voice or video call.
+ * Premium call interface for active voice and video calls in TeleVault.
  * Features:
- * - Video tiles (local + remote)
- * - Voice call UI with avatar
- * - Call controls (mute, speaker, camera, flip, end)
- * - Network quality indicator
- * - Duration timer
- * - Picture-in-Picture mode
- * - Animated connection states
+ * - Glassmorphic overlay & ambient glow aesthetics
+ * - Full Lucide vector icon suite
+ * - Smooth dynamic duration timer & status badges
+ * - Responsive layout & PiP mode support
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -25,23 +22,34 @@ import {
   PanResponder,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  Video,
+  VideoOff,
+  PhoneOff,
+  RefreshCw,
+  Minimize2,
+  Wifi,
+} from 'lucide-react-native';
 import { ActiveCallState, NetworkQuality } from '../types/call';
 import { UserAvatar } from '../components/UserAvatar';
 import { callingService } from '../services/callingService';
 import { webRTCPeerService } from '../services/webrtcPeerService';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Conditionally import RTCView
+// Conditionally import RTCView for native platforms
 let RTCView: any = null;
-
 if (Platform.OS !== 'web') {
   try {
     RTCView = require('react-native-webrtc').RTCView;
   } catch (_) {}
 }
 
-// Web RTCView substitute
+// Web Video Component
 const WebVideoView: React.FC<{
   stream: MediaStream | null;
   style?: any;
@@ -61,7 +69,7 @@ const WebVideoView: React.FC<{
       ref={videoRef}
       autoPlay
       playsInline
-      muted={mirror} // local video is muted
+      muted={mirror}
       style={{
         width: '100%',
         height: '100%',
@@ -84,13 +92,12 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
   const [showControls, setShowControls] = useState(true);
   const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsOpacity = useRef(new Animated.Value(1)).current;
-  const connectingAnim = useRef(new Animated.Value(0)).current;
+  const connectingAnim = useRef(new Animated.Value(0.4)).current;
 
-  // PiP position
+  // Draggable PiP position for local video tile
   const pipPosition = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 130, y: 80 })).current;
 
   useEffect(() => {
-    // Get streams from peer service
     const updateStreams = () => {
       setLocalStream(webRTCPeerService.getLocalStream());
       setRemoteStream(webRTCPeerService.getRemoteStream());
@@ -107,21 +114,23 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
     };
   }, []);
 
-  // Connecting animation
+  // Pulse effect for connecting/ringing status
   useEffect(() => {
-    if (callState.status === 'connecting' || callState.status === 'ringing') {
-      Animated.loop(
+    if (callState.status === 'connecting' || callState.status === 'ringing' || callState.status === 'initiating') {
+      const pulse = Animated.loop(
         Animated.sequence([
-          Animated.timing(connectingAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-          Animated.timing(connectingAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
+          Animated.timing(connectingAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+          Animated.timing(connectingAnim, { toValue: 0.4, duration: 700, useNativeDriver: true }),
         ])
-      ).start();
+      );
+      pulse.start();
+      return () => pulse.stop();
     } else {
       connectingAnim.setValue(1);
     }
   }, [callState.status]);
 
-  // Auto-hide controls for video calls
+  // Auto-hide controls overlay for video calls
   const resetControlsTimer = useCallback(() => {
     if (callState.callType !== 'video') return;
     if (controlsTimeout.current) clearTimeout(controlsTimeout.current);
@@ -134,7 +143,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
           setShowControls(false);
         });
       }
-    }, 4000);
+    }, 4500);
   }, [callState.callType, callState.status]);
 
   useEffect(() => {
@@ -144,7 +153,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
     };
   }, []);
 
-  // PiP pan responder
+  // PiP pan responder for dragging local video tile
   const pipPanResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onPanResponderMove: Animated.event(
@@ -156,8 +165,6 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
     },
   });
 
-  // ─── Duration Formatting ──────────────────────────────────────────────────
-
   const formatDuration = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -166,28 +173,6 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
       return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     }
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  };
-
-  // ─── Network Quality Display ──────────────────────────────────────────────
-
-  const getNetworkQualityColor = (quality: NetworkQuality): string => {
-    switch (quality) {
-      case 'excellent': return '#34C759';
-      case 'good': return '#30D158';
-      case 'fair': return '#FF9F0A';
-      case 'poor': return '#FF3B30';
-      default: return '#A0A8C0';
-    }
-  };
-
-  const getNetworkQualityBars = (quality: NetworkQuality): number => {
-    switch (quality) {
-      case 'excellent': return 4;
-      case 'good': return 3;
-      case 'fair': return 2;
-      case 'poor': return 1;
-      default: return 0;
-    }
   };
 
   const getStatusText = (): string => {
@@ -211,12 +196,10 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
   const remoteName =
     callState.remoteProfile?.full_name ||
     callState.remoteProfile?.username ||
-    'Unknown';
+    'Unknown User';
 
   const isVideoCall = callState.callType === 'video';
   const isConnected = callState.status === 'connected';
-
-  // ─── Render Video Call ───────────────────────────────────────────────────
 
   const renderVideoStream = (stream: MediaStream | null, mirror: boolean, style: any) => {
     if (!stream) return null;
@@ -239,79 +222,103 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
     return null;
   };
 
-  // ─── Controls ────────────────────────────────────────────────────────────
-
+  // Modern Control Dock
   const renderControls = () => (
     <Animated.View
       style={[
-        styles.controls,
+        styles.controlsDock,
         {
-          paddingBottom: insets.bottom + 20,
+          paddingBottom: insets.bottom > 0 ? insets.bottom + 12 : 20,
           opacity: isVideoCall ? controlsOpacity : 1,
         },
       ]}
     >
-      {/* Row 1: Secondary controls */}
-      <View style={styles.controlRow}>
-        {/* Speaker */}
-        <ControlButton
-          icon={callState.speakerEnabled ? '🔊' : '🔈'}
-          label={callState.speakerEnabled ? 'Speaker' : 'Earpiece'}
-          active={callState.speakerEnabled}
-          onPress={() => callingService.toggleSpeaker()}
-        />
-
-        {/* Camera flip (video only) */}
-        {isVideoCall && (
-          <ControlButton
-            icon="🔄"
-            label="Flip"
-            onPress={() => callingService.switchCamera()}
-          />
-        )}
-
-        {/* Video toggle (video only) */}
-        {isVideoCall && (
-          <ControlButton
-            icon={callState.localVideoEnabled ? '📹' : '📷'}
-            label={callState.localVideoEnabled ? 'Camera on' : 'Camera off'}
-            active={!callState.localVideoEnabled}
-            onPress={() => callingService.toggleVideo()}
-          />
-        )}
-      </View>
-
-      {/* Row 2: Main controls */}
-      <View style={styles.controlRow}>
-        {/* Mute */}
-        <ControlButton
-          icon={callState.localMuted ? '🎙️' : '🎤'}
-          label={callState.localMuted ? 'Unmute' : 'Mute'}
-          active={callState.localMuted}
+      <View style={styles.dockBar}>
+        {/* Mute Toggle */}
+        <TouchableOpacity
+          style={[styles.dockButton, callState.localMuted && styles.dockButtonActive]}
           onPress={() => callingService.toggleMute()}
-        />
+          activeOpacity={0.8}
+        >
+          {callState.localMuted ? (
+            <MicOff size={22} color="#FF3B30" />
+          ) : (
+            <Mic size={22} color="#FFFFFF" />
+          )}
+          <Text style={[styles.dockLabel, callState.localMuted && { color: '#FF3B30' }]}>
+            {callState.localMuted ? 'Muted' : 'Mute'}
+          </Text>
+        </TouchableOpacity>
 
-        {/* End call */}
+        {/* Video Toggle (Video Calls) */}
+        {isVideoCall && (
+          <TouchableOpacity
+            style={[styles.dockButton, !callState.localVideoEnabled && styles.dockButtonActive]}
+            onPress={() => callingService.toggleVideo()}
+            activeOpacity={0.8}
+          >
+            {callState.localVideoEnabled ? (
+              <Video size={22} color="#FFFFFF" />
+            ) : (
+              <VideoOff size={22} color="#FF3B30" />
+            )}
+            <Text style={[styles.dockLabel, !callState.localVideoEnabled && { color: '#FF3B30' }]}>
+              {callState.localVideoEnabled ? 'Camera' : 'Off'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Camera Flip (Video Calls) */}
+        {isVideoCall && (
+          <TouchableOpacity
+            style={styles.dockButton}
+            onPress={() => callingService.switchCamera()}
+            activeOpacity={0.8}
+          >
+            <RefreshCw size={22} color="#FFFFFF" />
+            <Text style={styles.dockLabel}>Flip</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Speaker Toggle */}
+        <TouchableOpacity
+          style={[styles.dockButton, callState.speakerEnabled && styles.dockButtonHighlight]}
+          onPress={() => callingService.toggleSpeaker()}
+          activeOpacity={0.8}
+        >
+          {callState.speakerEnabled ? (
+            <Volume2 size={22} color="#FFFC00" />
+          ) : (
+            <VolumeX size={22} color="#8E98B7" />
+          )}
+          <Text style={[styles.dockLabel, callState.speakerEnabled && { color: '#FFFC00' }]}>
+            {callState.speakerEnabled ? 'Speaker' : 'Speaker'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Mini PiP Window Toggle */}
+        <TouchableOpacity
+          style={styles.dockButton}
+          onPress={() => callingService.setPipMode(true)}
+          activeOpacity={0.8}
+        >
+          <Minimize2 size={22} color="#FFFFFF" />
+          <Text style={styles.dockLabel}>Mini</Text>
+        </TouchableOpacity>
+
+        {/* End Call Button */}
         <TouchableOpacity
           style={styles.endCallButton}
           onPress={() => callingService.endCall('hangup')}
           activeOpacity={0.85}
         >
-          <Text style={styles.endCallIcon}>📵</Text>
+          <PhoneOff size={26} color="#FFFFFF" />
         </TouchableOpacity>
-
-        {/* PiP mode */}
-        <ControlButton
-          icon="⊞"
-          label="Mini"
-          onPress={() => callingService.setPipMode(true)}
-        />
       </View>
     </Animated.View>
   );
 
-  // ─── Main Render ─────────────────────────────────────────────────────────
-
+  // Video Call Mode
   if (isVideoCall) {
     return (
       <TouchableOpacity
@@ -323,7 +330,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
           <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
         )}
 
-        {/* Remote video (full screen) */}
+        {/* Remote Fullscreen Video Stream */}
         <View style={StyleSheet.absoluteFill}>
           {remoteStream ? (
             renderVideoStream(remoteStream, false, StyleSheet.absoluteFill)
@@ -332,37 +339,40 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
               <UserAvatar
                 name={remoteName}
                 avatarUrl={callState.remoteProfile?.avatar_url}
-                size={120}
+                size={110}
               />
+              <Text style={styles.noVideoName}>{remoteName}</Text>
             </View>
           )}
         </View>
 
-        {/* Top overlay */}
+        {/* Top Floating Overlay */}
         {showControls && (
           <Animated.View
-            style={[styles.topOverlay, { paddingTop: insets.top + 12, opacity: controlsOpacity }]}
+            style={[
+              styles.topVideoOverlay,
+              { paddingTop: insets.top > 0 ? insets.top + 12 : 20, opacity: controlsOpacity },
+            ]}
           >
-            <Text style={styles.remoteNameVideo}>{remoteName}</Text>
-            <View style={styles.statusRow}>
-              {callState.isReconnecting && (
-                <Text style={styles.reconnectingText}>🔄 Reconnecting...</Text>
+            <View style={styles.topOverlayContent}>
+              <View>
+                <Text style={styles.remoteNameVideo}>{remoteName}</Text>
+                <Animated.Text style={[styles.statusTextVideo, { opacity: connectingAnim }]}>
+                  {getStatusText()}
+                </Animated.Text>
+              </View>
+
+              {isConnected && (
+                <View style={styles.networkBadge}>
+                  <Wifi size={14} color="#34C759" />
+                  <Text style={styles.networkBadgeText}>{callState.networkQuality}</Text>
+                </View>
               )}
-              <Animated.Text
-                style={[styles.statusTextVideo, { opacity: connectingAnim }]}
-              >
-                {getStatusText()}
-              </Animated.Text>
-              <NetworkQualityIcon
-                quality={callState.networkQuality}
-                color={getNetworkQualityColor(callState.networkQuality)}
-                bars={getNetworkQualityBars(callState.networkQuality)}
-              />
             </View>
           </Animated.View>
         )}
 
-        {/* Local video (PiP tile) */}
+        {/* Local Video PiP Tile */}
         {localStream && (
           <Animated.View
             style={[styles.localVideoTile, pipPosition.getLayout()]}
@@ -372,155 +382,68 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
           </Animated.View>
         )}
 
-        {/* Controls overlay */}
+        {/* Bottom Control Dock */}
         {showControls && renderControls()}
       </TouchableOpacity>
     );
   }
 
-  // ─── Voice Call UI ────────────────────────────────────────────────────────
-
+  // Voice Call Mode
   return (
     <View style={styles.voiceContainer}>
       {Platform.OS !== 'web' && (
         <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       )}
 
+      {/* Ambient Radial Glow */}
+      <View style={styles.ambientGlow} />
+
       <View
-        style={[styles.voiceContent, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
+        style={[
+          styles.voiceContent,
+          { paddingTop: insets.top > 0 ? insets.top + 28 : 40, paddingBottom: insets.bottom > 0 ? insets.bottom + 20 : 28 },
+        ]}
       >
-        {/* Remote info */}
-        <View style={styles.voiceAvatarSection}>
-          <UserAvatar
-            name={remoteName}
-            avatarUrl={callState.remoteProfile?.avatar_url}
-            size={128}
-            style={styles.voiceAvatar}
-          />
+        {/* Remote User Profile Info */}
+        <View style={styles.profileSection}>
+          <View style={styles.avatarGlowWrapper}>
+            <UserAvatar
+              name={remoteName}
+              avatarUrl={callState.remoteProfile?.avatar_url}
+              size={128}
+              style={styles.voiceAvatar}
+            />
+          </View>
+
           <Text style={styles.voiceRemoteName}>{remoteName}</Text>
           <Text style={styles.voiceRemoteUsername}>
             @{callState.remoteProfile?.username}
           </Text>
 
-          {/* Status / timer */}
-          <View style={styles.statusRow}>
-            {callState.isReconnecting && (
-              <Text style={styles.reconnectingText}>🔄 </Text>
+          {/* Status & Duration */}
+          <View style={styles.statusBadgeRow}>
+            {isConnected ? (
+              <View style={styles.connectedBadge}>
+                <View style={styles.livePulseDot} />
+                <Text style={styles.connectedDurationText}>{getStatusText()}</Text>
+              </View>
+            ) : (
+              <Animated.Text style={[styles.voiceStatusText, { opacity: connectingAnim }]}>
+                {getStatusText()}
+              </Animated.Text>
             )}
-            <Animated.Text
-              style={[
-                styles.voiceStatusText,
-                isConnected
-                  ? styles.connectedStatus
-                  : { opacity: connectingAnim },
-              ]}
-            >
-              {getStatusText()}
-            </Animated.Text>
           </View>
-
-          {/* Network quality */}
-          {isConnected && (
-            <View style={styles.networkRow}>
-              <NetworkQualityIcon
-                quality={callState.networkQuality}
-                color={getNetworkQualityColor(callState.networkQuality)}
-                bars={getNetworkQualityBars(callState.networkQuality)}
-              />
-              <Text
-                style={[
-                  styles.networkLabel,
-                  { color: getNetworkQualityColor(callState.networkQuality) },
-                ]}
-              >
-                {callState.networkQuality !== 'unknown' ? callState.networkQuality : ''}
-              </Text>
-            </View>
-          )}
         </View>
 
-        {/* Controls */}
+        {/* Bottom Dock Controls */}
         {renderControls()}
       </View>
     </View>
   );
 };
 
-// ─── Sub-components ────────────────────────────────────────────────────────
-
-interface ControlButtonProps {
-  icon: string;
-  label: string;
-  onPress: () => void;
-  active?: boolean;
-  disabled?: boolean;
-}
-
-const ControlButton: React.FC<ControlButtonProps> = ({
-  icon,
-  label,
-  onPress,
-  active = false,
-  disabled = false,
-}) => {
-  const scale = useRef(new Animated.Value(1)).current;
-
-  const handlePress = () => {
-    Animated.sequence([
-      Animated.timing(scale, { toValue: 0.9, duration: 80, useNativeDriver: true }),
-      Animated.timing(scale, { toValue: 1, duration: 80, useNativeDriver: true }),
-    ]).start();
-    onPress();
-  };
-
-  return (
-    <Animated.View style={{ transform: [{ scale }] }}>
-      <TouchableOpacity
-        style={[styles.controlButton, active && styles.controlButtonActive]}
-        onPress={handlePress}
-        disabled={disabled}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.controlIcon}>{icon}</Text>
-        <Text style={[styles.controlLabel, active && styles.controlLabelActive]}>
-          {label}
-        </Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-};
-
-interface NetworkQualityIconProps {
-  quality: NetworkQuality;
-  color: string;
-  bars: number;
-}
-
-const NetworkQualityIcon: React.FC<NetworkQualityIconProps> = ({ bars, color }) => {
-  if (bars === 0) return null;
-  return (
-    <View style={styles.networkBars}>
-      {[1, 2, 3, 4].map((i) => (
-        <View
-          key={i}
-          style={[
-            styles.networkBar,
-            {
-              height: 4 + i * 3,
-              backgroundColor: i <= bars ? color : '#333',
-              opacity: i <= bars ? 1 : 0.3,
-            },
-          ]}
-        />
-      ))}
-    </View>
-  );
-};
-
-// ─── Styles ───────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  // Video call
+  // Video Mode
   videoContainer: {
     position: 'absolute',
     top: 0,
@@ -528,52 +451,81 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 9998,
-    backgroundColor: '#000',
+    backgroundColor: '#000000',
   },
   noVideoBackground: {
     flex: 1,
-    backgroundColor: '#0A0D1F',
+    backgroundColor: '#090B15',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 16,
   },
-  topOverlay: {
+  noVideoName: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  topVideoOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     paddingHorizontal: 20,
-    paddingBottom: 20,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    paddingBottom: 16,
+    backgroundColor: 'rgba(9, 11, 21, 0.65)',
+  },
+  topOverlayContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   remoteNameVideo: {
     color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
   },
   statusTextVideo: {
-    color: '#E0E0E0',
-    fontSize: 14,
-    marginTop: 4,
+    color: '#FFFC00',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  networkBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(52, 199, 89, 0.15)',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 199, 89, 0.3)',
+  },
+  networkBadgeText: {
+    color: '#34C759',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'capitalize',
   },
   localVideoTile: {
     position: 'absolute',
     width: 110,
-    height: 165,
-    borderRadius: 16,
+    height: 160,
+    borderRadius: 18,
     overflow: 'hidden',
     borderWidth: 2,
-    borderColor: '#FFFFFF40',
+    borderColor: 'rgba(255, 252, 0, 0.6)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 10,
   },
   localVideoInner: {
     flex: 1,
   },
 
-  // Voice call
+  // Voice Mode
   voiceContainer: {
     position: 'absolute',
     top: 0,
@@ -581,131 +533,139 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 9998,
-    backgroundColor: '#0A0D1F',
+    backgroundColor: '#090B15',
+  },
+  ambientGlow: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: '#090B15',
   },
   voiceContent: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 24,
   },
-  voiceAvatarSection: {
+  profileSection: {
     alignItems: 'center',
-    flex: 1,
     justifyContent: 'center',
-    gap: 12,
+    gap: 10,
+    marginTop: 60,
+  },
+  avatarGlowWrapper: {
+    padding: 6,
+    borderRadius: 74,
+    borderWidth: 3,
+    borderColor: '#FFFC00',
+    shadowColor: '#FFFC00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 10,
   },
   voiceAvatar: {
-    borderWidth: 3,
-    borderColor: '#4F6FFF',
+    borderRadius: 64,
   },
   voiceRemoteName: {
     color: '#FFFFFF',
     fontSize: 28,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: -0.5,
+    marginTop: 8,
   },
   voiceRemoteUsername: {
-    color: '#A0A8C0',
+    color: '#8E98B7',
     fontSize: 15,
+    fontWeight: '600',
+  },
+  statusBadgeRow: {
+    marginTop: 12,
   },
   voiceStatusText: {
-    color: '#8891B0',
+    color: '#FFFC00',
     fontSize: 16,
+    fontWeight: '700',
     letterSpacing: 1,
   },
-  connectedStatus: {
-    color: '#FFFC00',
-    fontWeight: '600',
-    fontVariant: ['tabular-nums'] as any,
-    fontSize: 22,
-    letterSpacing: 2,
-  },
-
-  // Shared
-  statusRow: {
+  connectedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    backgroundColor: 'rgba(255, 252, 0, 0.12)',
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 252, 0, 0.3)',
   },
-  reconnectingText: {
-    color: '#FF9F0A',
-    fontSize: 14,
+  livePulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#34C759',
   },
-  networkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
-  },
-  networkLabel: {
-    fontSize: 12,
-    textTransform: 'capitalize',
-  },
-  networkBars: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 2,
-  },
-  networkBar: {
-    width: 3,
-    borderRadius: 1,
+  connectedDurationText: {
+    color: '#FFFC00',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    fontVariant: ['tabular-nums'] as any,
   },
 
-  // Controls
-  controls: {
+  // Dock Controls
+  controlsDock: {
     width: '100%',
-    paddingHorizontal: 24,
-    gap: 16,
     alignItems: 'center',
   },
-  controlRow: {
+  dockBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 24,
+    justifyContent: 'space-evenly',
     width: '100%',
-  },
-  controlButton: {
-    width: 72,
-    height: 72,
+    maxWidth: 420,
+    backgroundColor: 'rgba(25, 28, 50, 0.92)',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  dockButton: {
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
-  controlButtonActive: {
-    backgroundColor: 'rgba(255, 252, 0, 0.18)',
-    borderWidth: 1,
-    borderColor: '#FFFC00',
+  dockButtonActive: {
+    backgroundColor: 'rgba(255, 59, 48, 0.15)',
   },
-  controlIcon: {
-    fontSize: 24,
+  dockButtonHighlight: {
+    backgroundColor: 'rgba(255, 252, 0, 0.12)',
   },
-  controlLabel: {
-    color: '#A0A8C0',
+  dockLabel: {
+    color: '#8E98B7',
     fontSize: 10,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  controlLabelActive: {
-    color: '#FFFC00',
+    fontWeight: '600',
   },
   endCallButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#FF3B30',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#FF3B30',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  endCallIcon: {
-    fontSize: 32,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    elevation: 8,
+    marginLeft: 6,
   },
 });
 

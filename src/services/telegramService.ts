@@ -341,8 +341,8 @@ export const telegramService = {
             .maybeSingle();
 
           if (data && !error) {
-            botToken = data.bot_token;
-            channelId = data.channel_id;
+            botToken = botToken || data.bot_token;
+            channelId = channelId || data.channel_id;
             if (botToken) await storageService.setItem(BOT_TOKEN_KEY, botToken);
             if (channelId) await storageService.setItem(CHANNEL_ID_KEY, channelId);
           }
@@ -350,6 +350,13 @@ export const telegramService = {
       } catch (err) {
         console.error('Failed to restore Telegram config from Supabase:', err);
       }
+    }
+
+    if (!botToken) {
+      botToken = process.env.EXPO_PUBLIC_TELEGRAM_BOT_TOKEN || null;
+    }
+    if (!channelId) {
+      channelId = process.env.EXPO_PUBLIC_TELEGRAM_CHANNEL_ID || null;
     }
 
     return { botToken, channelId };

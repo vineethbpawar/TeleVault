@@ -706,18 +706,38 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
-  const handleOpenSnap = async (snap: any) => {
-    if (!snap) return;
-    const isReceiver = snap.receiver_id === currentUserId;
-    const isSavedInChat = snap.view_once === false;
-
-    if (isReceiver && snap.is_viewed && !isSavedInChat) {
-      Alert.alert('Opened', 'This view-once snap has already been viewed.');
-      return;
-    }
+  const handleOpenSnap = async (snapArg: any, snapIdFallback?: string) => {
+    let snap = snapArg;
+    const targetSnapId = snap?.id || snapIdFallback;
+    if (!targetSnapId && !snap) return;
 
     setLoading(true);
     try {
+      if (!snap || !snap.telegram_file_id) {
+        const { data: fetchedSnap, error } = await supabase
+          .from('snaps')
+          .select('*')
+          .eq('id', targetSnapId)
+          .single();
+        if (error || !fetchedSnap) {
+          throw new Error(error?.message || 'Could not load snap details.');
+        }
+        snap = fetchedSnap;
+      }
+
+      if (!snap || !snap.telegram_file_id) {
+        throw new Error('Snap file ID is unavailable.');
+      }
+
+      const isReceiver = snap.receiver_id === currentUserId;
+      const isSavedInChat = snap.view_once === false;
+
+      if (isReceiver && snap.is_viewed && !isSavedInChat) {
+        setLoading(false);
+        Alert.alert('Opened', 'This view-once snap has already been viewed.');
+        return;
+      }
+
       const mediaUrl = await snapService.resolveTelegramUrl(snap.telegram_file_id);
       setLoading(false);
 
@@ -739,7 +759,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
             return {
               ...m,
               status: 'read',
-              snap: { ...m.snap, is_viewed: true },
+              snap: { ...m.snap, ...snap, is_viewed: true },
             };
           }
           return m;
@@ -1000,7 +1020,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         <SnapBubble
           snap={item.snap || { id: item.snap_id, media_type: 'image', is_viewed: item.status === 'read' }}
           isMe={isMe}
-          onOpen={() => handleOpenSnap(item.snap)}
+          onOpen={() => handleOpenSnap(item.snap, item.snap_id)}
           onLongPress={() => setLongPressedMessage(item)}
           senderName={otherUsername}
         />

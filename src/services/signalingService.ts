@@ -182,7 +182,16 @@ class SignalingService {
     };
 
     // Send ring notification to user's personal channel first
-    await this.sendRingNotification(params.callId, params.senderId, params.receiverId, params.callType, params.callScope, params.callerProfile, params.groupId);
+    await this.sendRingNotification(
+      params.callId,
+      params.senderId,
+      params.receiverId,
+      params.callType,
+      params.callScope,
+      params.callerProfile,
+      params.groupId,
+      params.sdp
+    );
 
     // Then send offer to call channel
     await this.sendToCallChannel(params.callId, payload);
@@ -195,7 +204,8 @@ class SignalingService {
     callType: CallType,
     callScope: CallScope,
     callerProfile: UserCallProfile,
-    groupId?: string
+    groupId?: string,
+    sdp?: string
   ): Promise<void> {
     const payload: SignalingPayload = {
       event: 'call_ring',
@@ -206,6 +216,7 @@ class SignalingService {
       call_scope: callScope,
       caller_profile: callerProfile,
       group_id: groupId,
+      sdp: sdp,
       timestamp: Date.now(),
     };
 

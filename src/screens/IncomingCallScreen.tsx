@@ -2,8 +2,7 @@
  * Incoming Call Screen
  *
  * Displays when someone calls the current user.
- * Shows caller info, call type, accept/decline buttons.
- * Supports swipe gestures, animations, ringtone.
+ * Features modern glassmorphism aesthetic, Lucide vector icons, and smooth animations.
  */
 
 import React, { useEffect, useRef } from 'react';
@@ -17,6 +16,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Phone, PhoneOff, Video } from 'lucide-react-native';
 import { IncomingCallData } from '../types/call';
 import { UserAvatar } from '../components/UserAvatar';
 import { callingService } from '../services/callingService';
@@ -30,7 +30,7 @@ const IncomingCallScreen: React.FC<IncomingCallScreenProps> = ({ incomingCall })
   const insets = useSafeAreaInsets();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(100)).current;
+  const slideAnim = useRef(new Animated.Value(60)).current;
 
   useEffect(() => {
     // Fade in
@@ -48,17 +48,17 @@ const IncomingCallScreen: React.FC<IncomingCallScreenProps> = ({ incomingCall })
       useNativeDriver: true,
     }).start();
 
-    // Pulse animation for avatar
+    // Pulse animation for avatar rings
     const pulse = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.15,
-          duration: 800,
+          toValue: 1.18,
+          duration: 900,
           useNativeDriver: true,
         }),
         Animated.timing(pulseAnim, {
           toValue: 1,
-          duration: 800,
+          duration: 900,
           useNativeDriver: true,
         }),
       ])
@@ -77,103 +77,103 @@ const IncomingCallScreen: React.FC<IncomingCallScreenProps> = ({ incomingCall })
     await callingService.rejectCall(incomingCall);
   };
 
-  const callTypeLabel =
-    incomingCall.callType === 'video' ? '📹 Incoming Video Call' : '📞 Incoming Voice Call';
+  const isVideo = incomingCall.callType === 'video';
+  const callTypeLabel = isVideo ? 'INCOMING VIDEO CALL' : 'INCOMING VOICE CALL';
 
   const callerName =
     incomingCall.callerProfile.full_name ||
     incomingCall.callerProfile.username ||
-    'Unknown';
+    'Unknown User';
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-      {Platform.OS !== 'web' && <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />}
+      {Platform.OS !== 'web' && (
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      )}
 
-      {/* Background gradient overlay */}
-      <View style={styles.gradient} />
+      {/* Ambient glassmorphic backdrop glow */}
+      <View style={styles.glowBackdrop} />
 
-      {/* Content */}
+      {/* Main Content Card */}
       <View
         style={[
           styles.content,
-          { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 40 },
+          { paddingTop: insets.top > 0 ? insets.top + 24 : 40, paddingBottom: insets.bottom > 0 ? insets.bottom + 32 : 40 },
         ]}
       >
-        {/* Call type */}
-        <Text style={styles.callTypeLabel}>{callTypeLabel}</Text>
-
-        {/* Avatar with pulse */}
-        <View style={styles.avatarSection}>
-          <Animated.View
-            style={[
-              styles.avatarRing3,
-              {
-                transform: [{ scale: pulseAnim }],
-                opacity: 0.12,
-              },
-            ]}
-          />
-          <Animated.View
-            style={[
-              styles.avatarRing2,
-              {
-                transform: [{ scale: pulseAnim }],
-                opacity: 0.2,
-              },
-            ]}
-          />
-          <Animated.View
-            style={[
-              styles.avatarRing1,
-              { transform: [{ scale: pulseAnim }] },
-            ]}
-          >
-            <UserAvatar
-              name={callerName}
-              avatarUrl={incomingCall.callerProfile.avatar_url}
-              size={120}
-            />
-          </Animated.View>
+        {/* Top Header Badge */}
+        <View style={styles.headerBadge}>
+          {isVideo ? <Video size={14} color="#FFFC00" /> : <Phone size={14} color="#FFFC00" />}
+          <Text style={styles.callTypeLabel}>{callTypeLabel}</Text>
         </View>
 
-        {/* Caller info */}
-        <Text style={styles.callerName}>{callerName}</Text>
-        <Text style={styles.callerUsername}>@{incomingCall.callerProfile.username}</Text>
+        {/* Center Profile Avatar with Pulse Effect */}
+        <View style={styles.profileSection}>
+          <View style={styles.avatarContainer}>
+            <Animated.View
+              style={[
+                styles.pulseRingOuter,
+                { transform: [{ scale: pulseAnim }] },
+              ]}
+            />
+            <Animated.View
+              style={[
+                styles.pulseRingInner,
+                { transform: [{ scale: pulseAnim }] },
+              ]}
+            />
+            <View style={styles.avatarBorder}>
+              <UserAvatar
+                name={callerName}
+                avatarUrl={incomingCall.callerProfile.avatar_url}
+                size={120}
+              />
+            </View>
+          </View>
 
-        <Text style={styles.statusText}>
-          {incomingCall.callScope === 'group' ? 'Group call' : 'Calling you...'}
-        </Text>
+          {/* Caller Details */}
+          <Text style={styles.callerName}>{callerName}</Text>
+          <Text style={styles.callerUsername}>@{incomingCall.callerProfile.username}</Text>
+          <Text style={styles.statusText}>
+            {incomingCall.callScope === 'group' ? 'Group Call' : 'Ringing...'}
+          </Text>
+        </View>
 
-        {/* Controls */}
+        {/* Action Controls */}
         <Animated.View
           style={[
-            styles.controls,
+            styles.controlsContainer,
             { transform: [{ translateY: slideAnim }] },
           ]}
         >
-          {/* Decline */}
-          <TouchableOpacity
-            style={[styles.actionButton, styles.declineButton]}
-            onPress={handleDecline}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.actionIcon}>✕</Text>
-          </TouchableOpacity>
+          {/* Decline Button */}
+          <View style={styles.actionItem}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.declineButton]}
+              onPress={handleDecline}
+              activeOpacity={0.82}
+            >
+              <PhoneOff size={28} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text style={styles.actionLabel}>Decline</Text>
+          </View>
 
-          {/* Accept */}
-          <TouchableOpacity
-            style={[styles.actionButton, styles.acceptButton]}
-            onPress={handleAccept}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.actionIcon}>
-              {incomingCall.callType === 'video' ? '📹' : '📞'}
-            </Text>
-          </TouchableOpacity>
+          {/* Accept Button */}
+          <View style={styles.actionItem}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.acceptButton]}
+              onPress={handleAccept}
+              activeOpacity={0.82}
+            >
+              {isVideo ? (
+                <Video size={28} color="#000000" />
+              ) : (
+                <Phone size={28} color="#000000" />
+              )}
+            </TouchableOpacity>
+            <Text style={[styles.actionLabel, { color: '#34C759' }]}>Accept</Text>
+          </View>
         </Animated.View>
-
-        {/* Hint */}
-        <Text style={styles.hint}>Swipe or tap buttons</Text>
       </View>
     </Animated.View>
   );
@@ -187,83 +187,105 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 9999,
-    backgroundColor: '#0A0D1F',
+    backgroundColor: '#090B15',
   },
-  gradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#0A0D1F',
-    opacity: 0.97,
+  glowBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: '#090B15',
   },
   content: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 24,
+  },
+  headerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 252, 0, 0.1)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 252, 0, 0.25)',
   },
   callTypeLabel: {
-    color: '#A0A8C0',
-    fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: 0.5,
+    color: '#FFFC00',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.2,
   },
-  avatarSection: {
+  profileSection: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  avatarContainer: {
+    width: 190,
+    height: 190,
     alignItems: 'center',
     justifyContent: 'center',
-    width: 200,
-    height: 200,
+    marginVertical: 12,
   },
-  avatarRing3: {
+  pulseRingOuter: {
     position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: '#4F6FFF',
-    opacity: 0.1,
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    backgroundColor: 'rgba(79, 111, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(79, 111, 255, 0.3)',
   },
-  avatarRing2: {
+  pulseRingInner: {
     position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: '#4F6FFF',
-    opacity: 0.2,
+    width: 156,
+    height: 156,
+    borderRadius: 78,
+    backgroundColor: 'rgba(255, 252, 0, 0.12)',
   },
-  avatarRing1: {
-    width: 128,
-    height: 128,
-    borderRadius: 64,
-    overflow: 'hidden',
+  avatarBorder: {
+    width: 126,
+    height: 126,
+    borderRadius: 63,
     borderWidth: 3,
-    borderColor: '#4F6FFF',
+    borderColor: '#FFFC00',
+    overflow: 'hidden',
+    shadowColor: '#FFFC00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
   },
   callerName: {
     color: '#FFFFFF',
-    fontSize: 30,
-    fontWeight: '700',
+    fontSize: 28,
+    fontWeight: '800',
     textAlign: 'center',
-    marginTop: 16,
     letterSpacing: -0.5,
   },
   callerUsername: {
-    color: '#A0A8C0',
-    fontSize: 16,
-    marginTop: 4,
+    color: '#8E98B7',
+    fontSize: 15,
+    fontWeight: '600',
   },
   statusText: {
-    color: '#6B7FCC',
-    fontSize: 14,
-    marginTop: 8,
+    color: '#FFFC00',
+    fontSize: 13,
+    fontWeight: '700',
     letterSpacing: 1,
+    marginTop: 4,
   },
-  controls: {
+  controlsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 60,
-    paddingHorizontal: 40,
+    gap: 48,
+    width: '100%',
+    paddingBottom: 16,
+  },
+  actionItem: {
+    alignItems: 'center',
+    gap: 10,
   },
   actionButton: {
     width: 72,
@@ -271,10 +293,10 @@ const styles = StyleSheet.create({
     borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowRadius: 12,
+    elevation: 10,
   },
   declineButton: {
     backgroundColor: '#FF3B30',
@@ -284,13 +306,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#34C759',
     shadowColor: '#34C759',
   },
-  actionIcon: {
-    fontSize: 28,
-  },
-  hint: {
-    color: '#404868',
-    fontSize: 12,
-    marginTop: 8,
+  actionLabel: {
+    color: '#FF3B30',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });
 

@@ -388,6 +388,38 @@ export const previewCacheService = {
     // 1. Image resolution
     if (fileType === 'image') {
       let resolvedLocalUri = file.local_uri || file.local_thumbnail_uri || file.overlay_metadata?.local_uri;
+
+      // Handle tgthumb:<file_id> cross-platform references
+      if (resolvedLocalUri && typeof resolvedLocalUri === 'string' && resolvedLocalUri.startsWith('tgthumb:')) {
+        const thumbFileId = resolvedLocalUri.slice('tgthumb:'.length);
+        try {
+          const cacheKey = `televault_tgthumb_${thumbFileId}`;
+          const cached = await cacheGetItem(cacheKey);
+          if (cached && (Platform.OS !== 'web' || isWebValidUri(cached))) {
+            return { type: 'image', previewUri: cached, fallbackIcon };
+          }
+          const thumbUrl = await telegramService.getTelegramFileDownloadUrl(thumbFileId, signal);
+          let previewUri = thumbUrl;
+          if (Platform.OS === 'web') {
+            const res = await fetch(thumbUrl, { signal });
+            const blob = await res.blob();
+            previewUri = URL.createObjectURL(blob);
+          } else {
+            const localPath = `${FileSystem.cacheDirectory}tgthumb_${thumbFileId}.jpg`;
+            const dl = await FileSystem.downloadAsync(thumbUrl, localPath);
+            if (dl.status >= 200 && dl.status < 300) {
+              previewUri = dl.uri;
+            }
+          }
+          if (previewUri) {
+            await cacheSetItem(cacheKey, previewUri);
+            return { type: 'image', previewUri, fallbackIcon };
+          }
+        } catch (e) {
+          console.warn('[previewCacheService] tgthumb image fetch failed:', e);
+        }
+      }
+
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
           if (file.telegram_file_id && typeof resolvedLocalUri === 'string' && resolvedLocalUri.startsWith('blob:')) {
@@ -395,10 +427,11 @@ export const previewCacheService = {
           }
         }
       }
+
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
           if (!isWebValidUri(resolvedLocalUri)) {
-            // Ignore native file paths on Web
+            resolvedLocalUri = null; // Mark null so it falls back to telegram_file_id
           } else {
             if (typeof resolvedLocalUri === 'string' && resolvedLocalUri.startsWith('webblob:')) {
               resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
@@ -427,9 +460,12 @@ export const previewCacheService = {
                 previewUri: resolvedLocalUri,
                 fallbackIcon,
               };
+            } else {
+              resolvedLocalUri = null;
             }
           } catch (e) {
             console.warn('Local image check failed:', e);
+            resolvedLocalUri = null;
           }
         }
       }
@@ -444,14 +480,6 @@ export const previewCacheService = {
 
       if (file.telegram_file_id) {
         try {
-          const config = await telegramService.getTelegramConfig();
-          if (!config.botToken) {
-            return {
-              type: 'image',
-              fallbackIcon,
-              error: 'Telegram config is missing.',
-            };
-          }
           if (!forceRefresh) {
             const cached = await this.getCachedPreview(file.telegram_file_id);
             if (cached) {
@@ -482,18 +510,14 @@ export const previewCacheService = {
             }
           }
 
-          const fileInfo = await telegramService.getTelegramFileInfo(file.telegram_file_id, signal);
-          const url = `https://api.telegram.org/file/bot${config.botToken}/${fileInfo.file_path}`;
-
-          
-          let previewUri = url;
+          const downloadUrl = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
+          let previewUri = downloadUrl;
           if (Platform.OS === 'web') {
             if (file.is_private) {
               const { encryptionService } = require('./encryptionService');
-              const proxiedUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(url)}`;
+              const proxiedUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(downloadUrl)}`;
               previewUri = await encryptionService.decryptFile(proxiedUrl, fileName, file.mime_type);
             } else {
-              const downloadUrl = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
               const res = await fetch(downloadUrl, { signal });
               const blob = await res.blob();
               previewUri = URL.createObjectURL(blob);
@@ -502,12 +526,12 @@ export const previewCacheService = {
             if (file.is_private) {
               const { encryptionService } = require('./encryptionService');
               const tempEncPath = `${FileSystem.cacheDirectory}temp_enc_${file.id}_${fileName}`;
-              await FileSystem.downloadAsync(url, tempEncPath);
+              await FileSystem.downloadAsync(downloadUrl, tempEncPath);
               previewUri = await encryptionService.decryptFile(tempEncPath, fileName, file.mime_type);
               await FileSystem.deleteAsync(tempEncPath, { idempotent: true });
             } else {
               const localCachePath = `${FileSystem.cacheDirectory}cache_${file.id}_${fileName}`;
-              await FileSystem.downloadAsync(url, localCachePath);
+              await FileSystem.downloadAsync(downloadUrl, localCachePath);
               previewUri = localCachePath;
             }
           }
