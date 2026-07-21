@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,17 +7,19 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Check, X, ArrowLeft } from 'lucide-react-native';
+import { Check, X, ArrowLeft, UserPlus } from 'lucide-react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
 import { friendService } from '../services/friendService';
 import { FriendRequest } from '../types/friends';
+import { supabase } from '../lib/supabase';
 import AppHeader from '../components/AppHeader';
 import AppCard from '../components/AppCard';
 import UserAvatar from '../components/UserAvatar';
-import AppButton from '../components/AppButton';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'FriendRequests'>;
 
@@ -25,31 +27,77 @@ export const FriendRequestsScreen: React.FC<Props> = ({ navigation }) => {
   const [incoming, setIncoming] = useState<FriendRequest[]>([]);
   const [outgoing, setOutgoing] = useState<FriendRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'received' | 'sent'>('received');
+  const isFocused = useIsFocused();
 
-  const loadRequests = async () => {
-    setLoading(true);
+  const loadRequests = useCallback(async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
-      const inc = await friendService.getPendingRequests();
-      const out = await friendService.getSentRequests();
+      const [inc, out] = await Promise.all([
+        friendService.getPendingRequests(),
+        friendService.getSentRequests(),
+      ]);
       setIncoming(inc);
       setOutgoing(out);
     } catch (error) {
       console.error('Load Friend Requests Error:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadRequests();
-  }, []);
+    if (isFocused) {
+      loadRequests(true);
+    }
+  }, [isFocused, loadRequests]);
+
+  // Realtime subscription for incoming/outgoing request status changes
+  useEffect(() => {
+    let channel: any = null;
+
+    const setupSubscription = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      channel = supabase
+        .channel('friend_requests_realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'friend_requests',
+          },
+          () => {
+            loadRequests(false);
+          }
+        )
+        .subscribe();
+    };
+
+    setupSubscription();
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [loadRequests]);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadRequests(false);
+  };
 
   const handleAccept = async (request: FriendRequest) => {
     try {
       await friendService.acceptFriendRequest(request.id, request.sender_id);
-      Alert.alert('Success', `You are now friends with @${request.sender?.username || 'user'}`);
-      loadRequests();
+      const username = request.sender?.username || 'user';
+      Alert.alert('Success', `You are now friends with @${username}`);
+      loadRequests(false);
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to accept request.');
     }
@@ -58,7 +106,7 @@ export const FriendRequestsScreen: React.FC<Props> = ({ navigation }) => {
   const handleReject = async (request: FriendRequest) => {
     try {
       await friendService.rejectFriendRequest(request.id);
-      loadRequests();
+      loadRequests(false);
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to reject request.');
     }
@@ -67,7 +115,7 @@ export const FriendRequestsScreen: React.FC<Props> = ({ navigation }) => {
   const handleCancel = async (request: FriendRequest) => {
     try {
       await friendService.cancelFriendRequest(request.id);
-      loadRequests();
+      loadRequests(false);
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to cancel request.');
     }
@@ -77,28 +125,41 @@ export const FriendRequestsScreen: React.FC<Props> = ({ navigation }) => {
     const isIncoming = activeTab === 'received';
     const profile = isIncoming ? item.sender : item.receiver;
 
-    if (!profile) return null;
+    const displayName = profile?.full_name || profile?.username || (isIncoming ? `User ${item.sender_id.slice(0, 8)}` : `User ${item.receiver_id.slice(0, 8)}`);
+    const username = profile?.username ? `@${profile.username}` : 'pending profile';
 
     return (
       <AppCard style={styles.card}>
-        <UserAvatar name={profile.full_name || profile.username} avatarUrl={profile.avatar_url} size={40} />
+        <UserAvatar name={displayName} avatarUrl={profile?.avatar_url} size={44} />
         
         <View style={styles.info}>
-          <Text style={styles.fullName}>{profile.full_name || 'No Name'}</Text>
-          <Text style={styles.username}>@{profile.username}</Text>
+          <Text style={styles.fullName}>{displayName}</Text>
+          <Text style={styles.username}>{username}</Text>
         </View>
 
         {isIncoming ? (
           <View style={styles.actionContainer}>
-            <TouchableOpacity style={[styles.actionBtn, styles.acceptBtn]} onPress={() => handleAccept(item)}>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.acceptBtn]}
+              onPress={() => handleAccept(item)}
+              activeOpacity={0.8}
+            >
               <Check size={18} color="#000000" />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn]} onPress={() => handleReject(item)}>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.rejectBtn]}
+              onPress={() => handleReject(item)}
+              activeOpacity={0.8}
+            >
               <X size={18} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancel(item)}>
+          <TouchableOpacity
+            style={styles.cancelBtn}
+            onPress={() => handleCancel(item)}
+            activeOpacity={0.8}
+          >
             <Text style={styles.cancelBtnText}>Cancel</Text>
           </TouchableOpacity>
         )}
@@ -141,8 +202,17 @@ export const FriendRequestsScreen: React.FC<Props> = ({ navigation }) => {
           keyExtractor={(item) => item.id}
           renderItem={renderRequestItem}
           contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#FFFC00"
+              colors={['#FFFC00']}
+            />
+          }
           ListEmptyComponent={
             <View style={styles.empty}>
+              <UserPlus size={44} color="#2c2c35" style={{ marginBottom: 12 }} />
               <Text style={styles.emptyText}>
                 {activeTab === 'received'
                   ? 'No incoming friend requests'

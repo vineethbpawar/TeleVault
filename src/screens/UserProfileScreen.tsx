@@ -235,7 +235,7 @@ export const UserProfileScreen: React.FC<Props> = ({ navigation, route }) => {
         return;
       }
       setLoading(true);
-      const url = await snapService.resolveTelegramUrl(story.telegram_file_id);
+      const url = await snapService.resolveTelegramUrl(story.telegram_file_id, story.sender_id);
       setLoading(false);
       navigation.navigate('SnapViewer', {
         snapId: story.id,
@@ -245,6 +245,7 @@ export const UserProfileScreen: React.FC<Props> = ({ navigation, route }) => {
         senderUsername: targetUsername,
         isStory: true,
         telegramFileId: story.telegram_file_id,
+        senderId: story.sender_id,
       });
     } catch (err: any) {
       setLoading(false);

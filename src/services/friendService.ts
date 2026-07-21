@@ -48,22 +48,12 @@ export const friendService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not logged in.');
 
-    // 1. Update request status to accepted
-    const { error: updateError } = await supabase
-      .from('friend_requests')
-      .delete() // Let's delete the request upon acceptance to keep it simple, or delete it from the requests list
-      .eq('id', requestId);
-
-    if (updateError) {
-      console.error('Accept Request Delete Error:', updateError);
-    }
-
-    // 2. Create friendship
+    // 1. Create friendship (upsert to handle if already created or existing)
     const { user_a, user_b } = sortUserIds(user.id, senderId);
     
     const { data, error } = await supabase
       .from('friendships')
-      .insert({ user_a, user_b })
+      .upsert({ user_a, user_b }, { onConflict: 'user_a,user_b' })
       .select()
       .single();
 
@@ -71,6 +61,12 @@ export const friendService = {
       console.error('Create Friendship Error:', error);
       throw new Error(error.message || 'Failed to establish friendship.');
     }
+
+    // 2. Delete the pending request after friendship is created
+    await supabase
+      .from('friend_requests')
+      .delete()
+      .eq('id', requestId);
 
     return data as Friendship;
   },
@@ -166,18 +162,43 @@ export const friendService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not logged in.');
 
+    // Try joined query first
     const { data, error } = await supabase
       .from('friend_requests')
       .select('*, sender:profiles!friend_requests_sender_id_fkey(*)')
       .eq('receiver_id', user.id)
       .eq('status', 'pending');
 
-    if (error) {
-      console.error('Get Pending Requests Error:', error);
-      throw new Error(error.message || 'Failed to fetch requests.');
+    if (!error && data && data.length > 0 && data[0].sender) {
+      return data as FriendRequest[];
     }
 
-    return (data || []) as FriendRequest[];
+    // Two-step fallback if join relationship hint fails or returns null profile
+    const { data: rawRequests, error: rawError } = await supabase
+      .from('friend_requests')
+      .select('*')
+      .eq('receiver_id', user.id)
+      .eq('status', 'pending');
+
+    if (rawError) {
+      console.error('Get Pending Requests Error:', rawError);
+      throw new Error(rawError.message || 'Failed to fetch requests.');
+    }
+
+    if (!rawRequests || rawRequests.length === 0) return [];
+
+    const senderIds = Array.from(new Set(rawRequests.map(r => r.sender_id)));
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('*')
+      .in('id', senderIds);
+
+    const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+
+    return rawRequests.map(r => ({
+      ...r,
+      sender: profileMap.get(r.sender_id) as any,
+    })) as FriendRequest[];
   },
 
   /**
@@ -187,18 +208,43 @@ export const friendService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not logged in.');
 
+    // Try joined query first
     const { data, error } = await supabase
       .from('friend_requests')
       .select('*, receiver:profiles!friend_requests_receiver_id_fkey(*)')
       .eq('sender_id', user.id)
       .eq('status', 'pending');
 
-    if (error) {
-      console.error('Get Sent Requests Error:', error);
-      throw new Error(error.message || 'Failed to fetch sent requests.');
+    if (!error && data && data.length > 0 && data[0].receiver) {
+      return data as FriendRequest[];
     }
 
-    return (data || []) as FriendRequest[];
+    // Two-step fallback
+    const { data: rawRequests, error: rawError } = await supabase
+      .from('friend_requests')
+      .select('*')
+      .eq('sender_id', user.id)
+      .eq('status', 'pending');
+
+    if (rawError) {
+      console.error('Get Sent Requests Error:', rawError);
+      throw new Error(rawError.message || 'Failed to fetch sent requests.');
+    }
+
+    if (!rawRequests || rawRequests.length === 0) return [];
+
+    const receiverIds = Array.from(new Set(rawRequests.map(r => r.receiver_id)));
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('*')
+      .in('id', receiverIds);
+
+    const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+
+    return rawRequests.map(r => ({
+      ...r,
+      receiver: profileMap.get(r.receiver_id) as any,
+    })) as FriendRequest[];
   },
 
   /**

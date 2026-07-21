@@ -872,12 +872,9 @@ export const telegramService = {
         }
       }
 
-      if (tokensToTry.length === 0) {
-        throw new Error('Telegram bot token is not configured.');
-      }
-
       let lastError: Error | null = null;
 
+      // Try initially gathered tokens
       for (const token of tokensToTry) {
         try {
           const url = this.getTelegramApiUrl(`getFile?file_id=${encodeURIComponent(fileId)}`, token);
@@ -892,6 +889,29 @@ export const telegramService = {
         } catch (err: any) {
           lastError = err;
         }
+      }
+
+      // Fallback: Query all active bot tokens in telegram_configs table
+      try {
+        const { data: allConfigs } = await supabase
+          .from('telegram_configs')
+          .select('bot_token');
+        if (allConfigs && allConfigs.length > 0) {
+          for (const cfg of allConfigs) {
+            if (cfg.bot_token && !tokensToTry.includes(cfg.bot_token)) {
+              try {
+                const url = this.getTelegramApiUrl(`getFile?file_id=${encodeURIComponent(fileId)}`, cfg.bot_token);
+                const res = await fetchWithRetry(url, { signal }, 2);
+                const data = await res.json();
+                if (res.ok && data.ok && data.result) {
+                  return { fileInfo: data.result, workingToken: cfg.bot_token };
+                }
+              } catch (_) {}
+            }
+          }
+        }
+      } catch (fallbackErr) {
+        console.warn('[Telegram API] Fallback token scan failed:', fallbackErr);
       }
 
       throw lastError || new Error('Failed to locate file info on Telegram across configured tokens.');

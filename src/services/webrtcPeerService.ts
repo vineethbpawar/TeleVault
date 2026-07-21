@@ -266,6 +266,7 @@ class WebRTCPeerService {
       if (this.remoteStream) {
         if (Platform.OS === 'web') {
           const freshStream = new window.MediaStream(this.remoteStream.getTracks());
+          this.remoteStream = freshStream;
           this.emit('remoteStream', freshStream);
         } else {
           this.emit('remoteStream', this.remoteStream);

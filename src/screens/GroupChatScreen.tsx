@@ -136,7 +136,7 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
 
     // Resolve URL and Navigate to Viewer
     setLoading(true);
-    snapService.resolveTelegramUrl(snap.telegram_file_id)
+    snapService.resolveTelegramUrl(snap.telegram_file_id, snap.sender_id)
       .then((mediaUrl) => {
         setLoading(false);
         navigation.navigate('SnapViewer', {
@@ -147,6 +147,7 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
           senderUsername: snap.sender_username || 'group',
           isStory: false,
           telegramFileId: snap.telegram_file_id,
+          senderId: snap.sender_id,
         });
       })
       .catch((err) => {

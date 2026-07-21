@@ -30,7 +30,7 @@ export const SnapInboxScreen: React.FC<Props> = ({ navigation }) => {
     // Resolve first 10 received snaps in background to make loading instant when opened
     snapsList.slice(0, 10).forEach(snap => {
       if (snap.telegram_file_id && !snap.is_viewed) {
-        snapService.resolveTelegramUrl(snap.telegram_file_id).catch(() => {});
+        snapService.resolveTelegramUrl(snap.telegram_file_id, snap.sender_id).catch(() => {});
       }
     });
   };
@@ -106,7 +106,7 @@ export const SnapInboxScreen: React.FC<Props> = ({ navigation }) => {
         throw new Error('Telegram file ID is missing.');
       }
       
-      const mediaUrl = await snapService.resolveTelegramUrl(snap.telegram_file_id);
+      const mediaUrl = await snapService.resolveTelegramUrl(snap.telegram_file_id, snap.sender_id);
       setLoading(false);
       
       navigation.navigate('SnapViewer', {
@@ -117,6 +117,7 @@ export const SnapInboxScreen: React.FC<Props> = ({ navigation }) => {
         senderUsername: snap.sender_profile?.username || 'unknown',
         isStory: false,
         telegramFileId: snap.telegram_file_id,
+        senderId: snap.sender_id,
       });
     } catch (err: any) {
       setLoading(false);
@@ -146,11 +147,7 @@ export const SnapInboxScreen: React.FC<Props> = ({ navigation }) => {
       <View style={[styles.card, isViewed && styles.cardViewed]}>
         <TouchableOpacity 
           style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
-          onPress={() => {
-            if (sender) {
-              navigation.navigate('UserProfile', { userId: item.sender_id, username: sender.username || 'unknown' });
-            }
-          }}
+          onPress={() => handleOpenSnap(item)}
           activeOpacity={0.7}
         >
           <View style={[styles.statusIndicator, isViewed ? styles.indicatorViewed : styles.indicatorNew]}>

@@ -183,7 +183,7 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
     setLoading(true);
     try {
       if (!story.telegram_file_id) throw new Error('Invalid Story ID');
-      const mediaUrl = await snapService.resolveTelegramUrl(story.telegram_file_id);
+      const mediaUrl = await snapService.resolveTelegramUrl(story.telegram_file_id, story.sender_id);
       setLoading(false);
 
       navigation.navigate('SnapViewer', {
@@ -194,6 +194,7 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
         senderUsername: story.sender_profile?.username || 'me',
         isStory: true,
         telegramFileId: story.telegram_file_id,
+        senderId: story.sender_id,
       });
     } catch (err: any) {
       setLoading(false);

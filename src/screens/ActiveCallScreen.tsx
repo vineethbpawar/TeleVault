@@ -105,10 +105,26 @@ const WebAudioView: React.FC<{
   const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
-    if (audioRef.current && stream) {
-      audioRef.current.srcObject = stream;
-      audioRef.current.play().catch((err) => console.warn('[WebAudioView] Autoplay catch:', err));
-    }
+    const audio = audioRef.current;
+    if (!audio || !stream) return;
+
+    audio.srcObject = stream;
+    audio.play().catch((err) => console.warn('[WebAudioView] Autoplay catch:', err));
+
+    const handleTrackChange = () => {
+      if (audioRef.current && stream) {
+        audioRef.current.srcObject = stream;
+        audioRef.current.play().catch(() => {});
+      }
+    };
+
+    stream.addEventListener('addtrack', handleTrackChange);
+    stream.addEventListener('removetrack', handleTrackChange);
+
+    return () => {
+      stream.removeEventListener('addtrack', handleTrackChange);
+      stream.removeEventListener('removetrack', handleTrackChange);
+    };
   }, [stream]);
 
   if (Platform.OS !== 'web' || !stream) return null;
@@ -118,7 +134,7 @@ const WebAudioView: React.FC<{
       ref={audioRef}
       autoPlay
       playsInline
-      style={{ display: 'none' }}
+      style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
     />
   ) as any;
 };
