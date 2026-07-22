@@ -182,7 +182,7 @@ class CallingService {
       webRTCPeerService.createPeerConnection();
 
       // 8. Subscribe to call channel to receive answer
-      signalingService.subscribeToCall(callId, this.currentUserId!, this.handleSignalingEvent.bind(this));
+      await signalingService.subscribeToCall(callId, this.currentUserId!, this.handleSignalingEvent.bind(this));
 
       // 9. Create offer
       const offer = await webRTCPeerService.createOffer();
@@ -298,7 +298,7 @@ class CallingService {
       webRTCPeerService.createPeerConnection();
 
       // Subscribe to call channel
-      signalingService.subscribeToCall(callId, this.currentUserId!, this.handleSignalingEvent.bind(this));
+      await signalingService.subscribeToCall(callId, this.currentUserId!, this.handleSignalingEvent.bind(this));
 
       // Send accept signal
       await signalingService.sendAccept({
@@ -594,23 +594,28 @@ class CallingService {
     }, ICE_RESTART_DELAY_MS * this.reconnectAttempts);
   }
 
+  private markCallConnected(): void {
+    const callState = callStateStore.getState();
+    if (!callState || callState.status === 'connected') return;
+
+    this.reconnectAttempts = 0;
+    callStateStore.setReconnecting(false);
+    callStateStore.setStatus('connected');
+    audioManager.stopRingtone();
+    audioManager.startCallAudio(callState.callType === 'video');
+
+    // Update DB
+    callHistoryService.updateCallStatus(callState.callId, 'connected', {
+      connected_at: new Date().toISOString(),
+    });
+  }
+
   // ─── Connection State Handlers ─────────────────────────────────────────────
 
   private handleConnectionStateChange(state: RTCPeerConnectionState): void {
     switch (state) {
       case 'connected':
-        this.reconnectAttempts = 0;
-        callStateStore.setReconnecting(false);
-        callStateStore.setStatus('connected');
-        audioManager.stopRingtone();
-        const callState = callStateStore.getState();
-        if (callState) {
-          audioManager.startCallAudio(callState.callType === 'video');
-          // Update DB
-          callHistoryService.updateCallStatus(callState.callId, 'connected', {
-            connected_at: new Date().toISOString(),
-          });
-        }
+        this.markCallConnected();
         break;
 
       case 'disconnected':
@@ -638,8 +643,7 @@ class CallingService {
     } else if (state === 'failed') {
       this.attemptReconnect();
     } else if (state === 'connected' || state === 'completed') {
-      this.reconnectAttempts = 0;
-      callStateStore.setReconnecting(false);
+      this.markCallConnected();
     }
   }
 
@@ -669,6 +673,7 @@ class CallingService {
         // The caller receives this when receiver accepts
         audioManager.stopRingtone();
         callStateStore.setStatus('connecting');
+        this.resendLocalIceCandidates();
         break;
 
       case 'call_reject':
@@ -902,6 +907,25 @@ class CallingService {
   }
 
   // ─── Utilities ────────────────────────────────────────────────────────────
+
+  private resendLocalIceCandidates(): void {
+    const callState = callStateStore.getState();
+    if (!callState || !this.currentUserId || !callState.remoteUserId) return;
+
+    const candidates = webRTCPeerService.getLocalIceCandidates();
+    if (__DEV__) {
+      console.log(`[CallingService] Re-sending ${candidates.length} local ICE candidates on call_accept`);
+    }
+
+    candidates.forEach((candidate) => {
+      signalingService.sendIceCandidate({
+        callId: callState.callId,
+        senderId: this.currentUserId!,
+        receiverId: callState.remoteUserId!,
+        candidate,
+      });
+    });
+  }
 
   private generateCallId(): string {
     return `call_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;

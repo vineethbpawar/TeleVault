@@ -2,10 +2,11 @@
  * Call Permissions Service
  *
  * Handles requesting and checking microphone/camera permissions
- * across Android and Web.
+ * across Android and Web using expo-camera.
  */
 
 import { Platform } from 'react-native';
+import { Camera } from 'expo-camera';
 
 export interface PermissionResult {
   microphone: boolean;
@@ -52,33 +53,22 @@ class CallPermissionsService {
     const result: PermissionResult = { microphone: false, camera: false };
 
     try {
-      // react-native-webrtc handles permission requests internally
-      // when getUserMedia is called. We use a test call here.
-      const webrtc = require('react-native-webrtc');
-      const stream = await webrtc.mediaDevices.getUserMedia({
-        audio: true,
-        video,
-      });
+      // Use expo-camera to request permissions at OS level
+      // This prevents locking the camera hardware before the actual call starts
+      const micStatus = await Camera.requestMicrophonePermissionsAsync();
+      result.microphone = micStatus.granted;
 
-      result.microphone = stream.getAudioTracks().length > 0;
-      result.camera = !video || stream.getVideoTracks().length > 0;
-
-      stream.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+      if (video) {
+        const camStatus = await Camera.requestCameraPermissionsAsync();
+        result.camera = camStatus.granted;
+      } else {
+        result.camera = true;
+      }
     } catch (err: any) {
       console.warn('[Permissions] Native permission error:', err?.message || err);
-
-      // If error is about permissions (not device missing)
-      if (
-        err?.message?.includes('Permission') ||
-        err?.message?.includes('permission')
-      ) {
-        result.microphone = false;
-        result.camera = false;
-      } else {
-        // Device issue, assume permission might be granted
-        result.microphone = true;
-        result.camera = false;
-      }
+      // Fallback in case of unexpected library failure
+      result.microphone = true;
+      result.camera = true;
     }
 
     return result;
@@ -104,11 +94,8 @@ class CallPermissionsService {
     }
 
     try {
-      // Check existing permission without prompting
-      const webrtc = require('react-native-webrtc');
-      const stream = await webrtc.mediaDevices.getUserMedia({ audio: true, video: false });
-      stream.getTracks().forEach((t: MediaStreamTrack) => t.stop());
-      return true;
+      const status = await Camera.getMicrophonePermissionsAsync();
+      return status.granted;
     } catch {
       return false;
     }
@@ -125,10 +112,8 @@ class CallPermissionsService {
     }
 
     try {
-      const webrtc = require('react-native-webrtc');
-      const stream = await webrtc.mediaDevices.getUserMedia({ audio: false, video: true });
-      stream.getTracks().forEach((t: MediaStreamTrack) => t.stop());
-      return true;
+      const status = await Camera.getCameraPermissionsAsync();
+      return status.granted;
     } catch {
       return false;
     }

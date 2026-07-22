@@ -30,15 +30,16 @@ class SignalingService {
    * Subscribe to a call's signaling channel.
    * Call ID based channels ensure only participants receive events.
    */
-  subscribeToCall(
+  async subscribeToCall(
     callId: string,
     userId: string,
     onEvent: (payload: SignalingPayload) => void
-  ): void {
+  ): Promise<RealtimeChannel> {
     const channelKey = `call:${callId}`;
 
-    if (this.channels.has(channelKey)) {
-      return; // already subscribed
+    const existingChannel = this.channels.get(channelKey);
+    if (existingChannel) {
+      return existingChannel;
     }
 
     const channel = supabase
@@ -55,14 +56,20 @@ class SignalingService {
           }
         }
         onEvent(payload as SignalingPayload);
-      })
-      .subscribe((status) => {
-        if (__DEV__) {
-          console.log(`[Signaling] Channel ${channelKey} status: ${status}`);
-        }
       });
 
     this.channels.set(channelKey, channel);
+
+    return new Promise<RealtimeChannel>((resolve) => {
+      channel.subscribe((status) => {
+        if (__DEV__) {
+          console.log(`[Signaling] Channel ${channelKey} status: ${status}`);
+        }
+        if (status === 'SUBSCRIBED') {
+          resolve(channel);
+        }
+      });
+    });
   }
 
   /**

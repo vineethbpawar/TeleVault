@@ -45,11 +45,31 @@ class AudioManager {
         // Default to earpiece for voice calls, speaker for video
         if (isVideo) {
           InCallManager.setForceSpeakerphoneOn(true);
+          InCallManager.chooseAudioRoute('SPEAKER');
           this.currentRoute = 'speaker';
         } else {
           InCallManager.setForceSpeakerphoneOn(false);
+          InCallManager.chooseAudioRoute('EARPIECE');
           this.currentRoute = 'earpiece';
         }
+
+        // Force the route again after a short delay (500ms) to ensure it overrides
+        // any OS-level transitions or delayed ringtone release locks.
+        setTimeout(() => {
+          if (this.isCallActive) {
+            try {
+              if (this.currentRoute === 'speaker') {
+                InCallManager.setForceSpeakerphoneOn(true);
+                InCallManager.chooseAudioRoute('SPEAKER');
+              } else if (this.currentRoute === 'earpiece') {
+                InCallManager.setForceSpeakerphoneOn(false);
+                InCallManager.chooseAudioRoute('EARPIECE');
+              }
+            } catch (err) {
+              console.warn('[AudioManager] startCallAudio deferred route error:', err);
+            }
+          }
+        }, 500);
       } catch (err) {
         console.warn('[AudioManager] startCallAudio error:', err);
       }
@@ -84,6 +104,7 @@ class AudioManager {
     if (InCallManager) {
       try {
         InCallManager.setForceSpeakerphoneOn(on);
+        InCallManager.chooseAudioRoute(on ? 'SPEAKER' : 'EARPIECE');
       } catch (err) {
         console.warn('[AudioManager] setSpeakerOn error:', err);
       }

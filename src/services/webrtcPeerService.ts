@@ -98,6 +98,7 @@ class WebRTCPeerService {
   private remoteStream: MediaStream | null = null;
   private listeners: Partial<PeerEventListener> = {};
   private pendingCandidates: RTCIceCandidate[] = [];
+  private localIceCandidates: RTCIceCandidateJSON[] = [];
   private remoteDescSet = false;
   private config: WebRTCConfig = { iceServers: DEFAULT_ICE_SERVERS };
   private networkQualityInterval: ReturnType<typeof setInterval> | null = null;
@@ -237,6 +238,7 @@ class WebRTCPeerService {
           sdpMLineIndex: event.candidate.sdpMLineIndex,
           usernameFragment: event.candidate.usernameFragment,
         };
+        this.localIceCandidates.push(candidateJSON);
         this.emit('iceCandidate', candidateJSON);
       }
     };
@@ -527,6 +529,10 @@ class WebRTCPeerService {
     return this.localStream;
   }
 
+  getLocalIceCandidates(): RTCIceCandidateJSON[] {
+    return this.localIceCandidates;
+  }
+
   getRemoteStream(): MediaStream | null {
     return this.remoteStream;
   }
@@ -564,6 +570,7 @@ class WebRTCPeerService {
 
     this.remoteStream = null;
     this.pendingCandidates = [];
+    this.localIceCandidates = [];
     this.remoteDescSet = false;
     this.listeners = {};
     this.networkQualityCallback = undefined;
