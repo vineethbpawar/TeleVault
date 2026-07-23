@@ -11,6 +11,7 @@ import {
   Platform,
   Linking,
   Modal,
+  TextInput,
 } from 'react-native';
 import AppInput from '../components/AppInput';
 import AppButton from '../components/AppButton';
@@ -109,6 +110,11 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [recoveryModalVisible, setRecoveryModalVisible] = useState(false);
   const [cacheLimitMB, setCacheLimitMB] = useState(500);
   const [decoySetupVisible, setDecoySetupVisible] = useState(false);
+  const [versionTaps, setVersionTaps] = useState(0);
+  const [adminLoginVisible, setAdminLoginVisible] = useState(false);
+  const [adminIdInput, setAdminIdInput] = useState('');
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [adminLoginLoading, setAdminLoginLoading] = useState(false);
 
   // Profile States
   const [username, setUsername] = useState('');
@@ -559,6 +565,44 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         },
       ]
     );
+  };
+
+  const handleVersionTap = () => {
+    setVersionTaps(prev => {
+      const next = prev + 1;
+      if (next >= 10) {
+        setAdminLoginVisible(true);
+        return 0;
+      }
+      if (next >= 5) {
+        showToast(`You are ${10 - next} taps away from Admin Mode`);
+      }
+      return next;
+    });
+  };
+
+  const handleAdminLoginSubmit = () => {
+    const trimmedId = adminIdInput.trim();
+    const trimmedPass = adminPasswordInput.trim();
+    if (!trimmedId || !trimmedPass) {
+      Alert.alert('Required', 'Please enter your admin credentials.');
+      return;
+    }
+
+    setAdminLoginLoading(true);
+    setTimeout(() => {
+      const success = securityService.unlockAdminMode(trimmedId, trimmedPass);
+      setAdminLoginLoading(false);
+      if (success) {
+        setAdminLoginVisible(false);
+        setAdminIdInput('');
+        setAdminPasswordInput('');
+        showToast('Admin Mode Enabled.');
+        navigation.navigate('AdminOS');
+      } else {
+        Alert.alert('Access Denied', 'Developer options are not enabled for this account.');
+      }
+    }, 500);
   };
 
   const handleLogout = async () => {
@@ -1406,7 +1450,9 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.devDivider} />
 
             <Text style={styles.appInfoTitle}>TeleVault</Text>
-            <Text style={styles.appInfoSubtitle}>Version: v2.0 Beta</Text>
+            <TouchableOpacity onPress={handleVersionTap} activeOpacity={0.8}>
+              <Text style={styles.appInfoSubtitle}>Version: v2.0 Beta</Text>
+            </TouchableOpacity>
             <Text style={styles.copyright}>© 2026 Vineeth. All rights reserved.</Text>
           </View>
         </View>
@@ -1598,6 +1644,68 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
       {/* Upload Queue Overlay */}
       <UploadProgress visible={queueModalVisible} onClose={() => setQueueModalVisible(false)} />
+
+      {/* Admin Login Modal */}
+      <Modal
+        visible={adminLoginVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAdminLoginVisible(false)}
+      >
+        <View style={styles.adminModalOverlay}>
+          <View style={styles.adminModalContainer}>
+            <View style={styles.adminModalIconContainer}>
+              <Shield size={32} color="#FFFC00" />
+            </View>
+            <Text style={styles.adminModalTitle}>Security Verification</Text>
+            <Text style={styles.adminModalSubtitle}>Enter your developer credentials to unlock the TeleVault Control Center.</Text>
+            
+            <TextInput
+              style={styles.adminModalInput}
+              placeholder="Admin ID"
+              placeholderTextColor="#8E8E93"
+              value={adminIdInput}
+              onChangeText={setAdminIdInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextInput
+              style={styles.adminModalInput}
+              placeholder="Password"
+              placeholderTextColor="#8E8E93"
+              value={adminPasswordInput}
+              onChangeText={setAdminPasswordInput}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <TouchableOpacity 
+              style={styles.adminModalSubmitBtn} 
+              onPress={handleAdminLoginSubmit}
+              disabled={adminLoginLoading}
+            >
+              {adminLoginLoading ? (
+                <ActivityIndicator size="small" color="#000000" />
+              ) : (
+                <Text style={styles.adminModalSubmitBtnText}>Unlock Control Center</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.adminModalCancelBtn} 
+              onPress={() => {
+                setAdminLoginVisible(false);
+                setAdminIdInput('');
+                setAdminPasswordInput('');
+              }}
+              disabled={adminLoginLoading}
+            >
+              <Text style={styles.adminModalCancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 };
@@ -1917,6 +2025,80 @@ const styles = StyleSheet.create({
     marginTop: -8,
     marginBottom: 12,
     textAlign: 'center',
+  },
+  adminModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  adminModalContainer: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: '#1E1E1E',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+  },
+  adminModalIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255, 252, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  adminModalTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  adminModalSubtitle: {
+    color: '#8E8E93',
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  adminModalInput: {
+    width: '100%',
+    height: 48,
+    backgroundColor: '#0F0F10',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    color: '#FFFFFF',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    fontSize: 14,
+  },
+  adminModalSubmitBtn: {
+    width: '100%',
+    height: 48,
+    backgroundColor: '#FFFC00',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  adminModalSubmitBtnText: {
+    color: '#000000',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  adminModalCancelBtn: {
+    marginTop: 16,
+    paddingVertical: 8,
+  },
+  adminModalCancelBtnText: {
+    color: '#8E8E93',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

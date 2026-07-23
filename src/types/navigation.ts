@@ -97,6 +97,7 @@ export type AppStackParamList = {
   };
   CallHistory: undefined;
   ResetPassword: undefined;
+  AdminOS: undefined;
 };
 
 

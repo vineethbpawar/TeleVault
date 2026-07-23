@@ -35,6 +35,7 @@ import SendToScreen from '../screens/SendToScreen';
 import ChatCameraScreen from '../screens/ChatCameraScreen';
 import CallHistoryScreen from '../screens/CallHistoryScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
+import AdminOSScreen from '../screens/AdminOSScreen';
 import CallOverlay from '../components/CallOverlay';
 import { Session } from '@supabase/supabase-js';
 import { authEvents } from '../utils/authEvent';
@@ -357,6 +358,7 @@ export const AppNavigator: React.FC = () => {
                 }}
               />
               <Stack.Screen name="StorageAnalytics" component={StorageAnalyticsScreen} />
+              <Stack.Screen name="AdminOS" component={AdminOSScreen} />
             </>
           )
         ) : (

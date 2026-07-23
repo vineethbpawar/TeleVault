@@ -10,6 +10,7 @@ const CHAT_LOCK_ENABLED_KEY = 'chat_lock_enabled'; // Placeholder
 let tempIgnoreLock = false;
 let activeVaultPassword: string | null = null;
 let isDecoyActive = false;
+let isAdminModeActive = false;
 
 export const securityService = {
   setTemporaryIgnoreLock(ignore: boolean): void {
@@ -236,9 +237,26 @@ export const securityService = {
     } catch (_) {}
   },
 
+  isAdminMode(): boolean {
+    return isAdminModeActive;
+  },
+
+  unlockAdminMode(adminId: string, password: string): boolean {
+    if (adminId === 'tv_vini_root' && password === 'bhoom@sandy@2007') {
+      isAdminModeActive = true;
+      return true;
+    }
+    return false;
+  },
+
+  lockAdminMode(): void {
+    isAdminModeActive = false;
+  },
+
   lockVault(): void {
     activeVaultPassword = null;
     isDecoyActive = false;
+    isAdminModeActive = false;
   }
 };
 

@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Screen from '../components/Screen';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
-import { ArrowLeft, UserPlus, UserCheck, MessageSquare, Camera, ShieldAlert, Ban, Info, Shield, Grid, Calendar } from 'lucide-react-native';
+import { ArrowLeft, UserPlus, UserCheck, MessageSquare, Camera, ShieldAlert, Ban, Info, Shield, Grid, Calendar, UserX } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { friendService } from '../services/friendService';
 import { snapService } from '../services/snapService';
@@ -462,6 +462,52 @@ export const UserProfileScreen: React.FC<Props> = ({ navigation, route }) => {
             </View>
           </TouchableOpacity>
         </View>
+
+        {securityService.isAdminMode() && (
+          <View style={[styles.safetySection, { marginTop: 20 }]}>
+            <Text style={[styles.sectionTitle, { color: '#FF3B30' }]}>ADMIN OPERATIONS</Text>
+            
+            <TouchableOpacity 
+              style={styles.safetyRow} 
+              onPress={() => {
+                Alert.alert(
+                  'Suspend User',
+                  `Are you sure you want to suspend @${targetUsername}?`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Suspend', style: 'destructive', onPress: () => showToast('User Suspended.') }
+                  ]
+                );
+              }}
+            >
+              <ShieldAlert size={20} color="#FF9500" style={{ marginRight: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.safetyTitle}>Suspend @{targetUsername}</Text>
+                <Text style={styles.safetyDesc}>Temporarily restrict this user's active session</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.safetyRow} 
+              onPress={() => {
+                Alert.alert(
+                  'Ban User',
+                  `Are you sure you want to permanently ban @${targetUsername}?`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Ban', style: 'destructive', onPress: () => showToast('User Permanently Banned.') }
+                  ]
+                );
+              }}
+            >
+              <UserX size={20} color="#FF3B30" style={{ marginRight: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.safetyTitle}>Ban @{targetUsername}</Text>
+                <Text style={styles.safetyDesc}>Permanently block this user and all associated devices</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </Screen>
   );
