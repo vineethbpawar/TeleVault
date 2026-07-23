@@ -105,6 +105,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [storageModalVisible, setStorageModalVisible] = useState(false);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
   const [recoveryModalVisible, setRecoveryModalVisible] = useState(false);
+  const [cacheLimitMB, setCacheLimitMB] = useState(500);
 
   // Profile States
   const [username, setUsername] = useState('');
@@ -265,6 +266,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     setDefaultSnapViewOnce(appSettings.defaultSnapViewOnce ?? true);
     setSaveSentSnapsToMemories(appSettings.saveSentSnapsToMemories ?? true);
     setUploadMode(appSettings.uploadMode || 'Stable');
+    setCacheLimitMB(appSettings.cacheLimitMB ?? 500);
 
     const syncEnabled = await autoSyncService.isEnabled();
     setAutoSyncEnabled(syncEnabled);
@@ -1147,6 +1149,30 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 </View>
               </View>
             </TouchableOpacity>
+
+            {/* Automatic Cache Limit */}
+            <View style={styles.itemRowNoPress}>
+              <View style={styles.itemLeft}>
+                <HardDrive size={20} color="#FFFC00" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Automatic Cache Limit</Text>
+                  <Text style={styles.itemSubtitle}>Evict old preview items if cache exceeds limit</Text>
+                </View>
+              </View>
+              <View style={styles.segmentContainer}>
+                {([250, 500, 1000, 2000] as const).map((limit) => (
+                  <TouchableOpacity
+                    key={limit}
+                    style={[styles.segmentBtn, cacheLimitMB === limit && styles.segmentBtnActive]}
+                    onPress={() => updateSetting('cacheLimitMB', limit)}
+                  >
+                    <Text style={[styles.segmentBtnText, cacheLimitMB === limit && styles.segmentBtnTextActive]}>
+                      {limit >= 1000 ? `${limit / 1000}GB` : `${limit}MB`}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
 
             {/* Recovery Certificate */}
             <TouchableOpacity style={styles.itemRow} onPress={() => setRecoveryModalVisible(true)}>

@@ -1003,6 +1003,32 @@ export const telegramService = {
     }
   },
 
+  async sendTextMessage(text: string): Promise<boolean> {
+    const { botToken, channelId } = await this.getTelegramConfig();
+    if (!botToken || !channelId) {
+      console.warn('Telegram is not configured.');
+      return false;
+    }
+    try {
+      const url = this.getTelegramApiUrl('sendMessage', botToken);
+      const response = await fetchWithRetry(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: channelId,
+          text,
+        }),
+      });
+      const resData = await response.json();
+      return response.ok && resData.ok;
+    } catch (e) {
+      console.warn('Failed to send text message:', e);
+      return false;
+    }
+  },
+
   async initConfig(): Promise<void> {
     try {
       const config = await this.getTelegramConfig();

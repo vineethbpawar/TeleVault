@@ -32,8 +32,9 @@ export default function App() {
       Promise.all([
         import('./src/services/backgroundUploadTask'),
         import('./src/services/uploadQueueService'),
-        import('./src/services/autoSyncService')
-      ]).then(([{ backgroundUploadService }, { uploadQueueService }, { autoSyncService }]) => {
+        import('./src/services/autoSyncService'),
+        import('./src/services/cacheEvictionService')
+      ]).then(([{ backgroundUploadService }, { uploadQueueService }, { autoSyncService }, { cacheEvictionService }]) => {
         // Register background task on startup
         backgroundUploadService.registerBackgroundUploadTask();
 
@@ -42,6 +43,9 @@ export default function App() {
 
         // Trigger camera roll auto-sync scan on launch
         autoSyncService.syncCameraRoll();
+
+        // Run cache eviction scan
+        cacheEvictionService.evictCacheIfNecessary();
       }).catch(err => {
         console.warn('[STARTUP_OPTIMIZATION] Failed lazy-loading background services:', err);
       });

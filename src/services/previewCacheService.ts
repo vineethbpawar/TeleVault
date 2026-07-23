@@ -246,6 +246,8 @@ export const previewCacheService = {
         timestamp: Date.now(),
       };
       await cacheSetItem(CACHE_PREFIX + fileId, JSON.stringify(entry));
+      const { cacheEvictionService } = require('./cacheEvictionService');
+      cacheEvictionService.evictCacheIfNecessary().catch(() => {});
     } catch (err) {
       console.error('Failed to set cached preview:', err);
     }

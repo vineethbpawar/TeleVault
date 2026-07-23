@@ -38,7 +38,9 @@ import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import CallOverlay from '../components/CallOverlay';
 import { Session } from '@supabase/supabase-js';
 import { authEvents } from '../utils/authEvent';
+import * as SecureStore from 'expo-secure-store';
 import { telegramService } from '../services/telegramService';
+import { TwoFactorModal } from '../components/TwoFactorModal';
 import { Alert, AppState, AppStateStatus, Platform, View, Text, StyleSheet } from 'react-native';
 import { securityService } from '../services/securityService';
 import { PinLockModal } from '../components/PinLockModal';
@@ -55,6 +57,7 @@ export const AppNavigator: React.FC = () => {
   const [restoringConfig, setRestoringConfig] = useState(false);
   const [appLocked, setAppLocked] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  const [deviceAuthorized, setDeviceAuthorized] = useState<boolean | null>(null);
   const insets = useSafeAreaInsets();
 
   // Safety net: always hide the native splash after 5 seconds max,
@@ -206,6 +209,30 @@ export const AppNavigator: React.FC = () => {
       if (currSession) {
         setRestoringConfig(true);
         await checkUsername(currSession.user.id, currSession.user.email);
+
+        try {
+          let deviceId = await SecureStore.getItemAsync('televault_device_id');
+          if (!deviceId) {
+            deviceId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+            await SecureStore.setItemAsync('televault_device_id', deviceId);
+          }
+          
+          const authorizedDevices = currSession.user.user_metadata?.authorized_devices || [];
+          const config = await telegramService.getTelegramConfig();
+          const telegramConfigured = !!config.botToken && !!config.channelId;
+          
+          if (!telegramConfigured) {
+            setDeviceAuthorized(true);
+          } else if (authorizedDevices.includes(deviceId)) {
+            setDeviceAuthorized(true);
+          } else {
+            setDeviceAuthorized(false);
+          }
+        } catch (e) {
+          console.warn('Failed to check device authentication status:', e);
+          setDeviceAuthorized(true);
+        }
+
         setRestoringConfig(false);
         setLoading(false);
         // Hide the native splash screen now that auth is resolved
@@ -349,6 +376,17 @@ export const AppNavigator: React.FC = () => {
 
       {/* Global call overlay - handles incoming calls and active call UI */}
       {session && hasUsername && <CallOverlay />}
+
+      {session && deviceAuthorized === false && (
+        <TwoFactorModal
+          visible={true}
+          onSuccess={() => setDeviceAuthorized(true)}
+          onLogout={async () => {
+            setDeviceAuthorized(null);
+            await supabase.auth.signOut();
+          }}
+        />
+      )}
     </View>
   );
 };
