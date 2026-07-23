@@ -18,12 +18,14 @@ import { supabase } from '../lib/supabase';
 import { telegramService } from '../services/telegramService';
 import { UserProfile } from '../types/chat';
 import AppHeader from '../components/AppHeader';
+import { accountService, SavedAccount } from '../services/accountService';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'MyProfile'>;
 
 export const MyProfileScreen: React.FC<Props> = ({ navigation }) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
   
   // Stats
   const [stats, setStats] = useState({ memories: 0, friends: 0 });
@@ -84,6 +86,10 @@ export const MyProfileScreen: React.FC<Props> = ({ navigation }) => {
           channelId: '',
         });
       }
+
+      // Fetch saved accounts (excluding current user)
+      const accs = await accountService.getAccounts();
+      setSavedAccounts(accs.filter((a) => a.id !== user.id));
 
     } catch (err: any) {
       console.error('Failed to load profile details:', err);
@@ -178,8 +184,62 @@ export const MyProfileScreen: React.FC<Props> = ({ navigation }) => {
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
+            // Remove from saved accounts if user signs out completely
+            if (profile) {
+              await accountService.removeAccount(profile.id);
+            }
             await telegramService.deleteTelegramConfig();
             await supabase.auth.signOut();
+          }
+        }
+      ]
+    );
+  };
+
+  const handleSwitchAccount = async (targetUserId: string) => {
+    setLoading(true);
+    try {
+      const success = await accountService.switchAccount(targetUserId);
+      if (!success) {
+        Alert.alert('Error', 'Failed to switch account.');
+        setLoading(false);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'An error occurred.');
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveAccount = (userId: string) => {
+    Alert.alert(
+      'Remove Account',
+      'Are you sure you want to remove this account from this device?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setLoading(true);
+            await accountService.removeAccount(userId);
+            fetchProfileAndStats();
+          }
+        }
+      ]
+    );
+  };
+
+  const handleAddAccount = async () => {
+    Alert.alert(
+      'Add Account',
+      'You will be signed out temporarily to log in with another account. Your current session will be saved.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Proceed',
+          onPress: async () => {
+            setLoading(true);
+            await accountService.prepareAddAccount();
           }
         }
       ]
@@ -270,6 +330,39 @@ export const MyProfileScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Saved Accounts / Switch Account Section */}
+        {savedAccounts.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>SWITCH ACCOUNT</Text>
+            {savedAccounts.map((acc) => (
+              <View key={acc.id} style={styles.accountRow}>
+                <TouchableOpacity
+                  style={styles.accountPressable}
+                  onPress={() => handleSwitchAccount(acc.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.miniAvatar}>
+                    <Text style={styles.miniAvatarText}>
+                      {(acc.full_name || acc.username || 'U').substring(0, 1).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.accountMeta}>
+                    <Text style={styles.accountName}>{acc.full_name || 'TeleVault User'}</Text>
+                    <Text style={styles.accountUser}>@{acc.username}</Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.removeAccountBtn}
+                  onPress={() => handleRemoveAccount(acc.id)}
+                  activeOpacity={0.7}
+                >
+                  <LogOut size={16} color="#FF453A" />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* Options / Settings list */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>CONTROLS</Text>
@@ -280,6 +373,11 @@ export const MyProfileScreen: React.FC<Props> = ({ navigation }) => {
           >
             <Settings size={20} color="#8E8E93" style={{ marginRight: 12 }} />
             <Text style={styles.controlText}>Settings</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.controlRow} onPress={handleAddAccount}>
+            <Users size={20} color="#FFFC00" style={{ marginRight: 12 }} />
+            <Text style={[styles.controlText, { color: '#FFFC00' }]}>Add Account</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.controlRow} onPress={handleLogout}>
@@ -438,6 +536,52 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  accountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderColor: '#1E1E1E',
+  },
+  accountPressable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  miniAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFFC00',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  miniAvatarText: {
+    color: '#000000',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  accountMeta: {
+    flex: 1,
+  },
+  accountName: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  accountUser: {
+    color: '#8E8E93',
+    fontSize: 11,
+    marginTop: 1,
+  },
+  removeAccountBtn: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 69, 58, 0.1)',
   },
 });
 

@@ -154,7 +154,7 @@ export const AppNavigator: React.FC = () => {
       // 4-second safety timeout for profile check to prevent hangs on startup
       const profilePromise = supabase
         .from('profiles')
-        .select('username')
+        .select('username, full_name, avatar_url')
         .eq('id', userId)
         .maybeSingle();
 
@@ -172,6 +172,15 @@ export const AppNavigator: React.FC = () => {
 
       if (data && data.username) {
         setHasUsername(true);
+        // Save current session to accounts list for multi-account switcher
+        import('../services/accountService').then(({ accountService }) => {
+          accountService.saveCurrentSession({
+            id: userId,
+            username: data.username,
+            full_name: data.full_name,
+            avatar_url: data.avatar_url,
+          });
+        }).catch(err => console.warn('Failed to save account session:', err));
       } else {
         // If profile row doesn't exist at all, create it
         if (!data && email) {
