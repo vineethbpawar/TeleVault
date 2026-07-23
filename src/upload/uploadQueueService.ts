@@ -181,6 +181,15 @@ export const uploadQueueService = {
         return;
       }
 
+      // Prioritize app-captured snaps (db_file_id !== null && destination === 'memories')
+      pendingItems.sort((a, b) => {
+        const aIsSnap = !!(a.db_file_id && a.destination === 'memories');
+        const bIsSnap = !!(b.db_file_id && b.destination === 'memories');
+        if (aIsSnap && !bIsSnap) return -1;
+        if (!aIsSnap && bIsSnap) return 1;
+        return 0;
+      });
+
       const uploadingIds = new Set(activeItems.map(item => item.id));
       const itemsToUpload = pendingItems.filter(item => !uploadingIds.has(item.id));
 
