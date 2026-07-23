@@ -102,6 +102,8 @@ class WebRTCPeerService {
   private remoteDescSet = false;
   private config: WebRTCConfig = { iceServers: DEFAULT_ICE_SERVERS };
   private networkQualityInterval: ReturnType<typeof setInterval> | null = null;
+  private screenStream: MediaStream | null = null;
+  private cameraVideoTrack: MediaStreamTrack | null = null;
 
   // ─── Configuration ─────────────────────────────────────────────────────────
 
@@ -191,16 +193,103 @@ class WebRTCPeerService {
     }
   }
 
-  async getDisplayMedia(): Promise<MediaStream> {
+  async startScreenShare(): Promise<MediaStream> {
+    if (!this.localStream) throw new Error('No active local stream.');
+
     try {
-      const stream = await (NativeRTC.mediaDevices as any).getDisplayMedia({
-        video: true,
-        audio: true,
-      });
-      return stream;
-    } catch (error) {
-      throw new Error(`Failed to get display media: ${(error as Error).message}`);
+      let screenStream: MediaStream;
+      if (Platform.OS === 'web') {
+        screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      } else {
+        screenStream = await NativeRTC.mediaDevices.getDisplayMedia({ video: true });
+      }
+
+      const screenTrack = screenStream.getVideoTracks()[0];
+      if (!screenTrack) throw new Error('No screen video track found.');
+
+      const originalVideoTrack = this.localStream.getVideoTracks()[0];
+      if (originalVideoTrack) {
+        this.cameraVideoTrack = originalVideoTrack;
+        originalVideoTrack.enabled = false;
+      }
+
+      if (this.pc) {
+        const senders = this.pc.getSenders();
+        const videoSender = senders.find(s => s.track?.kind === 'video');
+        if (videoSender) {
+          await videoSender.replaceTrack(screenTrack);
+        }
+      }
+
+      if (originalVideoTrack) {
+        this.localStream.removeTrack(originalVideoTrack);
+      }
+      this.localStream.addTrack(screenTrack);
+      this.screenStream = screenStream;
+
+      screenTrack.onended = () => {
+        this.stopScreenShare().catch(err => {
+          console.warn('Failed stopping screen share after ended event:', err);
+        });
+      };
+
+      this.emit('localStream', this.localStream);
+      return this.localStream;
+    } catch (err: any) {
+      console.warn('Start screen share failed:', err);
+      throw err;
     }
+  }
+
+  async stopScreenShare(): Promise<MediaStream> {
+    if (!this.localStream) throw new Error('No active local stream.');
+    if (!this.screenStream) return this.localStream;
+
+    try {
+      const screenTrack = this.localStream.getVideoTracks()[0];
+      
+      this.screenStream.getTracks().forEach(track => track.stop());
+      this.screenStream = null;
+
+      let restoredTrack = this.cameraVideoTrack;
+      if (!restoredTrack) {
+        let newStream: MediaStream;
+        if (Platform.OS === 'web') {
+          newStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+        } else {
+          newStream = await NativeRTC.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+        }
+        restoredTrack = newStream.getVideoTracks()[0];
+      }
+
+      if (restoredTrack) {
+        restoredTrack.enabled = true;
+        
+        if (this.pc) {
+          const senders = this.pc.getSenders();
+          const videoSender = senders.find(s => s.track?.kind === 'video');
+          if (videoSender) {
+            await videoSender.replaceTrack(restoredTrack);
+          }
+        }
+
+        if (screenTrack) {
+          this.localStream.removeTrack(screenTrack);
+        }
+        this.localStream.addTrack(restoredTrack);
+      }
+
+      this.cameraVideoTrack = null;
+      this.emit('localStream', this.localStream);
+      return this.localStream;
+    } catch (err: any) {
+      console.warn('Stop screen share failed:', err);
+      throw err;
+    }
+  }
+
+  isSharingScreen(): boolean {
+    return this.screenStream !== null;
   }
 
   // ─── Peer Connection ───────────────────────────────────────────────────────

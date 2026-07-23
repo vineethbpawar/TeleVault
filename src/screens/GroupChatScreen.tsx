@@ -13,12 +13,16 @@ import {
   Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Send, Camera, MoreVertical, Plus, LogOut, Users } from 'lucide-react-native';
+import { ArrowLeft, Send, Camera, MoreVertical, Plus, LogOut, Users, Mic } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
 import { groupService } from '../services/groupService';
 import { friendService } from '../services/friendService';
 import { snapService } from '../services/snapService';
+import { telegramService } from '../services/telegramService';
+import { showToast } from '../components/ToastBanner';
+import { VoiceBubble } from '../components/VoiceBubble';
+import { VoiceRecorderModal } from '../components/VoiceRecorderModal';
 import { GroupMessage, GroupMember } from '../types/groups';
 import { UserProfile } from '../types/chat';
 import { supabase } from '../lib/supabase';
@@ -38,6 +42,55 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [voiceRecorderVisible, setVoiceRecorderVisible] = useState(false);
+
+  const handleSendVoiceNote = async (localUri: string, duration: number) => {
+    try {
+      setLoading(true);
+      const { encryptionService } = require('../services/encryptionService');
+      const encrypted = await encryptionService.encryptFile(localUri, 'voice_note.m4a');
+
+      const uploadRes = await telegramService.uploadToTelegram(
+        encrypted.uri,
+        'document',
+        'voice_note.m4a.enc',
+        'application/octet-stream',
+        undefined,
+        undefined,
+        undefined
+      );
+
+      const { data: snap, error: snapError } = await supabase
+        .from('snaps')
+        .insert({
+          sender_id: currentUserId,
+          receiver_id: null,
+          conversation_id: null,
+          snap_type: 'direct',
+          media_type: 'audio',
+          telegram_file_id: uploadRes.telegramFileId,
+          telegram_message_id: uploadRes.telegramMessageId,
+          caption: 'Group voice message',
+          overlay_metadata: [],
+          view_once: false,
+          is_viewed: false,
+          file_size: duration,
+        })
+        .select()
+        .single();
+
+      if (snapError) throw snapError;
+
+      await groupService.sendGroupSnap(groupId, snap.id);
+
+      loadData();
+      showToast('Group voice note sent.');
+    } catch (err: any) {
+      Alert.alert('Send failed', err.message || 'Could not send secure voice note.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -254,6 +307,23 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
 
     if (item.message_type === 'snap') {
       const snap = item.snap;
+      const isVoice = snap?.media_type === 'audio';
+
+      if (isVoice) {
+        return (
+          <View style={[styles.messageRow, isMe ? styles.myRow : styles.otherRow]}>
+            {!isMe && (
+              <UserAvatar name={senderName} avatarUrl={item.sender?.avatar_url} size={28} style={styles.chatAvatar} />
+            )}
+            <VoiceBubble
+              message={item}
+              isMe={isMe}
+              onLongPress={() => {}}
+            />
+          </View>
+        );
+      }
+
       const snapTypeLabel = snap?.media_type === 'video' ? 'Video Snap' : 'Photo Snap';
 
       return (
@@ -376,19 +446,34 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
               multiline
             />
 
-            <TouchableOpacity
-              style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]}
-              onPress={handleSend}
-              disabled={!inputText.trim() || sending}
-            >
-              {sending ? (
-                <ActivityIndicator size="small" color="#000000" />
-              ) : (
-                <Send size={18} color="#000000" />
-              )}
-            </TouchableOpacity>
+            {inputText.trim() ? (
+              <TouchableOpacity
+                style={styles.sendBtn}
+                onPress={handleSend}
+                disabled={sending}
+              >
+                {sending ? (
+                  <ActivityIndicator size="small" color="#000000" />
+                ) : (
+                  <Send size={18} color="#000000" />
+                )}
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.sendBtn}
+                onPress={() => setVoiceRecorderVisible(true)}
+              >
+                <Mic size={18} color="#000000" />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
+
+        <VoiceRecorderModal
+          visible={voiceRecorderVisible}
+          onClose={() => setVoiceRecorderVisible(false)}
+          onSend={handleSendVoiceNote}
+        />
       </View>
     </KeyboardAvoidingView>
   );

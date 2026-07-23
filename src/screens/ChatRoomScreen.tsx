@@ -39,6 +39,8 @@ import TypingIndicator from '../components/TypingIndicator';
 import ReactionBar from '../components/ReactionBar';
 import MediaViewer from '../components/MediaViewer';
 import UserAvatar from '../components/UserAvatar';
+import { VoiceBubble } from '../components/VoiceBubble';
+import { VoiceRecorderModal } from '../components/VoiceRecorderModal';
 
 const { width } = Dimensions.get('window');
 
@@ -88,6 +90,68 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [memoriesList, setMemoriesList] = useState<any[]>([]);
   const [mediaPickerLoading, setMediaPickerLoading] = useState(false);
+  const [voiceRecorderVisible, setVoiceRecorderVisible] = useState(false);
+
+  const handleSendVoiceNote = async (localUri: string, duration: number) => {
+    try {
+      setLoading(true);
+      const { encryptionService } = require('../services/encryptionService');
+      const encrypted = await encryptionService.encryptFile(localUri, 'voice_note.m4a');
+
+      const uploadRes = await telegramService.uploadToTelegram(
+        encrypted.uri,
+        'document',
+        'voice_note.m4a.enc',
+        'application/octet-stream',
+        undefined,
+        undefined,
+        undefined
+      );
+
+      const { data: snap, error: snapError } = await supabase
+        .from('snaps')
+        .insert({
+          sender_id: currentUserId,
+          receiver_id: otherUserId,
+          conversation_id: conversationId,
+          snap_type: 'direct',
+          media_type: 'audio',
+          telegram_file_id: uploadRes.telegramFileId,
+          telegram_message_id: uploadRes.telegramMessageId,
+          caption: 'Voice message',
+          overlay_metadata: [],
+          view_once: false,
+          is_viewed: false,
+          file_size: duration,
+        })
+        .select()
+        .single();
+
+      if (snapError) throw snapError;
+
+      await supabase
+        .from('chat_messages')
+        .insert({
+          conversation_id: conversationId,
+          sender_id: currentUserId,
+          receiver_id: otherUserId,
+          message_type: 'snap',
+          message_text: '🎵 Sent a voice message',
+          snap_id: snap.id,
+          status: 'sent',
+        });
+
+      if (conversationId) {
+        const latestMessages = await chatService.getMessages(conversationId);
+        setMessages(latestMessages);
+      }
+      showToast('Voice note sent.');
+    } catch (err: any) {
+      Alert.alert('Send failed', err.message || 'Could not send secure voice note.');
+    } finally {
+      setLoading(false);
+    }
+  };
   const pollingIntervalRef = useRef<any>(null);
   const offlineQueue = useRef<ChatMessage[]>([]);
 
@@ -1017,6 +1081,16 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     }
 
     if (item.message_type === 'snap') {
+      const isVoice = item.snap?.media_type === 'audio';
+      if (isVoice) {
+        return (
+          <VoiceBubble
+            message={item}
+            isMe={isMe}
+            onLongPress={() => setLongPressedMessage(item)}
+          />
+        );
+      }
       return (
         <SnapBubble
           snap={item.snap || { id: item.snap_id, media_type: 'image', is_viewed: item.status === 'read' }}
@@ -1122,6 +1196,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
             onSend={handleSend}
             onCameraPress={handleSnapPress}
             onGalleryPress={loadMemoriesForPicker}
+            onVoicePress={() => setVoiceRecorderVisible(true)}
             onTyping={broadcastTyping}
             replyToMessage={replyToMessage}
             onClearReply={() => setReplyToMessage(null)}
@@ -1272,6 +1347,12 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
           )}
         </SafeAreaView>
       </Modal>
+
+      <VoiceRecorderModal
+        visible={voiceRecorderVisible}
+        onClose={() => setVoiceRecorderVisible(false)}
+        onSend={handleSendVoiceNote}
+      />
     </KeyboardAvoidingView>
   );
 };

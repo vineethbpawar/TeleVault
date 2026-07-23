@@ -63,6 +63,7 @@ import {
   RefreshCw,
   Trash2,
   HardDrive,
+  ShieldAlert,
 } from 'lucide-react-native';
 import { CompositeScreenProps, useIsFocused } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -85,6 +86,7 @@ import { storageService } from '../services/storageService';
 import { uploadQueueService } from '../services/uploadQueueService';
 import { StorageManagerModal } from '../components/StorageManagerModal';
 import { autoSyncService } from '../services/autoSyncService';
+import { RecoveryKeyModal } from '../components/RecoveryKeyModal';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'SettingsTab'>,
@@ -102,6 +104,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [testingConnection, setTestingConnection] = useState(false);
   const [storageModalVisible, setStorageModalVisible] = useState(false);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
+  const [recoveryModalVisible, setRecoveryModalVisible] = useState(false);
 
   // Profile States
   const [username, setUsername] = useState('');
@@ -1145,6 +1148,17 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
               </View>
             </TouchableOpacity>
 
+            {/* Recovery Certificate */}
+            <TouchableOpacity style={styles.itemRow} onPress={() => setRecoveryModalVisible(true)}>
+              <View style={styles.itemLeft}>
+                <ShieldAlert size={20} color="#FFFC00" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Export Recovery Certificate</Text>
+                  <Text style={styles.itemSubtitle}>Print zero-knowledge vault recovery key</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.itemRow} onPress={() => exportHelper.exportChatsAsTXT()}>
               <View style={styles.itemLeft}>
                 <Download size={20} color="#FFFC00" />
@@ -1376,6 +1390,11 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       <StorageManagerModal
         visible={storageModalVisible}
         onClose={() => setStorageModalVisible(false)}
+      />
+
+      <RecoveryKeyModal
+        visible={recoveryModalVisible}
+        onClose={() => setRecoveryModalVisible(false)}
       />
 
       {/* Upload History Logs Modal */}

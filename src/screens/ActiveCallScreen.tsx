@@ -20,6 +20,7 @@ import {
   StatusBar,
   Dimensions,
   PanResponder,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -33,6 +34,7 @@ import {
   RefreshCw,
   Minimize2,
   Wifi,
+  MonitorUp,
 } from 'lucide-react-native';
 import { ActiveCallState, NetworkQuality } from '../types/call';
 import { UserAvatar } from '../components/UserAvatar';
@@ -148,6 +150,21 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [showControls, setShowControls] = useState(true);
+  const [isSharingScreen, setIsSharingScreen] = useState(false);
+
+  const handleToggleScreenShare = async () => {
+    try {
+      if (isSharingScreen) {
+        await webRTCPeerService.stopScreenShare();
+        setIsSharingScreen(false);
+      } else {
+        await webRTCPeerService.startScreenShare();
+        setIsSharingScreen(true);
+      }
+    } catch (err: any) {
+      Alert.alert('Screen Share Failed', err.message || 'Could not start screen sharing.');
+    }
+  };
   const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const connectingAnim = useRef(new Animated.Value(0.4)).current;
@@ -353,6 +370,20 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
             {callState.speakerEnabled ? 'Speaker' : 'Speaker'}
           </Text>
         </TouchableOpacity>
+
+        {/* Screen Share Toggle (Video Calls only) */}
+        {isVideoCall && (
+          <TouchableOpacity
+            style={[styles.dockButton, isSharingScreen && styles.dockButtonHighlight]}
+            onPress={handleToggleScreenShare}
+            activeOpacity={0.8}
+          >
+            <MonitorUp size={22} color={isSharingScreen ? '#FFFC00' : '#FFFFFF'} />
+            <Text style={[styles.dockLabel, isSharingScreen && { color: '#FFFC00' }]}>
+              {isSharingScreen ? 'Sharing' : 'Share'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Mini PiP Window Toggle */}
         <TouchableOpacity
