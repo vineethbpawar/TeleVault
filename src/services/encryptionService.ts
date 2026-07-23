@@ -10,8 +10,16 @@ const KEY_SIZE_WORDS = 256 / 32; // 256 bits key
 let derivedKeyCache: WordArray | null = null;
 
 export const encryptionService = {
-  // Derive AES encryption key from the secure app PIN
-  async getEncryptionKey(): Promise<WordArray | null> {
+  // Derive AES encryption key from the secure app PIN or Zero-Knowledge Vault password
+  async getEncryptionKey(isPrivate = false): Promise<WordArray | null> {
+    if (isPrivate) {
+      const { securityService } = require('./securityService');
+      const vaultPass = securityService.getVaultPasswordInMemory();
+      if (vaultPass) {
+        return this.deriveKeyFromPassword(vaultPass);
+      }
+    }
+
     if (derivedKeyCache) {
       return derivedKeyCache;
     }
@@ -36,16 +44,28 @@ export const encryptionService = {
     }
   },
 
+  async deriveKeyFromPassword(password: string): Promise<WordArray | null> {
+    try {
+      return PBKDF2(password, KEY_SALT, {
+        keySize: KEY_SIZE_WORDS,
+        iterations: PBKDF2_ITERATIONS,
+      });
+    } catch (err) {
+      console.error('[E2EE] deriveKeyFromPassword failed:', err);
+      return null;
+    }
+  },
+
   // Clear cached key when logging out or locking
   clearCachedKey(): void {
     derivedKeyCache = null;
   },
 
   // Encrypt file
-  async encryptFile(localUri: string, fileName: string): Promise<{ uri: string; size: number }> {
-    const key = await this.getEncryptionKey();
+  async encryptFile(localUri: string, fileName: string, isPrivate = false): Promise<{ uri: string; size: number }> {
+    const key = await this.getEncryptionKey(isPrivate);
     if (!key) {
-      throw new Error('E2EE requires a secure PIN to be set up first. Go to Settings.');
+      throw new Error('E2EE requires a secure PIN or Vault Password to be set up. Go to Settings.');
     }
 
     if (Platform.OS === 'web') {
@@ -120,10 +140,10 @@ export const encryptionService = {
   },
 
   // Decrypt file
-  async decryptFile(localUri: string, fileName: string, mimeType?: string | null): Promise<string> {
-    const key = await this.getEncryptionKey();
+  async decryptFile(localUri: string, fileName: string, mimeType?: string | null, isPrivate = false): Promise<string> {
+    const key = await this.getEncryptionKey(isPrivate);
     if (!key) {
-      throw new Error('E2EE secure key unavailable. Ensure PIN is configured.');
+      throw new Error('E2EE secure key unavailable. Ensure PIN or Vault Password is configured.');
     }
 
     if (Platform.OS === 'web') {

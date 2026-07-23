@@ -31,13 +31,17 @@ export default function App() {
     const timer = setTimeout(() => {
       Promise.all([
         import('./src/services/backgroundUploadTask'),
-        import('./src/services/uploadQueueService')
-      ]).then(([{ backgroundUploadService }, { uploadQueueService }]) => {
+        import('./src/services/uploadQueueService'),
+        import('./src/services/autoSyncService')
+      ]).then(([{ backgroundUploadService }, { uploadQueueService }, { autoSyncService }]) => {
         // Register background task on startup
         backgroundUploadService.registerBackgroundUploadTask();
 
         // Start upload queue processing on launch
         uploadQueueService.processUploadQueue();
+
+        // Trigger camera roll auto-sync scan on launch
+        autoSyncService.syncCameraRoll();
       }).catch(err => {
         console.warn('[STARTUP_OPTIMIZATION] Failed lazy-loading background services:', err);
       });

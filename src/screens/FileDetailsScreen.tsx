@@ -25,6 +25,7 @@ import AppButton from '../components/AppButton';
 
 import { previewCacheService } from '../services/previewCacheService';
 import { supabase } from '../lib/supabase';
+import { ShareLinkModal } from '../components/ShareLinkModal';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'FileDetails'>;
 
@@ -37,6 +38,7 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const [isFavorite, setIsFavorite] = useState(file.is_favorite || false);
   const [openingDoc, setOpeningDoc] = useState(false);
   const [showMetadata, setShowMetadata] = useState(false);
+  const [shareLinkModalVisible, setShareLinkModalVisible] = useState(false);
 
   const fetchTelegramUrl = async () => {
     setLoading(true);
@@ -508,6 +510,14 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
               </TouchableOpacity>
             </View>
           )}
+
+          <TouchableOpacity
+            style={styles.secondaryActionBtn}
+            onPress={() => setShareLinkModalVisible(true)}
+          >
+            <Share2 size={18} color="#FFFC00" style={{ marginRight: 8 }} />
+            <Text style={styles.secondaryActionBtnText}>Generate Expiring Link</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Toggle Metadata Button */}
@@ -596,6 +606,12 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
           </AppCard>
         )}
       </ScrollView>
+
+      <ShareLinkModal
+        visible={shareLinkModalVisible}
+        file={file as any}
+        onClose={() => setShareLinkModalVisible(false)}
+      />
     </Screen>
   );
 };
@@ -831,6 +847,23 @@ const styles = StyleSheet.create({
   metadataToggleText: {
     color: '#FFFC00',
     fontSize: 13,
+    fontWeight: '700',
+  },
+  secondaryActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 12,
+    height: 50,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    width: '100%',
+  },
+  secondaryActionBtnText: {
+    color: '#FFFC00',
+    fontSize: 15,
     fontWeight: '700',
   },
 });

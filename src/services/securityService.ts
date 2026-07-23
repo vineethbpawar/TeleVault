@@ -8,6 +8,7 @@ const BIOMETRICS_ENABLED_KEY = 'biometrics_enabled';
 const CHAT_LOCK_ENABLED_KEY = 'chat_lock_enabled'; // Placeholder
 
 let tempIgnoreLock = false;
+let activeVaultPassword: string | null = null;
 
 export const securityService = {
   setTemporaryIgnoreLock(ignore: boolean): void {
@@ -95,6 +96,65 @@ export const securityService = {
   async hasPin(): Promise<boolean> {
     const pin = await storageService.getItem(APP_PIN_KEY);
     return pin !== null && pin !== '';
+  },
+
+  // ─── Zero-Knowledge Vault helpers ─────────────────────────────────────────
+  setVaultPasswordInMemory(password: string | null): void {
+    activeVaultPassword = password;
+  },
+
+  getVaultPasswordInMemory(): string | null {
+    return activeVaultPassword;
+  },
+
+  async isVaultConfigured(): Promise<boolean> {
+    const token = await storageService.getItem('vault_verification_token');
+    return token !== null && token !== '';
+  },
+
+  async setupVaultPassword(password: string): Promise<void> {
+    const { encryptionService } = require('./encryptionService');
+    const key = await encryptionService.deriveKeyFromPassword(password);
+    if (!key) throw new Error('Failed to derive vault key');
+    
+    // Encrypt standard token
+    const { AES, CBC, Pkcs7 } = require('crypto-es');
+    const encrypted = AES.encrypt('televault_vault_unlocked', key, {
+      mode: CBC,
+      padding: Pkcs7,
+    }).toString();
+    
+    await storageService.setItem('vault_verification_token', encrypted);
+    activeVaultPassword = password;
+  },
+
+  async unlockVault(password: string): Promise<boolean> {
+    const token = await storageService.getItem('vault_verification_token');
+    if (!token) return false;
+    
+    try {
+      const { encryptionService } = require('./encryptionService');
+      const key = await encryptionService.deriveKeyFromPassword(password);
+      if (!key) return false;
+      
+      const { AES, CBC, Pkcs7, Utf8 } = require('crypto-es');
+      const decrypted = AES.decrypt(token, key, {
+        mode: CBC,
+        padding: Pkcs7,
+      }).toString(Utf8);
+      
+      if (decrypted === 'televault_vault_unlocked') {
+        activeVaultPassword = password;
+        return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  },
+
+  lockVault(): void {
+    activeVaultPassword = null;
   }
 };
 

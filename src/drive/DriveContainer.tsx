@@ -12,7 +12,7 @@ import { uploadQueueService } from '../services/uploadQueueService';
 import { showToast } from '../components/ToastBanner';
 import FolderCard from '../components/FolderCard';
 import FileCard from '../components/FileCard';
-import PinLockModal from '../components/PinLockModal';
+import VaultLockModal from '../components/VaultLockModal';
 import UploadProgress from '../components/UploadProgress';
 import { fileOpenService } from '../services/fileOpenService';
 import { previewCacheService } from '../services/previewCacheService';
@@ -362,12 +362,18 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
       if (nextStatus === 'background' || nextStatus === 'inactive') {
         setIsUnlocked(false);
         setPinModalVisible(true);
+        // Lock the Vault (zero-knowledge password wipe from memory)
+        const { securityService } = require('../services/securityService');
+        securityService.lockVault();
       }
     };
 
     const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => {
       sub.remove();
+      // Lock the Vault when unmounted / navigated away
+      const { securityService } = require('../services/securityService');
+      securityService.lockVault();
     };
   }, [isPrivateMode]);
 
@@ -1133,9 +1139,9 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
         </View>
       )}
 
-      {/* Secure PIN locks */}
+      {/* Secure Zero-Knowledge Vault lock */}
       {isPrivateMode && (
-        <PinLockModal
+        <VaultLockModal
           visible={pinModalVisible}
           onSuccess={() => {
             setPinModalVisible(false);

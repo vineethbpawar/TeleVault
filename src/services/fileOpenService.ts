@@ -396,7 +396,7 @@ export const fileOpenService = {
             if (file.is_private) {
               const tempUrl = URL.createObjectURL(localBlob);
               const { encryptionService } = require('./encryptionService');
-              cleanUrl = await encryptionService.decryptFile(tempUrl, file.file_name, file.mime_type);
+              cleanUrl = await encryptionService.decryptFile(tempUrl, file.file_name, file.mime_type, file.is_private);
             } else {
               cleanUrl = URL.createObjectURL(localBlob);
             }
@@ -422,7 +422,7 @@ export const fileOpenService = {
               } else {
                 const cachedUri = await telegramService.downloadTelegramFileToCache(file.telegram_file_id, file.file_name);
                 const { encryptionService } = require('./encryptionService');
-                cleanUrl = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type);
+                cleanUrl = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type, file.is_private);
               }
             }
           }
@@ -475,7 +475,7 @@ export const fileOpenService = {
         // Decrypt if E2EE private
         if (file.is_private) {
           const { encryptionService } = require('./encryptionService');
-          cachedUri = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type);
+          cachedUri = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type, file.is_private);
         }
       }
 
@@ -527,7 +527,7 @@ export const fileOpenService = {
     
     if (file.is_private) {
       const { encryptionService } = require('./encryptionService');
-      cachedUri = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type);
+      cachedUri = await encryptionService.decryptFile(cachedUri, file.file_name, file.mime_type, file.is_private);
     }
     
     return cachedUri;

@@ -340,7 +340,7 @@ export const uploadQueueService = {
           progress: 30
         });
         const { encryptionService } = require('../services/encryptionService');
-        const encrypted = await encryptionService.encryptFile(finalUri, pendingItem.file_name);
+        const encrypted = await encryptionService.encryptFile(finalUri, pendingItem.file_name, pendingItem.is_private);
         finalUri = encrypted.uri;
         finalSize = encrypted.size;
         if (Platform.OS !== 'web') {

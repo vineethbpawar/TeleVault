@@ -62,6 +62,7 @@ import {
   Clock,
   RefreshCw,
   Trash2,
+  HardDrive,
 } from 'lucide-react-native';
 import { CompositeScreenProps, useIsFocused } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -82,6 +83,8 @@ import TeleVaultLogo from '../components/TeleVaultLogo';
 import { fileService } from '../services/fileService';
 import { storageService } from '../services/storageService';
 import { uploadQueueService } from '../services/uploadQueueService';
+import { StorageManagerModal } from '../components/StorageManagerModal';
+import { autoSyncService } from '../services/autoSyncService';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'SettingsTab'>,
@@ -97,6 +100,8 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [driveLock, setDriveLock] = useState(false);
   const [privateDriveLock, setPrivateDriveLock] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
+  const [storageModalVisible, setStorageModalVisible] = useState(false);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
 
   // Profile States
   const [username, setUsername] = useState('');
@@ -258,6 +263,9 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     setSaveSentSnapsToMemories(appSettings.saveSentSnapsToMemories ?? true);
     setUploadMode(appSettings.uploadMode || 'Stable');
 
+    const syncEnabled = await autoSyncService.isEnabled();
+    setAutoSyncEnabled(syncEnabled);
+
     try {
       const stats = await largeFileService.getLargeFileStats();
       setLargeFileStats(stats);
@@ -374,6 +382,16 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       Alert.alert('Save Failed', error.message || 'Failed to update profile.');
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const handleToggleAutoSync = async (val: boolean) => {
+    try {
+      await autoSyncService.setEnabled(val);
+      setAutoSyncEnabled(val);
+      showToast(val ? 'Camera roll auto-sync enabled.' : 'Camera roll auto-sync disabled.');
+    } catch (_) {
+      Alert.alert('Error', 'Failed to update auto-sync setting.');
     }
   };
 
@@ -1097,8 +1115,36 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
         {/* Backup and Export Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionHeader}>Data Backup & Export</Text>
+          <Text style={styles.sectionHeader}>Storage, Sync & Backup</Text>
           <View style={styles.card}>
+            {/* Auto Sync Toggle */}
+            <View style={styles.itemRowNoPress}>
+              <View style={styles.itemLeft}>
+                <RefreshCw size={20} color="#FFFC00" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Camera roll Auto-Sync</Text>
+                  <Text style={styles.itemSubtitle}>Backup new photos/videos automatically</Text>
+                </View>
+              </View>
+              <Switch
+                value={autoSyncEnabled}
+                onValueChange={handleToggleAutoSync}
+                trackColor={{ false: '#2C2C2E', true: '#FFFC00' }}
+                thumbColor={autoSyncEnabled ? '#000000' : '#8E8E93'}
+              />
+            </View>
+
+            {/* Storage Manager */}
+            <TouchableOpacity style={styles.itemRow} onPress={() => setStorageModalVisible(true)}>
+              <View style={styles.itemLeft}>
+                <HardDrive size={20} color="#FFFC00" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Storage & Cache Manager</Text>
+                  <Text style={styles.itemSubtitle}>Manage and clear local decrypted previews</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.itemRow} onPress={() => exportHelper.exportChatsAsTXT()}>
               <View style={styles.itemLeft}>
                 <Download size={20} color="#FFFC00" />
@@ -1326,6 +1372,11 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           />
         </View>
       </ScrollView>
+
+      <StorageManagerModal
+        visible={storageModalVisible}
+        onClose={() => setStorageModalVisible(false)}
+      />
 
       {/* Upload History Logs Modal */}
       <Modal
