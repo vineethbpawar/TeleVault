@@ -16,6 +16,15 @@ ExpoSplash.preventAutoHideAsync().catch(() => {
 
 export const navigationRef = createNavigationContainerRef();
 
+const linking = {
+  prefixes: ['televault://'],
+  config: {
+    screens: {
+      ResetPassword: 'reset-password',
+    },
+  },
+};
+
 export default function App() {
   useEffect(() => {
     // Defer non-critical background initialization to improve PWA startup speed
@@ -113,7 +122,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <NavigationContainer ref={navigationRef}>
+        <NavigationContainer ref={navigationRef} linking={linking}>
           <AppNavigator />
           <StatusBar style="light" />
           <ToastBanner />

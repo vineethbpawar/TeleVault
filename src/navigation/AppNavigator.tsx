@@ -34,6 +34,7 @@ import MyProfileScreen from '../screens/MyProfileScreen';
 import SendToScreen from '../screens/SendToScreen';
 import ChatCameraScreen from '../screens/ChatCameraScreen';
 import CallHistoryScreen from '../screens/CallHistoryScreen';
+import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import CallOverlay from '../components/CallOverlay';
 import { Session } from '@supabase/supabase-js';
 import { authEvents } from '../utils/authEvent';
@@ -318,6 +319,7 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="SendTo" component={SendToScreen} />
               <Stack.Screen name="ChatCamera" component={ChatCameraScreen} />
               <Stack.Screen name="CallHistory" component={CallHistoryScreen} />
+              <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
               <Stack.Screen
                 name="MemoriesViewer"
                 component={MemoriesViewerScreen}

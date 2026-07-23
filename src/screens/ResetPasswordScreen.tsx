@@ -3,10 +3,10 @@ import {
   StyleSheet,
   View,
   Text,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
@@ -14,19 +14,30 @@ import AppInput from '../components/AppInput';
 import AppButton from '../components/AppButton';
 import TeleVaultLogo from '../components/TeleVaultLogo';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AuthStackParamList } from '../types/navigation';
+import { AppStackParamList } from '../types/navigation';
 
-type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
+type Props = NativeStackScreenProps<AppStackParamList, 'ResetPassword'>;
 
-export const LoginScreen: React.FC<Props> = ({ navigation }) => {
-  const [email, setEmail] = useState('');
+export const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
 
-  const handleLogin = async () => {
-    if (!email || !password) {
+  const handleUpdatePassword = async () => {
+    if (!password || !confirmPassword) {
       setError('Please fill in all fields.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
 
@@ -34,16 +45,26 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
     setError('');
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+      const { error: updateError } = await supabase.auth.updateUser({
         password: password,
       });
 
-      if (signInError) {
-        setError(signInError.message);
+      if (updateError) {
+        setError(updateError.message);
+      } else {
+        setSuccess(true);
+        Alert.alert('Success', 'Your password has been reset successfully.', [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Navigate back to main screen since session is already active
+              navigation.replace('Main', { screen: 'DriveTab' });
+            },
+          },
+        ]);
       }
     } catch (e: any) {
-      setError(e.message || 'An error occurred during login.');
+      setError(e.message || 'Failed to reset password.');
     } finally {
       setLoading(false);
     }
@@ -58,50 +79,35 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.logoContainer}>
             <TeleVaultLogo size={80} style={{ marginBottom: 20 }} />
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Log in to access your TeleVault cloud drive</Text>
+            <Text style={styles.title}>New Password</Text>
+            <Text style={styles.subtitle}>Create a strong, new password for your account</Text>
           </View>
 
           <View style={styles.formContainer}>
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
             <AppInput
-              label="Email Address"
-              placeholder="name@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={email}
-              onChangeText={setEmail}
-            />
-
-            <AppInput
-              label="Password"
+              label="New Password"
               placeholder="••••••••"
               isPassword
               value={password}
               onChangeText={setPassword}
             />
 
-            <TouchableOpacity
-              style={styles.forgotPasswordContainer}
-              onPress={() => navigation.navigate('ForgotPassword')}
-            >
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-            </TouchableOpacity>
+            <AppInput
+              label="Confirm New Password"
+              placeholder="••••••••"
+              isPassword
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+            />
 
             <AppButton
-              title="Log In"
-              onPress={handleLogin}
+              title="Save Password"
+              onPress={handleUpdatePassword}
               loading={loading}
               style={styles.button}
             />
-          </View>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
-              <Text style={styles.signupText}>Sign Up</Text>
-            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -124,17 +130,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
-  logoCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#1E1E1E',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#2C2C2E',
-  },
   title: {
     color: '#FFFFFF',
     fontSize: 28,
@@ -152,6 +147,7 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 16,
+    width: '100%',
   },
   errorText: {
     color: '#FF453A',
@@ -160,31 +156,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     textAlign: 'center',
   },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  footerText: {
-    color: '#8E8E93',
-    fontSize: 14,
-  },
-  signupText: {
-    color: '#FFFC00',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  forgotPasswordContainer: {
-    alignSelf: 'flex-end',
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  forgotPasswordText: {
-    color: '#FFFC00',
-    fontSize: 13,
-    fontWeight: '600',
-  },
 });
 
-export default LoginScreen;
+export default ResetPasswordScreen;

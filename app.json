@@ -2,6 +2,7 @@
   "expo": {
     "name": "TeleVault",
     "slug": "TeleVault",
+    "scheme": "televault",
     "version": "1.0.0",
     "updates": {
       "checkAutomatically": "ON_LOAD",

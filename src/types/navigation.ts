@@ -5,6 +5,7 @@ export type AuthStackParamList = {
   Splash: undefined;
   Login: undefined;
   Signup: undefined;
+  ForgotPassword: undefined;
 };
 
 export type MainTabParamList = {
@@ -95,6 +96,7 @@ export type AppStackParamList = {
     initialIndex: number;
   };
   CallHistory: undefined;
+  ResetPassword: undefined;
 };
 
 
