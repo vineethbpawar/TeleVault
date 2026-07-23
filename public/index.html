@@ -19,25 +19,27 @@
     <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
 
-    <!-- Service Worker Registration -->
+    <!-- Service Worker Unregistration & Cache Cleanup -->
     <script>
       try {
         if ('serviceWorker' in navigator) {
-          window.addEventListener('load', function() {
-            navigator.serviceWorker.register('/sw.js')
-              .then(function(reg) {
-                console.log('Service Worker registered:', reg.scope);
-                if (reg && typeof reg.update === 'function') {
-                  reg.update().catch(function() {});
-                }
-              })
-              .catch(function(err) {
-                console.error('Service Worker registration failed:', err);
+          navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for (var i = 0; i < registrations.length; i++) {
+              registrations[i].unregister().then(function(success) {
+                if (success) console.log('Service Worker unregistered successfully.');
               });
+            }
+          });
+        }
+        if ('caches' in window) {
+          caches.keys().then(function(names) {
+            for (var i = 0; i < names.length; i++) {
+              caches.delete(names[i]);
+            }
           });
         }
       } catch (e) {
-        console.error('SW registration failed:', e);
+        console.error('Failed to unregister Service Worker or clear cache:', e);
       }
     </script>
 

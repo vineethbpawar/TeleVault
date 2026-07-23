@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, Platform, Switch, FlatList, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, Star, Lock, Grid, Trash2, Edit, CheckSquare, X, Share2, Download, Plus, Video, RefreshCw } from 'lucide-react-native';
-import * as MediaLibrary from 'expo-media-library';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -65,6 +64,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
     if (Platform.OS === 'web') return;
     setLocalLoading(true);
     try {
+      const MediaLibrary = require('expo-media-library');
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         setLocalLoading(false);
