@@ -9,6 +9,7 @@ import {
   ScrollView,
   Image,
   Platform,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Screen from '../components/Screen';
@@ -18,6 +19,8 @@ import { ArrowLeft, UserPlus, UserCheck, MessageSquare, Camera, ShieldAlert, Ban
 import { supabase } from '../lib/supabase';
 import { friendService } from '../services/friendService';
 import { snapService } from '../services/snapService';
+import { securityService } from '../services/securityService';
+import { showToast } from '../components/ToastBanner';
 import { UserProfile } from '../types/chat';
 import { Snap } from '../types/snap';
 import AppHeader from '../components/AppHeader';
@@ -31,6 +34,8 @@ export const UserProfileScreen: React.FC<Props> = ({ navigation, route }) => {
   const [friendshipStatus, setFriendshipStatus] = useState<'none' | 'pending_sent' | 'pending_received' | 'friends'>('none');
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [chatLocked, setChatLocked] = useState(false);
   
   // Stats
   const [stats, setStats] = useState({ snaps: 0, stories: 0, friends: 0 });
@@ -55,6 +60,18 @@ export const UserProfileScreen: React.FC<Props> = ({ navigation, route }) => {
         if (blocked) {
           setLoading(false);
           return;
+        }
+
+        const { data: conv } = await supabase
+          .from('conversations')
+          .select('id')
+          .or(`and(user1_id.eq.${user.id},user2_id.eq.${targetId}),and(user1_id.eq.${targetId},user2_id.eq.${user.id})`)
+          .maybeSingle();
+
+        if (conv) {
+          setConversationId(conv.id);
+          const locked = await securityService.isChatLocked(conv.id);
+          setChatLocked(locked);
         }
 
         // Fetch Profile
@@ -228,6 +245,35 @@ export const UserProfileScreen: React.FC<Props> = ({ navigation, route }) => {
     });
   };
 
+  const handleToggleChatLock = async (value: boolean) => {
+    if (!conversationId) {
+      Alert.alert('Info', 'No active chat log conversation found with this user to lock.');
+      return;
+    }
+    try {
+      if (value) {
+        const hasPin = await securityService.hasPin();
+        if (!hasPin) {
+          Alert.alert(
+            'PIN Required',
+            'Please configure an App Security PIN in Settings first before locking chat rooms.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        await securityService.lockChat(conversationId);
+        setChatLocked(true);
+        showToast('Chat room locked.');
+      } else {
+        await securityService.unlockChat(conversationId);
+        setChatLocked(false);
+        showToast('Chat room unlocked.');
+      }
+    } catch (_) {
+      Alert.alert('Error', 'Failed to toggle chat lock.');
+    }
+  };
+
   const handleOpenStory = async (story: Snap) => {
     try {
       if (!story.telegram_file_id) {
@@ -382,7 +428,24 @@ export const UserProfileScreen: React.FC<Props> = ({ navigation, route }) => {
         {/* Security / Safety Block */}
         <View style={styles.safetySection}>
           <Text style={styles.sectionTitle}>SAFETY & PRIVACY</Text>
-          
+          {conversationId && (
+            <View style={[styles.safetyRow, { justifyContent: 'space-between', alignItems: 'center' }]}>
+              <View style={{ flexDirection: 'row', flex: 1, alignItems: 'flex-start' }}>
+                <Shield size={20} color="#FFFC00" style={{ marginRight: 12, marginTop: 4 }} />
+                <View style={{ flex: 1, paddingRight: 8 }}>
+                  <Text style={styles.safetyTitle}>Lock Chat Room</Text>
+                  <Text style={styles.safetyDesc}>Require PIN/Biometrics to open this chat room</Text>
+                </View>
+              </View>
+              <Switch
+                value={chatLocked}
+                onValueChange={handleToggleChatLock}
+                trackColor={{ false: '#2C2C2E', true: '#FFFC00' }}
+                thumbColor={chatLocked ? '#000000' : '#8E8E93'}
+              />
+            </View>
+          )}
+
           <TouchableOpacity style={styles.safetyRow} onPress={handleBlock}>
             <Ban size={20} color="#FF453A" style={{ marginRight: 12 }} />
             <View>

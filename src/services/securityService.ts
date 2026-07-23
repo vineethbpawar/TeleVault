@@ -9,6 +9,7 @@ const CHAT_LOCK_ENABLED_KEY = 'chat_lock_enabled'; // Placeholder
 
 let tempIgnoreLock = false;
 let activeVaultPassword: string | null = null;
+let isDecoyActive = false;
 
 export const securityService = {
   setTemporaryIgnoreLock(ignore: boolean): void {
@@ -145,6 +146,7 @@ export const securityService = {
       
       if (decrypted === 'televault_vault_unlocked') {
         activeVaultPassword = password;
+        isDecoyActive = false;
         return true;
       }
       return false;
@@ -153,8 +155,90 @@ export const securityService = {
     }
   },
 
+  isDecoyVault(): boolean {
+    return isDecoyActive;
+  },
+
+  async isDecoyConfigured(): Promise<boolean> {
+    const token = await storageService.getItem('vault_decoy_token');
+    return token !== null && token !== '';
+  },
+
+  async setupDecoyVault(decoyPassword: string): Promise<void> {
+    const { encryptionService } = require('./encryptionService');
+    const key = await encryptionService.deriveKeyFromPassword(decoyPassword);
+    if (!key) throw new Error('Failed to derive decoy key');
+
+    const { AES, CBC, Pkcs7 } = require('crypto-es');
+    const encrypted = AES.encrypt('televault_decoy_unlocked', key, {
+      mode: CBC,
+      padding: Pkcs7,
+    }).toString();
+
+    await storageService.setItem('vault_decoy_token', encrypted);
+  },
+
+  async unlockDecoyVault(password: string): Promise<boolean> {
+    const token = await storageService.getItem('vault_decoy_token');
+    if (!token) return false;
+
+    try {
+      const { encryptionService } = require('./encryptionService');
+      const key = await encryptionService.deriveKeyFromPassword(password);
+      if (!key) return false;
+
+      const { AES, CBC, Pkcs7, Utf8 } = require('crypto-es');
+      const decrypted = AES.decrypt(token, key, {
+        mode: CBC,
+        padding: Pkcs7,
+      }).toString(Utf8);
+
+      if (decrypted === 'televault_decoy_unlocked') {
+        activeVaultPassword = password;
+        isDecoyActive = true;
+        return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  },
+
+  async isChatLocked(conversationId: string): Promise<boolean> {
+    try {
+      const stored = await storageService.getItem('televault_locked_chats');
+      if (!stored) return false;
+      const list = JSON.parse(stored) as string[];
+      return list.includes(conversationId);
+    } catch (_) {
+      return false;
+    }
+  },
+
+  async lockChat(conversationId: string): Promise<void> {
+    try {
+      const stored = await storageService.getItem('televault_locked_chats');
+      const list = stored ? (JSON.parse(stored) as string[]) : [];
+      if (!list.includes(conversationId)) {
+        list.push(conversationId);
+        await storageService.setItem('televault_locked_chats', JSON.stringify(list));
+      }
+    } catch (_) {}
+  },
+
+  async unlockChat(conversationId: string): Promise<void> {
+    try {
+      const stored = await storageService.getItem('televault_locked_chats');
+      if (!stored) return;
+      let list = JSON.parse(stored) as string[];
+      list = list.filter(id => id !== conversationId);
+      await storageService.setItem('televault_locked_chats', JSON.stringify(list));
+    } catch (_) {}
+  },
+
   lockVault(): void {
     activeVaultPassword = null;
+    isDecoyActive = false;
   }
 };
 

@@ -17,6 +17,9 @@ import { MessageSquarePlus, MessageCircle, ArrowLeft } from 'lucide-react-native
 import { chatService } from '../services/chatService';
 import { Conversation } from '../types/chat';
 import { supabase } from '../lib/supabase';
+import { securityService } from '../services/securityService';
+import * as LocalAuthentication from 'expo-local-authentication';
+import { PinLockModal } from '../components/PinLockModal';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, any>,
@@ -27,6 +30,8 @@ export const ChatListScreen: React.FC<Props> = ({ navigation }) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [pendingConversation, setPendingConversation] = useState<Conversation | null>(null);
   const isFocused = useIsFocused();
 
   const fetchConversations = async () => {
@@ -117,14 +122,51 @@ export const ChatListScreen: React.FC<Props> = ({ navigation }) => {
     fetchConversations();
   };
 
-  const handleNavigateToChat = (conv: Conversation) => {
+  const handleNavigateToChat = async (conv: Conversation) => {
     if (!conv.other_user) return;
+
+    const isLocked = await securityService.isChatLocked(conv.id);
+    if (isLocked) {
+      const isBioEnabled = await securityService.isBiometricsEnabled();
+      if (isBioEnabled) {
+        const bioResult = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Unlock Locked Chat',
+        });
+        if (bioResult.success) {
+          navigation.navigate('ChatRoom', {
+            conversationId: conv.id,
+            otherUserId: conv.other_user.id,
+            otherUsername: conv.other_user.username || 'unknown',
+            otherFullName: conv.other_user.full_name || undefined,
+          });
+          return;
+        }
+      }
+      
+      setPendingConversation(conv);
+      setPinModalVisible(true);
+      return;
+    }
+
     navigation.navigate('ChatRoom', {
       conversationId: conv.id,
       otherUserId: conv.other_user.id,
       otherUsername: conv.other_user.username || 'unknown',
       otherFullName: conv.other_user.full_name || undefined,
     });
+  };
+
+  const handlePinUnlockSuccess = () => {
+    setPinModalVisible(false);
+    if (pendingConversation && pendingConversation.other_user) {
+      navigation.navigate('ChatRoom', {
+        conversationId: pendingConversation.id,
+        otherUserId: pendingConversation.other_user.id,
+        otherUsername: pendingConversation.other_user.username || 'unknown',
+        otherFullName: pendingConversation.other_user.full_name || undefined,
+      });
+    }
+    setPendingConversation(null);
   };
 
   const formatTime = (timeStr?: string | null): string => {
@@ -221,6 +263,18 @@ export const ChatListScreen: React.FC<Props> = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           }
+        />
+      )}
+
+      {pinModalVisible && (
+        <PinLockModal
+          visible={pinModalVisible}
+          onClose={() => {
+            setPinModalVisible(false);
+            setPendingConversation(null);
+          }}
+          onSuccess={handlePinUnlockSuccess}
+          mode="verify"
         />
       )}
     </SafeAreaView>

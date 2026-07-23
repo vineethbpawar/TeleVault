@@ -3,6 +3,63 @@ import { TeleVaultFile, TeleVaultFolder } from '../types/file';
 import { storageService } from './storageService';
 import { telegramService } from './telegramService';
 
+const DECOY_FILES: TeleVaultFile[] = [
+  {
+    id: 'decoy-file-1',
+    user_id: 'decoy-user',
+    file_name: 'Travel_Itinerary.pdf',
+    file_size: 450120,
+    file_type: 'document',
+    mime_type: 'application/pdf',
+    telegram_file_id: 'mock-file-1',
+    telegram_message_id: 'mock-msg-1',
+    telegram_file_unique_id: 'mock-unique-1',
+    is_private: true,
+    is_drive_file: true,
+    folder_id: null,
+    local_thumbnail_uri: null,
+    overlay_metadata: {},
+    created_at: new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString(),
+    uploaded_at: new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString(),
+  },
+  {
+    id: 'decoy-file-2',
+    user_id: 'decoy-user',
+    file_name: 'Car_Insurance_Policy.pdf',
+    file_size: 1024300,
+    file_type: 'document',
+    mime_type: 'application/pdf',
+    telegram_file_id: 'mock-file-2',
+    telegram_message_id: 'mock-msg-2',
+    telegram_file_unique_id: 'mock-unique-2',
+    is_private: true,
+    is_drive_file: true,
+    folder_id: null,
+    local_thumbnail_uri: null,
+    overlay_metadata: {},
+    created_at: new Date(Date.now() - 15 * 24 * 3600 * 1000).toISOString(),
+    uploaded_at: new Date(Date.now() - 15 * 24 * 3600 * 1000).toISOString(),
+  },
+  {
+    id: 'decoy-file-3',
+    user_id: 'decoy-user',
+    file_name: 'Family_Photo.jpg',
+    file_size: 284000,
+    file_type: 'image',
+    mime_type: 'image/jpeg',
+    telegram_file_id: 'mock-file-3',
+    telegram_message_id: 'mock-msg-3',
+    telegram_file_unique_id: 'mock-unique-3',
+    is_private: true,
+    is_drive_file: true,
+    folder_id: null,
+    local_thumbnail_uri: null,
+    overlay_metadata: {},
+    created_at: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+    uploaded_at: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+  }
+];
+
 export const fileService = {
   async saveFileMetadata(metadata: {
     folder_id: string | null;
@@ -124,6 +181,10 @@ export const fileService = {
   },
 
   async fetchPrivateDriveFiles(folderId: string | null): Promise<TeleVaultFile[]> {
+    const { securityService } = require('./securityService');
+    if (securityService.isDecoyVault()) {
+      return DECOY_FILES;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not logged in.');
 
@@ -150,6 +211,10 @@ export const fileService = {
   },
 
   async fetchPrivateDriveFolders(parentFolderId: string | null): Promise<TeleVaultFolder[]> {
+    const { securityService } = require('./securityService');
+    if (securityService.isDecoyVault()) {
+      return [];
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not logged in.');
 

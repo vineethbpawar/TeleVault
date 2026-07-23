@@ -64,6 +64,7 @@ import {
   Trash2,
   HardDrive,
   ShieldAlert,
+  Eye,
 } from 'lucide-react-native';
 import { CompositeScreenProps, useIsFocused } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -87,6 +88,7 @@ import { uploadQueueService } from '../services/uploadQueueService';
 import { StorageManagerModal } from '../components/StorageManagerModal';
 import { autoSyncService } from '../services/autoSyncService';
 import { RecoveryKeyModal } from '../components/RecoveryKeyModal';
+import { DecoySetupModal } from '../components/DecoySetupModal';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'SettingsTab'>,
@@ -106,6 +108,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
   const [recoveryModalVisible, setRecoveryModalVisible] = useState(false);
   const [cacheLimitMB, setCacheLimitMB] = useState(500);
+  const [decoySetupVisible, setDecoySetupVisible] = useState(false);
 
   // Profile States
   const [username, setUsername] = useState('');
@@ -1100,10 +1103,10 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
                 <View style={styles.itemRowNoPress}>
                   <View style={styles.itemLeft}>
-                    <Lock size={20} color="#8E8E93" />
+                    <Lock size={20} color="#FFFC00" />
                     <View style={styles.itemMeta}>
-                      <Text style={[styles.itemTitle, { color: '#8E8E93' }]}>Chat Lock</Text>
-                      <Text style={styles.itemSubtitle}>Secure specific direct chats behind PIN (Soon)</Text>
+                      <Text style={styles.itemTitle}>Chat Lock</Text>
+                      <Text style={styles.itemSubtitle}>Secure specific direct chats behind PIN/Biometrics</Text>
                     </View>
                   </View>
                   <Switch
@@ -1113,6 +1116,17 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                     thumbColor={chatLockEnabled ? '#000000' : '#8E8E93'}
                   />
                 </View>
+
+                {/* Decoy Passphrase */}
+                <TouchableOpacity style={styles.itemRow} onPress={() => setDecoySetupVisible(true)}>
+                  <View style={styles.itemLeft}>
+                    <Eye size={20} color="#FFFC00" />
+                    <View style={styles.itemMeta}>
+                      <Text style={styles.itemTitle}>Decoy Vault Passphrase</Text>
+                      <Text style={styles.itemSubtitle}>Configure secondary duress unlock password</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
               </>
             )}
           </View>
@@ -1421,6 +1435,11 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       <RecoveryKeyModal
         visible={recoveryModalVisible}
         onClose={() => setRecoveryModalVisible(false)}
+      />
+
+      <DecoySetupModal
+        visible={decoySetupVisible}
+        onClose={() => setDecoySetupVisible(false)}
       />
 
       {/* Upload History Logs Modal */}

@@ -369,6 +369,37 @@ export const fileOpenService = {
     large_file_id?: string | null;
   }): Promise<void> {
     try {
+      if (file.id && file.id.startsWith('decoy-file-')) {
+        const mime = file.mime_type || 'text/plain';
+        if (Platform.OS === 'web') {
+          showWebLoadingOverlay();
+          let dummyBlob: Blob;
+          if (mime.startsWith('image/')) {
+            const base64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mPs3V3yHwAEpQIL9kH87QAAAABJRU5ErkJggg==';
+            const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+            dummyBlob = new Blob([bytes], { type: mime });
+          } else {
+            dummyBlob = new Blob(['This is a sample safe document inside the TeleVault recovery backup.'], { type: 'text/plain' });
+          }
+          const cleanUrl = URL.createObjectURL(dummyBlob);
+          const overlay = document.getElementById('televault-web-share-overlay');
+          if (overlay) overlay.remove();
+          window.open(cleanUrl, '_blank');
+        } else {
+          const FileSystem = require('expo-file-system');
+          const Sharing = require('expo-sharing');
+          const dummyPath = `${FileSystem.cacheDirectory}decoy_${file.file_name}`;
+          if (mime.startsWith('image/')) {
+            const base64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mPs3V3yHwAEpQIL9kH87QAAAABJRU5ErkJggg==';
+            await FileSystem.writeAsStringAsync(dummyPath, base64, { encoding: FileSystem.EncodingType.Base64 });
+          } else {
+            await FileSystem.writeAsStringAsync(dummyPath, 'This is a sample safe document inside the TeleVault recovery backup.');
+          }
+          await Sharing.shareAsync(dummyPath, { mimeType: mime });
+        }
+        return;
+      }
+
       if (Platform.OS === 'web') {
         showWebLoadingOverlay();
         try {

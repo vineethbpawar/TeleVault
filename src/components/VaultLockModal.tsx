@@ -73,7 +73,11 @@ export const VaultLockModal: React.FC<Props> = ({ visible, onSuccess, onClose })
         onSuccess();
       } else {
         // Unlock flow
-        const success = await securityService.unlockVault(password);
+        let success = await securityService.unlockVault(password);
+        if (!success) {
+          success = await securityService.unlockDecoyVault(password);
+        }
+
         if (success) {
           onSuccess();
         } else {
