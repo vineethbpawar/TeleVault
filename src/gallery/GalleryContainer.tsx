@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, Platform } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, Platform, Switch, FlatList, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Search, Star, Lock, Grid, Trash2, Edit, CheckSquare, X, Share2, Download } from 'lucide-react-native';
+import { Search, Star, Lock, Grid, Trash2, Edit, CheckSquare, X, Share2, Download, Plus, Video, RefreshCw } from 'lucide-react-native';
+import * as MediaLibrary from 'expo-media-library';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 
 import { MemoryGrid } from './MemoryGrid';
 import { GalleryItem, FilterType } from './types';
@@ -53,6 +56,133 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
   const [refreshing, setRefreshing] = useState(false);
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [subTab, setSubTab] = useState<'cloud' | 'device'>('cloud');
+  const [localAssets, setLocalAssets] = useState<any[]>([]);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);
+
+  const loadLocalMedia = async () => {
+    if (Platform.OS === 'web') return;
+    setLocalLoading(true);
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        setLocalLoading(false);
+        return;
+      }
+      const result = await MediaLibrary.getAssetsAsync({
+        first: 60,
+        mediaType: ['photo', 'video'],
+        sortBy: ['creationTime'],
+      });
+      setLocalAssets(result.assets || []);
+    } catch (err) {
+      console.warn('Failed to load local media:', err);
+    } finally {
+      setLocalLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (subTab === 'device') {
+      loadLocalMedia();
+      import('../services/autoSyncService').then(({ autoSyncService }) => {
+        autoSyncService.isEnabled().then(setAutoSyncEnabled);
+      });
+    }
+  }, [subTab]);
+
+  const handleToggleAutoSync = async (val: boolean) => {
+    try {
+      const { autoSyncService } = require('../services/autoSyncService');
+      await autoSyncService.setEnabled(val);
+      setAutoSyncEnabled(val);
+      showToast(val ? 'Camera roll auto-sync enabled.' : 'Camera roll auto-sync disabled.');
+    } catch (_) {
+      showAlert('Error', 'Failed to update auto-sync setting.');
+    }
+  };
+
+  const pickMedia = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showAlert('Permission Denied', 'Media library access is required.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsMultipleSelection: true,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        for (const asset of result.assets) {
+          const isVideo = asset.type === 'video';
+          await uploadQueueService.addToUploadQueue({
+            file_name: asset.fileName || `upload_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`,
+            local_uri: asset.uri,
+            file_type: isVideo ? 'video' : 'image',
+            mime_type: isVideo ? 'video/mp4' : 'image/jpeg',
+            file_size: asset.fileSize || 0,
+            is_private: false,
+            is_drive_file: false,
+            destination: 'memories',
+            folder_id: null,
+            progress: 0,
+            status: 'pending',
+          });
+        }
+        showToast('Media queued for secure upload!');
+        setSubTab('cloud');
+      }
+    } catch (err: any) {
+      showAlert('Error', err.message || 'Failed to pick media');
+    }
+  };
+
+  const pickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const isVideo = asset.mimeType?.startsWith('video/') || false;
+        const isImage = asset.mimeType?.startsWith('image/') || false;
+        const fileType = isVideo ? 'video' : isImage ? 'image' : 'document';
+        
+        await uploadQueueService.addToUploadQueue({
+          file_name: asset.name,
+          local_uri: asset.uri,
+          file_type: fileType,
+          mime_type: asset.mimeType || 'application/octet-stream',
+          file_size: asset.size || 0,
+          is_private: false,
+          is_drive_file: false,
+          destination: 'memories',
+          folder_id: null,
+          progress: 0,
+          status: 'pending',
+        });
+        showToast('Document queued for secure upload!');
+        setSubTab('cloud');
+      }
+    } catch (err: any) {
+      showAlert('Error', err.message || 'Failed to pick document');
+    }
+  };
+
+  const handleImportPress = () => {
+    showAlert(
+      'Import / Upload',
+      'Choose files to encrypt and load into memories:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Photo or Video', onPress: pickMedia },
+        { text: 'Document or File', onPress: pickDocument },
+      ]
+    );
+  };
 
   // Secure Private Vault states
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -440,8 +570,86 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
         </TouchableOpacity>
       </View>
 
-      {/* Tabs Filter Row */}
-      <View style={styles.tabContainer}>
+      {/* Sub-Tabs: Cloud Vault vs. Device Gallery */}
+      <View style={styles.subTabsRow}>
+        <TouchableOpacity
+          style={[styles.subTabBtn, subTab === 'cloud' && styles.subTabBtnActive]}
+          onPress={() => setSubTab('cloud')}
+        >
+          <Text style={[styles.subTabBtnText, subTab === 'cloud' && styles.subTabBtnTextActive]}>Cloud Vault</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.subTabBtn, subTab === 'device' && styles.subTabBtnActive]}
+          onPress={() => setSubTab('device')}
+        >
+          <Text style={[styles.subTabBtnText, subTab === 'device' && styles.subTabBtnTextActive]}>Device Gallery</Text>
+        </TouchableOpacity>
+      </View>
+
+      {subTab === 'device' ? (
+        <View style={{ flex: 1 }}>
+          {/* Header Controls for Auto-Sync and Add File */}
+          <View style={styles.deviceHeader}>
+            <View style={styles.autoSyncRow}>
+              <RefreshCw size={18} color="#FFFC00" style={{ marginRight: 8 }} />
+              <View>
+                <Text style={styles.deviceHeaderTitle}>Auto-Sync to Cloud</Text>
+                <Text style={styles.deviceHeaderSubtitle}>Backup new items automatically</Text>
+              </View>
+              <Switch
+                value={autoSyncEnabled}
+                onValueChange={handleToggleAutoSync}
+                style={{ marginLeft: 'auto' }}
+                trackColor={{ false: '#2C2C2E', true: '#FFFC00' }}
+                thumbColor={autoSyncEnabled ? '#000000' : '#8E8E93'}
+              />
+            </View>
+            <TouchableOpacity style={styles.importBtn} onPress={handleImportPress}>
+              <Plus size={20} color="#000000" style={{ marginRight: 6 }} />
+              <Text style={styles.importBtnText}>Import / Upload Files</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Local Grid */}
+          {localLoading ? (
+            <View style={styles.center}>
+              <ActivityIndicator size="large" color="#FFFC00" />
+            </View>
+          ) : localAssets.length === 0 ? (
+            <View style={styles.center}>
+              <Text style={styles.noMediaText}>
+                {Platform.OS === 'web' 
+                  ? 'Device gallery view is only available on native iOS/Android' 
+                  : 'No local gallery media found.'}
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={localAssets}
+              keyExtractor={(item) => item.id}
+              numColumns={3}
+              renderItem={({ item }) => {
+                const isVideo = item.mediaType === 'video';
+                return (
+                  <View style={styles.localItemWrapper}>
+                    <Image source={{ uri: item.uri }} style={styles.localItemImage} />
+                    {isVideo && (
+                      <View style={styles.videoBadge}>
+                        <Video size={12} color="#000000" />
+                      </View>
+                    )}
+                  </View>
+                );
+              }}
+              contentContainerStyle={styles.localGridContent}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+        </View>
+      ) : (
+        <View style={{ flex: 1 }}>
+          {/* Tabs Filter Row */}
+          <View style={styles.tabContainer}>
         {(['all', 'image', 'video', 'favorites', 'private'] as const).map((tab) => (
           <TouchableOpacity
             key={tab}
@@ -484,6 +692,8 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
           onRefresh={handleRefresh}
           refreshing={refreshing}
         />
+      )}
+        </View>
       )}
 
       {/* Bulk Operations Bottom HUD */}
@@ -807,5 +1017,101 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
   },
+  subTabsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    gap: 12,
+  },
+  subTabBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#1E1E1E',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+  },
+  subTabBtnActive: {
+    backgroundColor: '#FFFC00',
+    borderColor: '#FFFC00',
+  },
+  subTabBtnText: {
+    color: '#8E8E93',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  subTabBtnTextActive: {
+    color: '#000000',
+  },
+  deviceHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E1E1E',
+  },
+  autoSyncRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  deviceHeaderTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  deviceHeaderSubtitle: {
+    color: '#8E8E93',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  importBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFC00',
+    height: 40,
+    borderRadius: 20,
+  },
+  importBtnText: {
+    color: '#000000',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  noMediaText: {
+    color: '#8E8E93',
+    fontSize: 13,
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
+  localGridContent: {
+    paddingTop: 8,
+    paddingBottom: 80,
+  },
+  localItemWrapper: {
+    width: (360 - 12) / 3,
+    height: (360 - 12) / 3,
+    margin: 2,
+    borderRadius: 8,
+    backgroundColor: '#1E1E1E',
+    overflow: 'hidden',
+  },
+  localItemImage: {
+    width: '100%',
+    height: '100%',
+  },
+  videoBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#FFFC00',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });
+
 export default GalleryContainer;
