@@ -400,8 +400,16 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         filter: `conversation_id=eq.${convId}`,
       },
       async (payload: any) => {
-        const newMsg = payload.new as ChatMessage;
+        let newMsg = payload.new as ChatMessage;
         if (newMsg.conversation_id !== convId) return;
+
+        if (newMsg.message_text && newMsg.message_text.startsWith('[self-destruct:')) {
+          const match = newMsg.message_text.match(/^\[self-destruct:(\d+)\](.*)/);
+          if (match) {
+            newMsg.self_destruct_seconds = parseInt(match[1]);
+            newMsg.message_text = match[2];
+          }
+        }
 
         if (newMsg.snap_id) {
           const { data: snap } = await supabase
@@ -450,8 +458,16 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         filter: `conversation_id=eq.${convId}`,
       },
       (payload: any) => {
-        const updatedMsg = payload.new as ChatMessage;
+        let updatedMsg = payload.new as ChatMessage;
         if (updatedMsg.conversation_id !== convId) return;
+
+        if (updatedMsg.message_text && updatedMsg.message_text.startsWith('[self-destruct:')) {
+          const match = updatedMsg.message_text.match(/^\[self-destruct:(\d+)\](.*)/);
+          if (match) {
+            updatedMsg.self_destruct_seconds = parseInt(match[1]);
+            updatedMsg.message_text = match[2];
+          }
+        }
 
         setMessages((prev) =>
           prev.map((m) => (m.id === updatedMsg.id ? { ...m, ...updatedMsg } : m))
@@ -617,6 +633,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         const data = await chatService.getMessages(activeId);
         if (!active) return;
         console.log('[DEBUG_CHAT] Fetched messages count:', data.length);
+
         setMessages(data);
         
         // 4. Load offline queue and mark as read
@@ -721,8 +738,13 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   // Send message flow with optimistic UI
-  const handleSend = async (text: string) => {
+  const handleSend = async (text: string, selfDestructSeconds: number = 0) => {
     if (!conversationId || !currentUserId) return;
+
+    let finalPayloadText = text;
+    if (selfDestructSeconds > 0) {
+      finalPayloadText = `[self-destruct:${selfDestructSeconds}]${text}`;
+    }
 
     const tempId = `temp-${Date.now()}`;
     const optimisticMsg: ChatMessage = {
@@ -735,6 +757,9 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
       status: 'sending',
       created_at: new Date().toISOString(),
     };
+    if (selfDestructSeconds > 0) {
+      (optimisticMsg as any).self_destruct_seconds = selfDestructSeconds;
+    }
 
     // Include reply reference in optimistic local state
     if (replyToMessage) {
@@ -745,9 +770,14 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     setMessages((prev) => [...prev, optimisticMsg]);
 
     try {
-      const realMsg = await chatService.sendMessage(conversationId, otherUserId, text);
+      const realMsg = await chatService.sendMessage(conversationId, otherUserId, finalPayloadText);
+      const parsedRealMsg = { ...realMsg };
+      if (selfDestructSeconds > 0) {
+        parsedRealMsg.self_destruct_seconds = selfDestructSeconds;
+        parsedRealMsg.message_text = text;
+      }
       setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...realMsg, status: 'sent' } : m))
+        prev.map((m) => (m.id === tempId ? { ...parsedRealMsg, status: 'sent' } : m))
       );
     } catch (err: any) {
       // Mark as failed and append to offline queue

@@ -207,12 +207,31 @@ export const chatService = {
       }
     }
 
-    const messages = messagesData.map((msg: any) => ({
-      ...msg,
-      snap: snapsMap[msg.snap_id] || null,
-    }));
+    const messages = messagesData.map((msg: any) => {
+      const parsed = { ...msg };
+      if (parsed.message_text && parsed.message_text.startsWith('[self-destruct:')) {
+        const match = parsed.message_text.match(/^\[self-destruct:(\d+)\](.*)/);
+        if (match) {
+          parsed.self_destruct_seconds = parseInt(match[1]);
+          parsed.message_text = match[2];
+        }
+      }
+      return {
+        ...parsed,
+        snap: snapsMap[parsed.snap_id] || null,
+      };
+    });
 
-    return messages as ChatMessage[];
+    const filtered: ChatMessage[] = [];
+    messages.forEach((msg) => {
+      if (msg.self_destruct_seconds && msg.status === 'read') {
+        chatService.deleteMessage(msg.id).catch(() => {});
+      } else {
+        filtered.push(msg as ChatMessage);
+      }
+    });
+
+    return filtered;
   },
 
   /**
@@ -366,6 +385,44 @@ export const chatService = {
   /**
    * Mark all messages in a conversation as read (sent to read).
    */
+  async deleteMessage(messageId: string): Promise<void> {
+    try {
+      const { data } = await supabase
+        .from('chat_messages')
+        .select('*, snap:snaps(*)')
+        .eq('id', messageId)
+        .maybeSingle();
+
+      if (data) {
+        if (data.message_type === 'snap' && data.snap_id) {
+          const { data: snap } = await supabase
+            .from('snaps')
+            .select('*')
+            .eq('id', data.snap_id)
+            .maybeSingle();
+
+          if (snap && snap.telegram_message_id) {
+            const { telegramService } = require('./telegramService');
+            telegramService.deleteTelegramMessage(Number(snap.telegram_message_id)).catch(() => {});
+          }
+          await supabase.from('snaps').delete().eq('id', data.snap_id);
+        }
+
+        await supabase
+          .from('chat_messages')
+          .update({
+            deleted_at: new Date().toISOString(),
+            message_text: null,
+            snap_id: null,
+            telegram_message_id: null,
+          })
+          .eq('id', messageId);
+      }
+    } catch (e) {
+      console.warn('Failed to delete self-destruct message:', e);
+    }
+  },
+
   async markMessagesRead(conversationId: string): Promise<void> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;

@@ -8,11 +8,11 @@ import {
   Animated,
   Platform,
 } from 'react-native';
-import { Camera, Send, X, Paperclip, Smile, Mic, MapPin, File, Image } from 'lucide-react-native';
+import { Camera, Send, X, Paperclip, Smile, Mic, MapPin, File, Image, Timer } from 'lucide-react-native';
 import { ChatMessage } from '../types/chat';
 
 interface MessageComposerProps {
-  onSend: (text: string) => void;
+  onSend: (text: string, selfDestructSeconds: number) => void;
   onCameraPress: () => void;
   onGalleryPress: () => void;
   onVoicePress?: () => void;
@@ -40,6 +40,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const toolsAnim = useRef(new Animated.Value(0)).current;
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<any>(null);
+  const [selfDestructSeconds, setSelfDestructSeconds] = useState(0);
+
+  const cycleSelfDestruct = () => {
+    const cycle = [0, 5, 10, 30, 60];
+    const currentIndex = cycle.indexOf(selfDestructSeconds);
+    const nextIndex = (currentIndex + 1) % cycle.length;
+    setSelfDestructSeconds(cycle[nextIndex]);
+  };
 
   useEffect(() => {
     Animated.spring(sendScale, {
@@ -74,8 +82,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const handleSendPress = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    onSend(trimmed);
+    onSend(trimmed, selfDestructSeconds);
     setText('');
+    setSelfDestructSeconds(0);
     if (onTyping && isTypingRef.current) {
       isTypingRef.current = false;
       onTyping(false);
@@ -180,6 +189,17 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             multiline
             maxLength={1000}
           />
+          <TouchableOpacity style={[styles.attachmentBtn, { marginRight: 8 }]} onPress={cycleSelfDestruct} activeOpacity={0.7}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Timer size={18} color={selfDestructSeconds > 0 ? '#FFFC00' : '#8E8E93'} />
+              {selfDestructSeconds > 0 && (
+                <Text style={{ color: '#FFFC00', fontSize: 10, fontWeight: '700', marginLeft: 3 }}>
+                  {selfDestructSeconds}s
+                </Text>
+              )}
+            </View>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.attachmentBtn} onPress={toggleTools} activeOpacity={0.7}>
             <Paperclip size={18} color={showTools ? '#FFFC00' : '#8E8E93'} />
           </TouchableOpacity>

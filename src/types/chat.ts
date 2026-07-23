@@ -42,4 +42,5 @@ export interface ChatMessage {
   snap?: any;
   deleted_at?: string | null;
   is_saved_by_users?: string[];
+  self_destruct_seconds?: number;
 }

@@ -7,7 +7,7 @@ import {
   Animated,
   TouchableOpacity,
 } from 'react-native';
-import { Reply, Smile } from 'lucide-react-native';
+import { Reply, Smile, Timer } from 'lucide-react-native';
 import MessageStatus from './MessageStatus';
 import UserAvatar from './UserAvatar';
 import { ChatMessage } from '../types/chat';
@@ -34,6 +34,30 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   replyToMessage,
 }) => {
   const pan = useRef(new Animated.ValueXY()).current;
+  const [timeLeft, setTimeLeft] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    if (!message.self_destruct_seconds) return;
+
+    if (message.status === 'read') {
+      setTimeLeft(message.self_destruct_seconds);
+
+      const interval = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev === null) return null;
+          if (prev <= 1) {
+            clearInterval(interval);
+            const { chatService } = require('../services/chatService');
+            chatService.deleteMessage(message.id).catch(() => {});
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [message.status, message.self_destruct_seconds, message.id]);
 
   // Swipe to Reply gesture setup
   const panResponder = useRef(
@@ -86,6 +110,10 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const messageReactions = (message as any).reactions || [];
   const savedUsers = message.is_saved_by_users || [];
   const isSaved = savedUsers.length > 0;
+
+  if (message.self_destruct_seconds && message.status === 'read' && timeLeft === 0) {
+    return null;
+  }
 
   if (message.deleted_at) {
     return (
@@ -179,6 +207,14 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 
           {/* Footer with time and seen status indicator */}
           <View style={styles.footer}>
+            {message.self_destruct_seconds && message.status === 'read' && timeLeft !== null && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 6 }}>
+                <Timer size={11} color="#FFFC00" style={{ marginRight: 2 }} />
+                <Text style={{ color: '#FFFC00', fontSize: 10, fontWeight: '700' }}>
+                  {timeLeft}s
+                </Text>
+              </View>
+            )}
             <Text style={styles.time}>{formatTime(message.created_at)}</Text>
             {isMe && (
               <View style={styles.status}>
