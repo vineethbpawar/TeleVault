@@ -142,6 +142,45 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
     }
   };
 
+  const importNativeAsset = async (asset: any) => {
+    try {
+      const isVideo = asset.mediaType === 'video';
+      const MediaLibrary = require('expo-media-library');
+      const info = await MediaLibrary.getAssetInfoAsync(asset);
+      if (!info || !info.localUri) {
+        showAlert('Error', 'Unable to resolve file path on device.');
+        return;
+      }
+
+      let finalSize = 0;
+      try {
+        const FileSystem = require('expo-file-system');
+        const fileInfo = await FileSystem.getInfoAsync(info.localUri);
+        if (fileInfo.exists) {
+          finalSize = fileInfo.size;
+        }
+      } catch (_) {}
+
+      await uploadQueueService.addToUploadQueue({
+        file_name: asset.filename || `sync_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`,
+        local_uri: info.localUri,
+        file_type: isVideo ? 'video' : 'image',
+        mime_type: isVideo ? 'video/mp4' : 'image/jpeg',
+        file_size: finalSize || 0,
+        is_private: false,
+        is_drive_file: false,
+        destination: 'memories',
+        folder_id: null,
+        progress: 0,
+        status: 'pending',
+      });
+      showToast('Media queued for secure upload!');
+      setSubTab('cloud');
+    } catch (err: any) {
+      showAlert('Error', 'Failed to import device file.');
+    }
+  };
+
   useEffect(() => {
     if (subTab === 'device') {
       loadLocalMedia();
@@ -825,18 +864,17 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
                 return (
                   <TouchableOpacity 
                     style={styles.localItemWrapper}
-                    activeOpacity={Platform.OS === 'web' ? 0.7 : 1}
+                    activeOpacity={0.7}
                     onPress={() => {
-                      if (Platform.OS === 'web') {
-                        showAlert(
-                          'Import Item',
-                          `Would you like to import "${item.fileName}" to your cloud memories?`,
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Import', onPress: () => importLocalAsset(item) }
-                          ]
-                        );
-                      }
+                      const title = Platform.OS === 'web' ? item.fileName : item.filename;
+                      showAlert(
+                        'Import Item',
+                        `Would you like to import "${title || 'this file'}" to your cloud memories?`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Import', onPress: () => Platform.OS === 'web' ? importLocalAsset(item) : importNativeAsset(item) }
+                        ]
+                      );
                     }}
                   >
                     {renderInner()}

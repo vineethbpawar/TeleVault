@@ -59,6 +59,13 @@
       "expo-video",
       "@config-plugins/react-native-webrtc",
       [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow TeleVault to access your device photos to backup media.",
+          "savePhotosPermission": "Allow TeleVault to save photos to your library."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
