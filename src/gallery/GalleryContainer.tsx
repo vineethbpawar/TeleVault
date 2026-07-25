@@ -4,6 +4,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, Star, Lock, Grid, Trash2, Edit, CheckSquare, X, Share2, Download, Plus, Video, RefreshCw } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getWebBlob, setWebBlob } from '../services/webBlobStore';
+import { Music, FileText } from 'lucide-react-native';
 
 import { MemoryGrid } from './MemoryGrid';
 import { GalleryItem, FilterType } from './types';
@@ -61,8 +64,36 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
   const [localLoading, setLocalLoading] = useState(false);
 
   const loadLocalMedia = async () => {
-    if (Platform.OS === 'web') return;
     setLocalLoading(true);
+    if (Platform.OS === 'web') {
+      try {
+        const storedStr = await AsyncStorage.getItem('@televault_local_web_assets');
+        if (storedStr) {
+          const storedAssets = JSON.parse(storedStr);
+          const activeAssets: any[] = [];
+          for (const asset of storedAssets) {
+            const blob = await getWebBlob(asset.id);
+            if (blob) {
+              const localUrl = URL.createObjectURL(blob);
+              activeAssets.push({
+                ...asset,
+                uri: localUrl,
+              });
+            }
+          }
+          activeAssets.sort((a, b) => (b.creationTime || 0) - (a.creationTime || 0));
+          setLocalAssets(activeAssets);
+        } else {
+          setLocalAssets([]);
+        }
+      } catch (err) {
+        console.warn('Failed to load local web media:', err);
+      } finally {
+        setLocalLoading(false);
+      }
+      return;
+    }
+
     try {
       const MediaLibrary = require('expo-media-library');
       const { status } = await MediaLibrary.requestPermissionsAsync();
@@ -80,6 +111,34 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
       console.warn('Failed to load local media:', err);
     } finally {
       setLocalLoading(false);
+    }
+  };
+
+  const importLocalAsset = async (item: any) => {
+    try {
+      const blob = await getWebBlob(item.id);
+      if (!blob) {
+        showAlert('Error', 'File content is not available locally.');
+        return;
+      }
+      const fileType = item.mediaType === 'photo' || item.mediaType === 'image' ? 'image' : (item.mediaType === 'video' ? 'video' : 'document');
+      await uploadQueueService.addToUploadQueue({
+        file_name: item.fileName,
+        local_uri: item.uri,
+        file_type: fileType,
+        mime_type: blob.type || 'application/octet-stream',
+        file_size: blob.size,
+        is_private: false,
+        is_drive_file: false,
+        destination: 'memories',
+        folder_id: null,
+        progress: 0,
+        status: 'pending',
+      });
+      showToast('Media queued for secure upload!');
+      setSubTab('cloud');
+    } catch (err: any) {
+      showAlert('Error', 'Failed to import local file.');
     }
   };
 
@@ -105,10 +164,12 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
 
   const pickMedia = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        showAlert('Permission Denied', 'Media library access is required.');
-        return;
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          showAlert('Permission Denied', 'Media library access is required.');
+          return;
+        }
       }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
@@ -117,22 +178,72 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         for (const asset of result.assets) {
           const isVideo = asset.type === 'video';
-          await uploadQueueService.addToUploadQueue({
-            file_name: asset.fileName || `upload_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`,
-            local_uri: asset.uri,
-            file_type: isVideo ? 'video' : 'image',
-            mime_type: isVideo ? 'video/mp4' : 'image/jpeg',
-            file_size: asset.fileSize || 0,
-            is_private: false,
-            is_drive_file: false,
-            destination: 'memories',
-            folder_id: null,
-            progress: 0,
-            status: 'pending',
-          });
+          
+          if (Platform.OS === 'web') {
+            try {
+              const res = await fetch(asset.uri);
+              const blob = await res.blob();
+              const fileName = asset.fileName || `web_local_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`;
+              const id = `web_local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+              await setWebBlob(id, blob);
+
+              const newAsset = {
+                id,
+                uri: URL.createObjectURL(blob),
+                mediaType: isVideo ? 'video' : 'photo',
+                fileName,
+                fileSize: blob.size,
+                creationTime: Date.now(),
+              };
+
+              const storedStr = await AsyncStorage.getItem('@televault_local_web_assets');
+              const storedAssets = storedStr ? JSON.parse(storedStr) : [];
+              storedAssets.push(newAsset);
+              await AsyncStorage.setItem('@televault_local_web_assets', JSON.stringify(storedAssets));
+
+              if (autoSyncEnabled) {
+                await uploadQueueService.addToUploadQueue({
+                  file_name: fileName,
+                  local_uri: newAsset.uri,
+                  file_type: isVideo ? 'video' : 'image',
+                  mime_type: blob.type || (isVideo ? 'video/mp4' : 'image/jpeg'),
+                  file_size: blob.size,
+                  is_private: false,
+                  is_drive_file: false,
+                  destination: 'memories',
+                  folder_id: null,
+                  progress: 0,
+                  status: 'pending',
+                });
+              }
+            } catch (webErr) {
+              console.warn('Failed to cache local media on web:', webErr);
+            }
+          } else {
+            await uploadQueueService.addToUploadQueue({
+              file_name: asset.fileName || `upload_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`,
+              local_uri: asset.uri,
+              file_type: isVideo ? 'video' : 'image',
+              mime_type: isVideo ? 'video/mp4' : 'image/jpeg',
+              file_size: asset.fileSize || 0,
+              is_private: false,
+              is_drive_file: false,
+              destination: 'memories',
+              folder_id: null,
+              progress: 0,
+              status: 'pending',
+            });
+          }
         }
-        showToast('Media queued for secure upload!');
-        setSubTab('cloud');
+        showToast(Platform.OS === 'web' && !autoSyncEnabled 
+          ? 'Media imported to local Device Gallery!' 
+          : 'Media queued for secure upload!');
+        
+        if (Platform.OS === 'web') {
+          loadLocalMedia();
+        } else {
+          setSubTab('cloud');
+        }
       }
     } catch (err: any) {
       showAlert('Error', err.message || 'Failed to pick media');
@@ -149,23 +260,73 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
         const asset = result.assets[0];
         const isVideo = asset.mimeType?.startsWith('video/') || false;
         const isImage = asset.mimeType?.startsWith('image/') || false;
-        const fileType = isVideo ? 'video' : isImage ? 'image' : 'document';
+        const isAudio = asset.mimeType?.startsWith('audio/') || false;
+        const fileType = isVideo ? 'video' : isImage ? 'image' : isAudio ? 'audio' : 'document';
         
-        await uploadQueueService.addToUploadQueue({
-          file_name: asset.name,
-          local_uri: asset.uri,
-          file_type: fileType,
-          mime_type: asset.mimeType || 'application/octet-stream',
-          file_size: asset.size || 0,
-          is_private: false,
-          is_drive_file: false,
-          destination: 'memories',
-          folder_id: null,
-          progress: 0,
-          status: 'pending',
-        });
-        showToast('Document queued for secure upload!');
-        setSubTab('cloud');
+        if (Platform.OS === 'web') {
+          try {
+            const res = await fetch(asset.uri);
+            const blob = await res.blob();
+            const fileName = asset.name;
+            const id = `web_local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            await setWebBlob(id, blob);
+
+            const newAsset = {
+              id,
+              uri: URL.createObjectURL(blob),
+              mediaType: fileType,
+              fileName,
+              fileSize: blob.size,
+              creationTime: Date.now(),
+            };
+
+            const storedStr = await AsyncStorage.getItem('@televault_local_web_assets');
+            const storedAssets = storedStr ? JSON.parse(storedStr) : [];
+            storedAssets.push(newAsset);
+            await AsyncStorage.setItem('@televault_local_web_assets', JSON.stringify(storedAssets));
+
+            if (autoSyncEnabled) {
+              await uploadQueueService.addToUploadQueue({
+                file_name: fileName,
+                local_uri: newAsset.uri,
+                file_type: fileType === 'image' ? 'image' : (fileType === 'video' ? 'video' : 'document'),
+                mime_type: asset.mimeType || 'application/octet-stream',
+                file_size: blob.size,
+                is_private: false,
+                is_drive_file: false,
+                destination: 'memories',
+                folder_id: null,
+                progress: 0,
+                status: 'pending',
+              });
+            }
+          } catch (webErr) {
+            console.warn('Failed to cache local document on web:', webErr);
+          }
+        } else {
+          await uploadQueueService.addToUploadQueue({
+            file_name: asset.name,
+            local_uri: asset.uri,
+            file_type: fileType === 'image' ? 'image' : (fileType === 'video' ? 'video' : 'document'),
+            mime_type: asset.mimeType || 'application/octet-stream',
+            file_size: asset.size || 0,
+            is_private: false,
+            is_drive_file: false,
+            destination: 'memories',
+            folder_id: null,
+            progress: 0,
+            status: 'pending',
+          });
+        }
+        showToast(Platform.OS === 'web' && !autoSyncEnabled 
+          ? 'Document imported to local Device Gallery!' 
+          : 'Document queued for secure upload!');
+
+        if (Platform.OS === 'web') {
+          loadLocalMedia();
+        } else {
+          setSubTab('cloud');
+        }
       }
     } catch (err: any) {
       showAlert('Error', err.message || 'Failed to pick document');
@@ -619,7 +780,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
             <View style={styles.center}>
               <Text style={styles.noMediaText}>
                 {Platform.OS === 'web' 
-                  ? 'Device gallery view is only available on native iOS/Android' 
+                  ? 'No local files imported yet. Tap "Import / Upload Files" to add items.' 
                   : 'No local gallery media found.'}
               </Text>
             </View>
@@ -630,15 +791,56 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
               numColumns={3}
               renderItem={({ item }) => {
                 const isVideo = item.mediaType === 'video';
+                const isPhoto = item.mediaType === 'photo' || item.mediaType === 'image';
+                
+                const renderInner = () => {
+                  if (isPhoto || isVideo) {
+                    return (
+                      <>
+                        <Image source={{ uri: item.uri }} style={styles.localItemImage} />
+                        {isVideo && (
+                          <View style={styles.videoBadge}>
+                            <Video size={12} color="#000000" />
+                          </View>
+                        )}
+                      </>
+                    );
+                  }
+                  
+                  const isAudio = item.mediaType === 'audio' || item.fileName?.match(/\.(mp3|wav|m4a|aac|ogg|flac)$/i);
+                  return (
+                    <View style={{ flex: 1, backgroundColor: '#1C1C1E', justifyContent: 'center', alignItems: 'center', padding: 8 }}>
+                      {isAudio ? (
+                        <Music size={28} color="#FFFC00" />
+                      ) : (
+                        <FileText size={28} color="#007AFF" />
+                      )}
+                      <Text style={{ color: '#FFFFFF', fontSize: 10, marginTop: 4, textAlign: 'center' }} numberOfLines={1}>
+                        {item.fileName}
+                      </Text>
+                    </View>
+                  );
+                };
+
                 return (
-                  <View style={styles.localItemWrapper}>
-                    <Image source={{ uri: item.uri }} style={styles.localItemImage} />
-                    {isVideo && (
-                      <View style={styles.videoBadge}>
-                        <Video size={12} color="#000000" />
-                      </View>
-                    )}
-                  </View>
+                  <TouchableOpacity 
+                    style={styles.localItemWrapper}
+                    activeOpacity={Platform.OS === 'web' ? 0.7 : 1}
+                    onPress={() => {
+                      if (Platform.OS === 'web') {
+                        showAlert(
+                          'Import Item',
+                          `Would you like to import "${item.fileName}" to your cloud memories?`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Import', onPress: () => importLocalAsset(item) }
+                          ]
+                        );
+                      }
+                    }}
+                  >
+                    {renderInner()}
+                  </TouchableOpacity>
                 );
               }}
               contentContainerStyle={styles.localGridContent}
