@@ -706,7 +706,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
       if (fileSize > 500 * 1024 * 1024) {
         Alert.alert('Upload Blocked', 'This file is too large. Max supported is 500 MB.');
         return;
-      } else if (fileSize > 50 * 1024 * 1024) {
+      } else if (fileSize > 4 * 1024 * 1024) {
         Alert.alert('Large File Detected', 'This file will be split into chunks and uploaded to Telegram.');
       }
     }

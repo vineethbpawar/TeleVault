@@ -22,8 +22,10 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const status = useAudioPlayerStatus(player);
 
   const isPlaying = status.playing;
-  const position = status.currentTime || 0;
-  const duration = status.duration || 0;
+  const rawPosition = status.currentTime || 0;
+  const rawDuration = status.duration || 0;
+  const duration = rawDuration > 100000 ? rawDuration / 1000 : rawDuration;
+  const position = rawDuration > 100000 ? rawPosition / 1000 : rawPosition;
 
   // Rotation animation for CD/music disc
   const rotationAnim = useRef(new Animated.Value(0)).current;
@@ -81,12 +83,12 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const skipForward = () => {
     if (!duration) return;
     const newPos = Math.min(duration, position + 15);
-    player.seekTo(newPos);
+    player.seekTo(newPos * 1000);
   };
 
   const skipBackward = () => {
     const newPos = Math.max(0, position - 15);
-    player.seekTo(newPos);
+    player.seekTo(newPos * 1000);
   };
 
   const formatTime = (secs: number) => {
@@ -103,7 +105,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     const clickX = e.nativeEvent.locationX;
     const percentage = Math.max(0, Math.min(1, clickX / barWidth));
     const seekTime = percentage * duration;
-    player.seekTo(seekTime);
+    player.seekTo(seekTime * 1000);
   };
 
   const progressPercent = duration > 0 ? (position / duration) * 100 : 0;

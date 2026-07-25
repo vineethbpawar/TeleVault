@@ -895,6 +895,25 @@ export const previewCacheService = {
               fallbackIcon,
             };
           }
+          // Chunked file: rebuild directly from chunks (no getFile limit)
+          if (file.is_chunked && file.large_file_id) {
+            const { largeFileDownloadService } = require('./largeFileDownloadService');
+            const rebuildResult = await largeFileDownloadService.downloadAndRebuildLargeFile(
+              file.large_file_id,
+              file.is_private,
+              file.mime_type
+            );
+            if (rebuildResult.success && rebuildResult.localUri) {
+              await this.setCachedPreview(file.telegram_file_id, rebuildResult.localUri);
+              return {
+                type: fileType,
+                previewUri: rebuildResult.localUri,
+                fallbackIcon,
+              };
+            } else {
+              throw new Error(rebuildResult.message || 'Failed to rebuild chunked file.');
+            }
+          }
           const { fileInfo, workingToken } = await telegramService.getTelegramFileInfo(file.telegram_file_id, signal);
           const url = `https://api.telegram.org/file/bot${workingToken}/${fileInfo.file_path}`;
           

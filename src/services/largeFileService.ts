@@ -16,10 +16,9 @@ async function deleteFileHelper(tempUri: string): Promise<void> {
   }
 }
 
-export const NORMAL_TELEGRAM_LIMIT_BYTES = Platform.OS === 'web' ? 4 * 1024 * 1024 : 50 * 1024 * 1024;
-// Telegram Bot API getFile endpoint has a hard 20 MB download limit.
-// Keep chunks at 15 MB to stay safely under that ceiling with 5 MB margin.
-export const CHUNK_SIZE_BYTES = Platform.OS === 'web' ? 4 * 1024 * 1024 : 15 * 1024 * 1024;
+export const NORMAL_TELEGRAM_LIMIT_BYTES = 4 * 1024 * 1024; // 4 MB threshold for both web and native due to Vercel proxy response limits
+// Keep chunks at 4 MB to stay safely under Vercel serverless request/response size limits (4.5 MB ceiling)
+export const CHUNK_SIZE_BYTES = 4 * 1024 * 1024;
 export const MAX_CHUNKED_FILE_BYTES = 500 * 1024 * 1024;
 
 export const largeFileService = {

@@ -713,7 +713,7 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
       return;
     }
 
-    if (size > 50 * 1024 * 1024) {
+    if (size > 4 * 1024 * 1024) {
       Alert.alert('Large File Split', 'Large file detected. TeleVault will partition it into chunked pieces automatically.');
     }
 
