@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, Platform, Switch, FlatList, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, Star, Lock, Grid, Trash2, Edit, CheckSquare, X, Share2, Download, Plus, Video, RefreshCw } from 'lucide-react-native';
@@ -62,6 +62,19 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
   const [localAssets, setLocalAssets] = useState<any[]>([]);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
   const [localLoading, setLocalLoading] = useState(false);
+  const [deviceFilterType, setDeviceFilterType] = useState<'all' | 'image' | 'video' | 'audio' | 'document'>('all');
+
+  const filteredLocalAssets = useMemo(() => {
+    return localAssets.filter((item: any) => {
+      if (deviceFilterType === 'all') return true;
+      const type = item.mediaType || '';
+      if (deviceFilterType === 'image') return type === 'photo' || type === 'image';
+      if (deviceFilterType === 'video') return type === 'video';
+      const isAudio = type === 'audio' || (item.fileName || item.filename)?.match(/\.(mp3|wav|m4a|aac|ogg|flac)$/i);
+      if (deviceFilterType === 'audio') return !!isAudio;
+      return type === 'document' && !isAudio;
+    });
+  }, [localAssets, deviceFilterType]);
 
   const loadLocalMedia = async () => {
     setLocalLoading(true);
@@ -810,25 +823,42 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
             </TouchableOpacity>
           </View>
 
+          {/* Category Tabs for local assets */}
+          <View style={[styles.tabContainer, { marginTop: 12, marginBottom: 12 }]}>
+            {(['all', 'image', 'video', 'audio', 'document'] as const).map((tab) => (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.tabItem, deviceFilterType === tab && styles.tabItemActive]}
+                onPress={() => setDeviceFilterType(tab)}
+              >
+                {tab === 'audio' && <Music size={12} color={deviceFilterType === tab ? '#000000' : '#8E8E93'} style={{ marginRight: 4 }} />}
+                {tab === 'document' && <FileText size={12} color={deviceFilterType === tab ? '#000000' : '#8E8E93'} style={{ marginRight: 4 }} />}
+                <Text style={[styles.tabText, deviceFilterType === tab && styles.tabTextActive]}>
+                  {tab.toUpperCase()}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           {/* Local Grid */}
           {localLoading ? (
             <View style={styles.center}>
               <ActivityIndicator size="large" color="#FFFC00" />
             </View>
-          ) : localAssets.length === 0 ? (
+          ) : filteredLocalAssets.length === 0 ? (
             <View style={styles.center}>
               <Text style={styles.noMediaText}>
                 {Platform.OS === 'web' 
-                  ? 'No local files imported yet. Tap "Import / Upload Files" to add items.' 
-                  : 'No local gallery media found.'}
+                  ? 'No local files imported under this category. Tap "Import / Upload Files" to add items.' 
+                  : 'No device media found under this category.'}
               </Text>
             </View>
           ) : (
-            <FlatList
-              data={localAssets}
+            <FlatList<any>
+              data={filteredLocalAssets}
               keyExtractor={(item) => item.id}
               numColumns={3}
-              renderItem={({ item }) => {
+              renderItem={({ item }: { item: any }) => {
                 const isVideo = item.mediaType === 'video';
                 const isPhoto = item.mediaType === 'photo' || item.mediaType === 'image';
                 
@@ -846,7 +876,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
                     );
                   }
                   
-                  const isAudio = item.mediaType === 'audio' || item.fileName?.match(/\.(mp3|wav|m4a|aac|ogg|flac)$/i);
+                  const isAudio = item.mediaType === 'audio' || (item.fileName || item.filename)?.match(/\.(mp3|wav|m4a|aac|ogg|flac)$/i);
                   return (
                     <View style={{ flex: 1, backgroundColor: '#1C1C1E', justifyContent: 'center', alignItems: 'center', padding: 8 }}>
                       {isAudio ? (
@@ -855,7 +885,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
                         <FileText size={28} color="#007AFF" />
                       )}
                       <Text style={{ color: '#FFFFFF', fontSize: 10, marginTop: 4, textAlign: 'center' }} numberOfLines={1}>
-                        {item.fileName}
+                        {item.fileName || item.filename}
                       </Text>
                     </View>
                   );
