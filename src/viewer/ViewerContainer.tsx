@@ -5,6 +5,7 @@ import { Modal } from 'react-native';
 
 import { ImageViewer } from './ImageViewer';
 import { VideoPlayer } from './VideoPlayer';
+import { AudioPlayer } from './AudioPlayer';
 import { previewCacheService } from '../services/previewCacheService';
 import { fileService } from '../services/fileService';
 import { showToast } from '../components/ToastBanner';
@@ -78,9 +79,14 @@ const ViewerItem = React.memo<{
   }
 
   if (!resolvedUri) {
+    const isAudio = file.mime_type?.startsWith('audio/') || 
+      (file.file_name && /\.(mp3|wav|m4a|aac|ogg|flac)($|\?)/i.test(file.file_name));
+
     return renderPressableContent(
       <View style={[styles.itemCenter, { paddingHorizontal: 32 }]}>
-        <Text style={{ color: '#FF3B30', fontSize: 18, textAlign: 'center', marginBottom: 10 }}>⚠️ Can't Play Video</Text>
+        <Text style={{ color: '#FF3B30', fontSize: 18, textAlign: 'center', marginBottom: 10 }}>
+          {isAudio ? "⚠️ Can't Play Audio" : "⚠️ Can't Play Video"}
+        </Text>
         <Text style={{ color: '#8E8E93', fontSize: 13, textAlign: 'center', lineHeight: 20 }}>
           {mediaError || 'Unable to load media'}
         </Text>
@@ -89,6 +95,27 @@ const ViewerItem = React.memo<{
   }
 
   const isVideo = file.file_type === 'video';
+  const isAudio = file.mime_type?.startsWith('audio/') || 
+    (file.file_name && /\.(mp3|wav|m4a|aac|ogg|flac)($|\?)/i.test(file.file_name));
+
+  if (isAudio) {
+    return (
+      <View style={styles.itemContainer}>
+        {isActive ? (
+          <AudioPlayer
+            source={resolvedUri}
+            fileName={file.file_name}
+            fileSize={file.file_size}
+            paused={paused}
+          />
+        ) : (
+          <View style={styles.itemCenter}>
+            <ActivityIndicator size="small" color="#8E8E93" />
+          </View>
+        )}
+      </View>
+    );
+  }
 
   return (
     <Pressable
@@ -551,7 +578,17 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
             
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Type</Text>
-              <Text style={styles.infoValue}>{activeFile.file_type === 'video' ? '🎬 Video' : '📸 Image'}</Text>
+              <Text style={styles.infoValue}>
+                {(() => {
+                  const name = activeFile.file_name || '';
+                  const mime = activeFile.mime_type || '';
+                  const isAudio = mime.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)($|\?)/i.test(name);
+                  if (isAudio) return '🎵 Audio';
+                  if (activeFile.file_type === 'video') return '🎬 Video';
+                  if (activeFile.file_type === 'image') return '📸 Image';
+                  return '📁 Document';
+                })()}
+              </Text>
             </View>
 
             <View style={styles.infoRow}>

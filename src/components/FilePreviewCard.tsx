@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, Image, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
-import { FileImage, FileVideo, FileText, Play, File, AlertTriangle } from 'lucide-react-native';
+import { FileImage, FileVideo, FileText, Play, File, AlertTriangle, Music } from 'lucide-react-native';
 import { TeleVaultFile } from '../types/file';
 import { previewCacheService } from '../services/previewCacheService';
 import { telegramService } from '../services/telegramService';
@@ -32,6 +32,9 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
   const isImage = file.file_type === 'image' ||
     (file.mime_type && file.mime_type.startsWith('image/')) ||
     (file.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(file.file_name));
+
+  const isAudio = file.mime_type?.startsWith('audio/') ||
+    (file.file_name && /\.(mp3|wav|m4a|aac|ogg|flac)($|\?)/i.test(file.file_name));
 
   const isVideoUri = (uri: string | null | undefined): boolean => {
     if (!uri) return false;
@@ -266,6 +269,20 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
               <Text style={[styles.fallbackSubText, { color: '#FF453A' }]} numberOfLines={1}>
                 {errorMsg}
               </Text>
+            </>
+          )}
+        </View>
+      );
+    }
+
+    if (isAudio) {
+      return (
+        <View style={[styles.center, styles.docBg, { backgroundColor: '#1C1C1E' }]}>
+          <Music size={variant === 'row' ? 24 : 32} color="#FFCC00" />
+          {variant !== 'grid' && (
+            <>
+              <Text style={styles.fallbackText} numberOfLines={1}>{file.file_name}</Text>
+              <Text style={styles.fallbackSubText} numberOfLines={1}>{formatSize(file.file_size)}</Text>
             </>
           )}
         </View>
