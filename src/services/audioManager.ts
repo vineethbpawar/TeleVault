@@ -10,14 +10,18 @@
  * Cross-platform: handles web audio context, Android InCallManager.
  */
 
-import { Platform } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 
-// Conditionally import InCallManager only on native
+// Conditionally import InCallManager only on native and if the native module is linked
 let InCallManager: any = null;
 
 if (Platform.OS !== 'web') {
   try {
-    InCallManager = require('react-native-incall-manager').default;
+    if (NativeModules.RNInCallManager) {
+      InCallManager = require('react-native-incall-manager').default;
+    } else {
+      console.warn('[AudioManager] Native RNInCallManager is not linked. Skipping InCallManager.');
+    }
   } catch (err) {
     console.warn('[AudioManager] react-native-incall-manager not available:', err);
   }
