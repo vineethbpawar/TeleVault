@@ -95,7 +95,7 @@ export const fileService = {
         telegram_file_id: metadata.telegram_file_id,
         telegram_file_unique_id: metadata.telegram_file_unique_id,
         local_thumbnail_uri: metadata.local_thumbnail_uri,
-        overlay_metadata: metadata.overlay_metadata || [],
+        overlay_metadata: metadata.overlay_metadata || {},
       })
       .select()
       .single();
@@ -119,10 +119,34 @@ export const fileService = {
       .select('*')
       .eq('user_id', user.id)
       .eq('is_drive_file', false)
+      .or('overlay_metadata.is.null,overlay_metadata.not.cs.{"is_device_import":true}')
       .order('created_at', { ascending: false });
 
     if (error) {
       console.error("FETCHMEMORIES error:", error);
+      throw new Error(error.message);
+    }
+
+    // Safety: client-side filter in case DB filter misses edge cases
+    return ((data || []) as TeleVaultFile[]).filter(
+      (f: any) => !f.overlay_metadata?.is_device_import
+    );
+  },
+
+  async fetchDeviceImports(): Promise<TeleVaultFile[]> {
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
+    if (!user) throw new Error('Not logged in.');
+
+    const { data, error } = await supabase
+      .from('files')
+      .select('*')
+      .eq('user_id', user.id)
+      .contains('overlay_metadata', { is_device_import: true })
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error("FETCH_DEVICE_IMPORTS error:", error);
       throw new Error(error.message);
     }
 
@@ -416,7 +440,7 @@ export const fileService = {
         telegram_file_unique_id: file.telegram_file_unique_id,
         local_thumbnail_uri: file.local_thumbnail_uri,
         caption: file.caption,
-        overlay_metadata: file.overlay_metadata || [],
+        overlay_metadata: file.overlay_metadata || {},
       })
       .select()
       .single();

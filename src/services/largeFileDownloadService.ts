@@ -64,7 +64,11 @@ export const largeFileDownloadService = {
       
       const completedChunks = chunks.filter(c => c.status === 'completed');
       if (completedChunks.length !== chunkCount) {
-        throw new Error(`Cannot rebuild file: only ${completedChunks.length}/${chunkCount} chunks completed.`);
+        return {
+          success: false,
+          message: `Cannot rebuild file: only ${completedChunks.length}/${chunkCount} chunks completed.`,
+          localUri: null,
+        };
       }
 
       if (Platform.OS === 'web') {

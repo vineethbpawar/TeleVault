@@ -31,7 +31,7 @@ class AutoSyncService {
     if (!enabled) return;
 
     try {
-      const MediaLibrary = require('expo-media-library');
+      const MediaLibrary = require('expo-media-library/legacy');
       // 1. Check/request permission
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {

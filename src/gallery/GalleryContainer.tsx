@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, Platform, Switch, FlatList, Image } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, Platform, Switch, FlatList, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, Star, Lock, Grid, Trash2, Edit, CheckSquare, X, Share2, Download, Plus, Video, RefreshCw } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 
 import { MemoryGrid } from './MemoryGrid';
 import { GalleryItem, FilterType } from './types';
@@ -56,6 +57,9 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [subTab, setSubTab] = useState<'cloud' | 'device'>('cloud');
+  const [deviceCategory, setDeviceCategory] = useState<'all' | 'video' | 'image' | 'files' | 'document' | 'local_media'>('local_media');
+  const [activeQueueItems, setActiveQueueItems] = useState<any[]>([]);
+  const [deviceImportItems, setDeviceImportItems] = useState<GalleryItem[]>([]);
   const [localAssets, setLocalAssets] = useState<any[]>([]);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
   const [localLoading, setLocalLoading] = useState(false);
@@ -64,7 +68,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
     if (Platform.OS === 'web') return;
     setLocalLoading(true);
     try {
-      const MediaLibrary = require('expo-media-library');
+      const MediaLibrary = require('expo-media-library/legacy');
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         setLocalLoading(false);
@@ -117,22 +121,33 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         for (const asset of result.assets) {
           const isVideo = asset.type === 'video';
+          
+          let finalSize = 0;
+          try {
+            const fileInfo = await FileSystem.getInfoAsync(asset.uri);
+            if (fileInfo.exists) {
+              finalSize = fileInfo.size;
+            }
+          } catch (_) {}
+
           await uploadQueueService.addToUploadQueue({
             file_name: asset.fileName || `upload_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`,
             local_uri: asset.uri,
             file_type: isVideo ? 'video' : 'image',
             mime_type: isVideo ? 'video/mp4' : 'image/jpeg',
-            file_size: asset.fileSize || 0,
+            file_size: finalSize,
             is_private: false,
             is_drive_file: false,
             destination: 'memories',
             folder_id: null,
             progress: 0,
             status: 'pending',
+            overlay_metadata: { is_device_import: true }
           });
         }
         showToast('Media queued for secure upload!');
-        setSubTab('cloud');
+        setSubTab('device');
+        setDeviceCategory('all');
       }
     } catch (err: any) {
       showAlert('Error', err.message || 'Failed to pick media');
@@ -147,25 +162,59 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
       });
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        const isVideo = asset.mimeType?.startsWith('video/') || false;
-        const isImage = asset.mimeType?.startsWith('image/') || false;
-        const fileType = isVideo ? 'video' : isImage ? 'image' : 'document';
+        
+        const getCategoryForFile = (fileName: string, mimeType: string): 'video' | 'image' | 'document' | 'file' => {
+          const lowerName = fileName.toLowerCase();
+          const lowerMime = (mimeType || '').toLowerCase();
+          if (lowerMime.startsWith('video/') || lowerName.match(/\.(mp4|mov|avi|mkv|webm|3gp)$/)) {
+            return 'video';
+          }
+          if (lowerMime.startsWith('image/') || lowerName.match(/\.(jpg|jpeg|png|gif|webp|heic|bmp)$/)) {
+            return 'image';
+          }
+          if (
+            lowerMime.startsWith('text/') ||
+            lowerMime.includes('pdf') ||
+            lowerMime.includes('document') ||
+            lowerMime.includes('sheet') ||
+            lowerMime.includes('presentation') ||
+            lowerName.match(/\.(pdf|doc|docx|txt|rtf|xls|xlsx|ppt|pptx|csv|epub)$/)
+          ) {
+            return 'document';
+          }
+          return 'file';
+        };
+
+        const subCategory = getCategoryForFile(asset.name, asset.mimeType || '');
+        const fileType = (subCategory === 'video' || subCategory === 'image') ? subCategory : 'document';
+        
+        let finalSize = asset.size || 0;
+        if (!finalSize) {
+          try {
+            const fileInfo = await FileSystem.getInfoAsync(asset.uri);
+            if (fileInfo.exists) {
+              finalSize = fileInfo.size;
+            }
+          } catch (_) {}
+        }
         
         await uploadQueueService.addToUploadQueue({
           file_name: asset.name,
           local_uri: asset.uri,
           file_type: fileType,
           mime_type: asset.mimeType || 'application/octet-stream',
-          file_size: asset.size || 0,
+          file_size: finalSize,
           is_private: false,
           is_drive_file: false,
           destination: 'memories',
           folder_id: null,
           progress: 0,
           status: 'pending',
+          overlay_metadata: { is_device_import: true, sub_category: subCategory }
         });
         showToast('Document queued for secure upload!');
-        setSubTab('cloud');
+        setSubTab('device');
+        setDeviceCategory('all');
       }
     } catch (err: any) {
       showAlert('Error', err.message || 'Failed to pick document');
@@ -224,7 +273,10 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
     }
 
     try {
-      const data = await fileService.fetchMemories();
+      const [data, deviceData] = await Promise.all([
+        fileService.fetchMemories(),
+        fileService.fetchDeviceImports(),
+      ]);
       sessionMemoriesCache = data; // persist for next navigation
 
       // Pre-warm IndexedDB → in-memory blob cache BEFORE setState so MemoryItem
@@ -234,6 +286,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
       }
 
       setItems(data);
+      setDeviceImportItems(deviceData);
 
       // Background: pre-warm preview thumbnails for first screenful of items
       // Deferred 1.5s so UI renders first (per AGENTS.md lazy startup rule)
@@ -300,8 +353,22 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
   // Local upload queue changes listener
   useEffect(() => {
     if (!isFocused) return;
+
+    const updateQueueState = async () => {
+      try {
+        const queue = await uploadQueueService.getUploadQueue();
+        const activeImports = queue.filter(
+          item => item.status !== 'completed' && item.overlay_metadata?.is_device_import
+        );
+        setActiveQueueItems(activeImports);
+      } catch (_) {}
+    };
+
+    updateQueueState();
+
     const unsubscribe = uploadQueueService.subscribeToQueue(() => {
       loadMemories(false);
+      updateQueueState();
     });
 
     return () => {
@@ -312,6 +379,9 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
   // Filter and Search items
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
+      // Exclude imported device files from Memories
+      if (item.overlay_metadata?.is_device_import) return false;
+
       // 1. Filter Type check
       if (filterType === 'private') {
         if (!item.is_private) return false;
@@ -335,9 +405,98 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
     });
   }, [items, filterType, searchQuery]);
 
+  const mappedQueueItems = useMemo(() => {
+    return activeQueueItems.map(q => ({
+      id: q.id,
+      file_name: q.file_name,
+      file_type: q.file_type,
+      mime_type: q.mime_type,
+      file_size: q.file_size,
+      is_private: q.is_private,
+      is_drive_file: q.is_drive_file,
+      local_thumbnail_uri: q.local_thumbnail_uri || q.local_uri,
+      uploaded_at: q.created_at,
+      created_at: q.created_at,
+      telegram_file_id: null,
+      overlay_metadata: q.overlay_metadata || { is_device_import: true },
+      progress: q.progress,
+      status: q.status,
+    } as any));
+  }, [activeQueueItems]);
+
+  const filteredDeviceImportedItems = useMemo(() => {
+    const dbImported = deviceImportItems;
+
+    const combined = [...mappedQueueItems, ...dbImported];
+
+    return combined.filter((item) => {
+      const subCat = item.overlay_metadata?.sub_category || item.file_type;
+      if (deviceCategory === 'video' && item.file_type !== 'video') return false;
+      if (deviceCategory === 'image' && item.file_type !== 'image') return false;
+      if (deviceCategory === 'files' && subCat !== 'file') return false;
+      if (deviceCategory === 'document' && subCat !== 'document') return false;
+
+      // Search query check
+      if (searchQuery.trim().length > 0) {
+        const query = searchQuery.toLowerCase();
+        const matchesName = item.file_name?.toLowerCase().includes(query);
+        const matchesCaption = item.caption?.toLowerCase().includes(query);
+        return matchesName || matchesCaption;
+      }
+
+      return true;
+    });
+  }, [deviceImportItems, mappedQueueItems, deviceCategory, searchQuery]);
+
   function useMemo(factory: () => GalleryItem[], deps: any[]): GalleryItem[] {
     return React.useMemo(factory, deps);
   }
+
+  const handleLocalAssetPress = (item: any) => {
+    Alert.alert(
+      'Import Media',
+      `Would you like to import "${item.filename || 'this media'}" to TeleVault?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Import',
+          onPress: async () => {
+            try {
+              const isVideo = item.mediaType === 'video';
+              const fileType = isVideo ? 'video' : 'image';
+              
+              let finalSize = 0;
+              try {
+                const fileInfo = await FileSystem.getInfoAsync(item.uri);
+                if (fileInfo.exists) {
+                  finalSize = fileInfo.size;
+                }
+              } catch (_) {}
+
+              await uploadQueueService.addToUploadQueue({
+                file_name: item.filename || `local_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`,
+                local_uri: item.uri,
+                file_type: fileType,
+                mime_type: isVideo ? 'video/mp4' : 'image/jpeg',
+                file_size: finalSize,
+                is_private: false,
+                is_drive_file: false,
+                destination: 'memories',
+                folder_id: null,
+                progress: 0,
+                status: 'pending',
+                overlay_metadata: { is_device_import: true },
+              });
+              showToast('Media queued for secure import!');
+              setDeviceCategory('all');
+            } catch (err: any) {
+              showAlert('Error', err.message || 'Failed to import media');
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -362,9 +521,10 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
     }
 
     // Filter to only include items of the current tab/search that are ready
-    const index = filteredItems.findIndex((f) => f.id === item.id);
+    const activeList = subTab === 'device' ? filteredDeviceImportedItems : filteredItems;
+    const index = activeList.findIndex((f) => f.id === item.id);
     navigation.navigate('MemoriesViewer', {
-      files: filteredItems,
+      files: activeList,
       initialIndex: index >= 0 ? index : 0,
     });
   };
@@ -610,39 +770,87 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
             </TouchableOpacity>
           </View>
 
-          {/* Local Grid */}
-          {localLoading ? (
+          {/* Device Tabs Selector Row */}
+          <View style={{ marginBottom: 12 }}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
+            >
+              {([
+                { key: 'local_media', label: 'Local Media' },
+                { key: 'all', label: 'All' },
+                { key: 'video', label: 'Video' },
+                { key: 'image', label: 'Image' },
+                { key: 'files', label: 'Files' },
+                { key: 'document', label: 'Document' },
+              ] as const).map((tab) => (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[styles.tabItem, deviceCategory === tab.key && styles.tabItemActive]}
+                  onPress={() => setDeviceCategory(tab.key)}
+                >
+                  <Text style={[styles.tabText, deviceCategory === tab.key && styles.tabTextActive]}>
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* Grid Selection */}
+          {deviceCategory === 'local_media' ? (
+            localLoading ? (
+              <View style={styles.center}>
+                <ActivityIndicator size="large" color="#FFFC00" />
+              </View>
+            ) : localAssets.length === 0 ? (
+              <View style={styles.center}>
+                <Text style={styles.noMediaText}>
+                  {Platform.OS === 'web' 
+                    ? 'Device gallery view is only available on native iOS/Android' 
+                    : 'No local gallery media found.'}
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={localAssets}
+                keyExtractor={(item) => item.id}
+                numColumns={3}
+                renderItem={({ item }) => {
+                  const isVideo = item.mediaType === 'video';
+                  return (
+                    <TouchableOpacity 
+                      style={styles.localItemWrapper}
+                      onPress={() => handleLocalAssetPress(item)}
+                      activeOpacity={0.8}
+                    >
+                      <Image source={{ uri: item.uri }} style={styles.localItemImage} />
+                      {isVideo && (
+                        <View style={styles.videoBadge}>
+                          <Video size={12} color="#000000" />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                }}
+                contentContainerStyle={styles.localGridContent}
+                showsVerticalScrollIndicator={false}
+              />
+            )
+          ) : filteredDeviceImportedItems.length === 0 ? (
             <View style={styles.center}>
-              <ActivityIndicator size="large" color="#FFFC00" />
-            </View>
-          ) : localAssets.length === 0 ? (
-            <View style={styles.center}>
-              <Text style={styles.noMediaText}>
-                {Platform.OS === 'web' 
-                  ? 'Device gallery view is only available on native iOS/Android' 
-                  : 'No local gallery media found.'}
-              </Text>
+              <Text style={styles.noMediaText}>No imported items found.</Text>
             </View>
           ) : (
-            <FlatList
-              data={localAssets}
-              keyExtractor={(item) => item.id}
-              numColumns={3}
-              renderItem={({ item }) => {
-                const isVideo = item.mediaType === 'video';
-                return (
-                  <View style={styles.localItemWrapper}>
-                    <Image source={{ uri: item.uri }} style={styles.localItemImage} />
-                    {isVideo && (
-                      <View style={styles.videoBadge}>
-                        <Video size={12} color="#000000" />
-                      </View>
-                    )}
-                  </View>
-                );
-              }}
-              contentContainerStyle={styles.localGridContent}
-              showsVerticalScrollIndicator={false}
+            <MemoryGrid
+              items={filteredDeviceImportedItems}
+              onPressItem={handlePressItem}
+              onLongPressItem={handleLongPressItem}
+              selectedIds={selectedIds}
+              isSelectionMode={isSelectionMode}
+              onRefresh={handleRefresh}
+              refreshing={refreshing}
             />
           )}
         </View>

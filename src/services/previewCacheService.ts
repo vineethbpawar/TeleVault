@@ -313,7 +313,9 @@ export const previewCacheService = {
           resolvedLocalUri = await resolveWebBlobUrl(resolvedLocalUri);
         }
       } else {
-        if (resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
+        if (resolvedLocalUri.startsWith('webblob:') || resolvedLocalUri.startsWith('blob:')) {
+          resolvedLocalUri = null;
+        } else if (resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://') || resolvedLocalUri.startsWith('data:')) {
           // Keep it
         } else {
           try {
@@ -447,27 +449,30 @@ export const previewCacheService = {
             }
           }
         } else {
-          if (resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
+          if (resolvedLocalUri.startsWith('webblob:') || resolvedLocalUri.startsWith('blob:')) {
+            resolvedLocalUri = null;
+          } else if (resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://') || resolvedLocalUri.startsWith('data:')) {
             return {
               type: 'image',
               previewUri: resolvedLocalUri,
               fallbackIcon,
             };
-          }
-          try {
-            const info = await FileSystem.getInfoAsync(resolvedLocalUri);
-            if (info.exists) {
-              return {
-                type: 'image',
-                previewUri: resolvedLocalUri,
-                fallbackIcon,
-              };
-            } else {
+          } else {
+            try {
+              const info = await FileSystem.getInfoAsync(resolvedLocalUri);
+              if (info.exists) {
+                return {
+                  type: 'image',
+                  previewUri: resolvedLocalUri,
+                  fallbackIcon,
+                };
+              } else {
+                resolvedLocalUri = null;
+              }
+            } catch (e) {
+              console.warn('Local image check failed:', e);
               resolvedLocalUri = null;
             }
-          } catch (e) {
-            console.warn('Local image check failed:', e);
-            resolvedLocalUri = null;
           }
         }
       }
@@ -577,7 +582,9 @@ export const previewCacheService = {
             playableUri = resolvedLocalUri;
           }
         } else {
-          if (resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
+          if (resolvedLocalUri.startsWith('webblob:') || resolvedLocalUri.startsWith('blob:') || resolvedLocalUri.startsWith('data:')) {
+            // Ignore on native
+          } else if (resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
             playableUri = resolvedLocalUri;
           } else {
             try {
@@ -723,7 +730,9 @@ export const previewCacheService = {
             }
           }
         } else {
-          if (file.local_thumbnail_uri.startsWith('ph://') || file.local_thumbnail_uri.startsWith('assets-library://')) {
+          if (file.local_thumbnail_uri.startsWith('webblob:') || file.local_thumbnail_uri.startsWith('blob:')) {
+            // Ignore on native
+          } else if (file.local_thumbnail_uri.startsWith('ph://') || file.local_thumbnail_uri.startsWith('assets-library://') || file.local_thumbnail_uri.startsWith('data:')) {
             previewUri = file.local_thumbnail_uri;
             hasLocalThumb = true;
           } else {
@@ -754,10 +763,17 @@ export const previewCacheService = {
                 hasCachedThumb = true;
               }
             } else {
-              const info = await FileSystem.getInfoAsync(cachedThumb);
-              if (info.exists) {
+              if (cachedThumb.startsWith('webblob:') || cachedThumb.startsWith('blob:')) {
+                // Ignore on native
+              } else if (cachedThumb.startsWith('data:')) {
                 previewUri = cachedThumb;
                 hasCachedThumb = true;
+              } else {
+                const info = await FileSystem.getInfoAsync(cachedThumb);
+                if (info.exists) {
+                  previewUri = cachedThumb;
+                  hasCachedThumb = true;
+                }
               }
             }
           }
@@ -844,23 +860,26 @@ export const previewCacheService = {
           }
         }
       } else {
-        if (resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://')) {
+        if (resolvedLocalUri.startsWith('webblob:') || resolvedLocalUri.startsWith('blob:')) {
+          // Ignore
+        } else if (resolvedLocalUri.startsWith('ph://') || resolvedLocalUri.startsWith('assets-library://') || resolvedLocalUri.startsWith('data:')) {
           return {
             type: fileType,
             previewUri: resolvedLocalUri,
             fallbackIcon,
           };
+        } else {
+          try {
+            const info = await FileSystem.getInfoAsync(resolvedLocalUri);
+            if (info.exists) {
+              return {
+                type: fileType,
+                previewUri: resolvedLocalUri,
+                fallbackIcon,
+              };
+            }
+          } catch (e) {}
         }
-        try {
-          const info = await FileSystem.getInfoAsync(resolvedLocalUri);
-          if (info.exists) {
-            return {
-              type: fileType,
-              previewUri: resolvedLocalUri,
-              fallbackIcon,
-            };
-          }
-        } catch (e) {}
       }
     }
 

@@ -8,6 +8,7 @@ interface VideoPlayerProps {
   style?: any;
   onError?: (error: any) => void;
   paused?: boolean;
+  isMuted?: boolean;
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
@@ -15,6 +16,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   style,
   onError,
   paused = false,
+  isMuted = false,
 }) => {
   const isFocused = useIsFocused();
 
@@ -37,12 +39,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           video.src = source;
           video.load();
         }
-        video.muted = false;
-        video.play().catch(() => {
-          // Auto-fallback to muted if blocked
-          video.muted = true;
+        video.muted = isMuted;
+        if (!isMuted) {
+          video.play().catch(() => {
+            // Auto-fallback to muted if blocked
+            video.muted = true;
+            video.play().catch(() => {});
+          });
+        } else {
           video.play().catch(() => {});
-        });
+        }
       } else {
         video.pause();
       }
@@ -55,7 +61,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           video.load();
         } catch (_) {}
       };
-    }, [source, isFocused, paused]);
+    }, [source, isFocused, paused, isMuted]);
 
     return (
       <View style={[styles.container, style]}>
@@ -73,11 +79,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   // Native AVPlayer / ExoPlayer (Expo Video) Implementation
   const player = useVideoPlayer(source, (playerInstance) => {
     playerInstance.loop = true;
+    playerInstance.muted = isMuted;
   });
 
   useEffect(() => {
     if (!player) return;
 
+    player.muted = isMuted;
     if (isFocused && !paused) {
       player.play();
     } else {
@@ -88,10 +96,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       try {
         player.pause();
         player.muted = true;
-        player.replace(null); // Unload stream resources instantly
+        player.replaceAsync(null); // Unload stream resources instantly
       } catch (_) {}
     };
-  }, [player, source, isFocused, paused]);
+  }, [player, source, isFocused, paused, isMuted]);
 
   return (
     <View style={[styles.container, style]}>

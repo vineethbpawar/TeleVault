@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
-import { Star, Video, Image as ImageIcon } from 'lucide-react-native';
+import { Star, Video, Image as ImageIcon, Music } from 'lucide-react-native';
 import { GalleryItem } from './types';
 import { previewCacheService } from '../services/previewCacheService';
 
@@ -40,6 +40,8 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
     }, [item.id, item.local_thumbnail_uri, item.telegram_file_id]);
 
     const isVideo = item.file_type === 'video';
+    const isAudio = item.mime_type?.startsWith('audio/') || 
+      (item.file_name && /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(item.file_name));
 
     return (
       <TouchableOpacity
@@ -60,7 +62,9 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
           <Image source={{ uri: imgUri }} style={styles.image} resizeMode="cover" />
         ) : (
           <View style={styles.fallbackContainer}>
-            {isVideo ? (
+            {isAudio ? (
+              <Music size={24} color="#FFFC00" />
+            ) : isVideo ? (
               <Video size={24} color="#8E8E93" />
             ) : (
               <ImageIcon size={24} color="#8E8E93" />
@@ -72,6 +76,13 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
         {isVideo && (
           <View style={styles.videoBadge}>
             <Video size={10} color="#FFFFFF" fill="#FFFFFF" />
+          </View>
+        )}
+
+        {/* Audio Badge Overlay */}
+        {isAudio && (
+          <View style={[styles.videoBadge, { backgroundColor: 'rgba(255, 252, 0, 0.2)' }]}>
+            <Music size={10} color="#FFFC00" fill="#FFFC00" />
           </View>
         )}
 

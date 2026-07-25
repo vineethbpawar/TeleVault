@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Modal, Platform, AppState, ScrollView, RefreshControl, Dimensions, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Plus, FolderPlus, Upload, ArrowLeft, Folder, ChevronRight, ChevronLeft, MoreVertical, Search, ArrowUpDown, Lock, FileText, HardDrive, Star, Image as ImageIcon, Video, Trash2, Edit, CheckSquare, X, Share2, CloudUpload, AlertTriangle, Info } from 'lucide-react-native';
+import { Plus, FolderPlus, Upload, ArrowLeft, Folder, ChevronRight, ChevronLeft, MoreVertical, Search, ArrowUpDown, Lock, FileText, HardDrive, Star, Image as ImageIcon, Video, Trash2, Edit, CheckSquare, X, Share2, CloudUpload, AlertTriangle, Info, Music } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -17,6 +17,7 @@ import UploadProgress from '../components/UploadProgress';
 import { fileOpenService } from '../services/fileOpenService';
 import { previewCacheService } from '../services/previewCacheService';
 import VideoPlayer from '../components/VideoPlayer';
+import { AudioPlayer } from '../viewer/AudioPlayer';
 import { DocumentReaderModal } from '../components/DocumentReaderModal';
 
 const Alert = {
@@ -174,10 +175,14 @@ export const DriveFileGridItem: React.FC<{
   isSelectionMode: boolean;
   onSelectToggle: () => void;
 }> = React.memo(({ file, size, onPress, onMorePress, isSelected, isSelectionMode, onSelectToggle }) => {
+  const isAudio = file.mime_type?.startsWith('audio/') || 
+    (file.file_name && /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(file.file_name));
   const isVideo = file.file_type === 'video';
-  const isImage = file.file_type === 'image' ||
+  const isImage = !isAudio && (
+    file.file_type === 'image' ||
     (file.mime_type && file.mime_type.startsWith('image/')) ||
-    (file.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(file.file_name));
+    (file.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(file.file_name))
+  );
 
   const [imgUri, setImgUri] = useState<string | null>(() => {
     if (!isImage && !isVideo) return null;
@@ -235,6 +240,8 @@ export const DriveFileGridItem: React.FC<{
         <View style={styles.gridFileFallback}>
           {loading ? (
             <ActivityIndicator size="small" color="#FFFC00" />
+          ) : isAudio ? (
+            <Music size={24} color="#FFFC00" />
           ) : isVideo ? (
             <Video size={24} color="#8E8E93" />
           ) : isImage ? (
@@ -1347,16 +1354,29 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
                 </View>
               ) : resolvedPreviewUri ? (
                 (() => {
-                  const isImage = previewFile.file_type === 'image' ||
+                  const isAudio = previewFile.mime_type?.startsWith('audio/') || 
+                    (previewFile.file_name && /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(previewFile.file_name));
+                  const isImage = !isAudio && (
+                    previewFile.file_type === 'image' ||
                     (previewFile.mime_type && previewFile.mime_type.startsWith('image/')) ||
-                    (previewFile.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(previewFile.file_name));
+                    (previewFile.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(previewFile.file_name))
+                  );
                   const isVideo = previewFile.file_type === 'video';
                   const isPdf = previewFile.mime_type === 'application/pdf' ||
                     (previewFile.file_name && /\.pdf$/i.test(previewFile.file_name));
                   const isText = previewFile.mime_type?.startsWith('text/') ||
                     (previewFile.file_name && /\.(txt|log|json|csv|md|js|ts|html|css|xml|yaml|yml)$/i.test(previewFile.file_name));
- 
-                  if (isImage) {
+
+                  if (isAudio) {
+                    return (
+                      <AudioPlayer
+                        source={resolvedPreviewUri}
+                        fileName={previewFile.file_name}
+                        fileSize={previewFile.file_size}
+                        paused={false}
+                      />
+                    );
+                  } else if (isImage) {
                     return (
                       <Image
                         source={{ uri: resolvedPreviewUri }}

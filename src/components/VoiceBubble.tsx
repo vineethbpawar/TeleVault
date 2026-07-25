@@ -8,7 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { Play, Pause, Mic } from 'lucide-react-native';
-import { Audio } from 'expo-av';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { telegramService } from '../services/telegramService';
 import { encryptionService } from '../services/encryptionService';
 
@@ -22,20 +22,20 @@ export const VoiceBubble: React.FC<Props> = ({ message, isMe, onLongPress }) => 
   const snap = message.snap || {};
   const duration = snap.file_size || 0; // we reuse file_size to store the audio duration in seconds!
   
-  const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [decryptedUri, setDecryptedUri] = useState<string | null>(null);
-  const [position, setPosition] = useState(0);
 
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const player = useAudioPlayer(decryptedUri || '');
+  const status = useAudioPlayerStatus(player);
+
+  const isPlaying = status.playing;
+  const position = status.currentTime;
 
   useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
-      }
-    };
-  }, []);
+    if (decryptedUri) {
+      player.replace(decryptedUri);
+    }
+  }, [decryptedUri, player]);
 
   const handlePlayPause = async () => {
     if (loading) return;
@@ -65,51 +65,20 @@ export const VoiceBubble: React.FC<Props> = ({ message, isMe, onLongPress }) => 
         setLoading(false);
 
         // Play the newly decrypted file
-        await playAudio(cleanUri);
+        player.replace(cleanUri);
+        player.play();
         return;
       }
 
       // 2. Already decrypted, toggle play state
-      if (soundRef.current) {
-        if (isPlaying) {
-          await soundRef.current.pauseAsync();
-          setIsPlaying(false);
-        } else {
-          await soundRef.current.playAsync();
-          setIsPlaying(true);
-        }
+      if (isPlaying) {
+        player.pause();
       } else {
-        await playAudio(decryptedUri);
+        player.play();
       }
     } catch (err: any) {
       setLoading(false);
       Alert.alert('Error', err.message || 'Failed to play voice message.');
-    }
-  };
-
-  const playAudio = async (uri: string) => {
-    try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-      });
-
-      const { sound } = await Audio.Sound.createAsync(
-        { uri },
-        { shouldPlay: true },
-        (status: any) => {
-          if (status.didJustFinish) {
-            setIsPlaying(false);
-            setPosition(0);
-          } else if (status.positionMillis) {
-            setPosition(status.positionMillis / 1000);
-          }
-        }
-      );
-      soundRef.current = sound;
-      setIsPlaying(true);
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Audio playback initialization failed.');
     }
   };
 

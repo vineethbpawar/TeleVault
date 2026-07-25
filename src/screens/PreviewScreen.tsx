@@ -13,7 +13,7 @@ import {
   Modal,
   Platform,
 } from 'react-native';
-import { ArrowLeft, Send, Sparkles, X, Type, Edit3, RotateCw, EyeOff, Music, CloudSun, BarChart2, HelpCircle, MapPin, Clock, DownloadCloud, Lock, HardDrive, Mic, Smile, Paperclip, MoreHorizontal } from 'lucide-react-native';
+import { ArrowLeft, Send, Sparkles, X, Type, Edit3, RotateCw, EyeOff, Music, CloudSun, BarChart2, HelpCircle, MapPin, Clock, DownloadCloud, Lock, HardDrive, Mic, MicOff, Smile, Paperclip, MoreHorizontal } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
 import { telegramService } from '../services/telegramService';
@@ -129,6 +129,8 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
   const previewContainerRef = useRef<View>(null);
   // Capturing state — hides delete buttons from baked output
   const [isCapturing, setIsCapturing] = useState(false);
+
+  const [isMuted, setIsMuted] = useState(false);
 
   // Fetch local file info
   useEffect(() => {
@@ -332,6 +334,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
     thumbnailUri: thumbUri || null,
     lens: defaultLens || 'none',
     locationText: locationText || null,
+    isMuted: isMuted || false,
   });
 
   /**
@@ -525,18 +528,20 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
 
         // Preserve audio from the video element via WebAudio
         let combinedStream: MediaStream = canvasStream;
-        try {
-          const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-          const src = audioCtx.createMediaElementSource(videoEl);
-          const dest = audioCtx.createMediaStreamDestination();
-          src.connect(dest);
-          src.connect(audioCtx.destination);
-          combinedStream = new MediaStream([
-            ...canvasStream.getVideoTracks(),
-            ...dest.stream.getAudioTracks(),
-          ]);
-        } catch (audioErr) {
-          console.warn('[VideoLensBake] Audio capture not available, proceeding muted:', audioErr);
+        if (!isMuted) {
+          try {
+            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const src = audioCtx.createMediaElementSource(videoEl);
+            const dest = audioCtx.createMediaStreamDestination();
+            src.connect(dest);
+            src.connect(audioCtx.destination);
+            combinedStream = new MediaStream([
+              ...canvasStream.getVideoTracks(),
+              ...dest.stream.getAudioTracks(),
+            ]);
+          } catch (audioErr) {
+            console.warn('[VideoLensBake] Audio capture not available, proceeding muted:', audioErr);
+          }
         }
 
         const recorder = new MediaRecorder(combinedStream, { mimeType });
@@ -1117,7 +1122,7 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         onLayout={handleLayout}
       >
         {type === 'video' ? (
-          <VideoPlayer source={uri} style={styles.previewImage} />
+          <VideoPlayer source={uri} style={styles.previewImage} isMuted={isMuted} />
         ) : (
           <Image
             source={{ uri }}
@@ -1242,10 +1247,17 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
           <Text style={styles.toolbarBtnLabel}>Music</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.toolbarBtn} onPress={() => Alert.alert('Audio Control', 'Audio unmuted.')}>
-          <Mic size={18} color="#FFFFFF" />
-          <Text style={styles.toolbarBtnLabel}>Voice</Text>
-        </TouchableOpacity>
+        {type === 'video' && (
+          <TouchableOpacity 
+            style={[styles.toolbarBtn, isMuted && styles.activeToolbarBtn]} 
+            onPress={() => setIsMuted(!isMuted)}
+          >
+            {isMuted ? <MicOff size={18} color="#000000" /> : <Mic size={18} color="#FFFFFF" />}
+            <Text style={[styles.toolbarBtnLabel, isMuted && { color: '#000000' }]}>
+              {isMuted ? 'Muted' : 'Voice'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity style={styles.toolbarBtn} onPress={() => Alert.alert('Snap Duration', 'Disappearing timer set to infinite.')}>
           <Clock size={18} color="#FFFFFF" />

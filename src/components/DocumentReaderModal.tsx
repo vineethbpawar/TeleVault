@@ -11,6 +11,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, FileText, Download } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -612,6 +613,7 @@ export const DocumentReaderModal: React.FC<DocumentReaderProps> = ({
   mimeType,
   onExport,
 }) => {
+  const insets = useSafeAreaInsets();
   const docType = detectDocType(fileName, mimeType);
   const shortName = fileName.length > 40 ? fileName.substring(0, 38) + '…' : fileName;
 
@@ -682,7 +684,12 @@ export const DocumentReaderModal: React.FC<DocumentReaderProps> = ({
     >
       <View style={styles.modalContainer}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[
+          styles.header,
+          (Platform.OS === 'web'
+            ? { paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }
+            : { paddingTop: Math.max(insets.top, 12) }) as any
+        ]}>
           <TouchableOpacity style={styles.headerBtn} onPress={onClose}>
             <X size={20} color="#FFFFFF" />
           </TouchableOpacity>
@@ -723,7 +730,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingTop: Platform.OS === 'ios' ? 16 : 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.08)',

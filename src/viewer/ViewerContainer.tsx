@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, Dimensions, PanResponder, Animated, Platform, ActivityIndicator, Alert, Pressable } from 'react-native';
 import { X, Trash2, Lock, Star, Send, Calendar, Info } from 'lucide-react-native';
 import { Modal } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ImageViewer } from './ImageViewer';
 import { VideoPlayer } from './VideoPlayer';
+import { AudioPlayer } from './AudioPlayer';
 import { previewCacheService } from '../services/previewCacheService';
 import { fileService } from '../services/fileService';
 import { showToast } from '../components/ToastBanner';
@@ -89,6 +91,27 @@ const ViewerItem = React.memo<{
   }
 
   const isVideo = file.file_type === 'video';
+  const isAudio = file.mime_type?.startsWith('audio/') || 
+    (file.file_name && /\.(mp3|wav|m4a|aac|ogg|flac)($|\?)/i.test(file.file_name));
+
+  if (isAudio) {
+    return (
+      <View style={styles.itemContainer}>
+        {isActive ? (
+          <AudioPlayer
+            source={resolvedUri}
+            fileName={file.file_name}
+            fileSize={file.file_size}
+            paused={paused}
+          />
+        ) : (
+          <View style={styles.itemCenter}>
+            <ActivityIndicator size="small" color="#8E8E93" />
+          </View>
+        )}
+      </View>
+    );
+  }
 
   return (
     <Pressable
@@ -116,6 +139,7 @@ const ViewerItem = React.memo<{
             source={resolvedUri}
             style={styles.fullMedia}
             paused={paused}
+            isMuted={file.overlay_metadata?.isMuted || false}
           />
         ) : (
           <View style={styles.itemCenter}>
@@ -216,6 +240,7 @@ const showAlert = (
 };
 
 export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initialIndex, navigation }) => {
+  const insets = useSafeAreaInsets();
   const [localFiles, setLocalFiles] = useState(files);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isHoldActive, setIsHoldActive] = useState(false);
@@ -234,28 +259,13 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   const activeFile = localFiles[currentIndex];
 
   useEffect(() => {
+    // Viewer slides do not auto-advance. They only navigate on user swipe or tap.
     progressAnim.setValue(0);
-    if (isHoldActive || isMenuOpen || isDragging) {
-      progressAnim.stopAnimation();
-      return;
-    }
-
-    const duration = activeFile?.file_type === 'video' ? 10000 : 5000;
-
-    Animated.timing(progressAnim, {
-      toValue: 1,
-      duration: duration,
-      useNativeDriver: false,
-    }).start(({ finished }) => {
-      if (finished) {
-        goToNext();
-      }
-    });
-
+    progressAnim.stopAnimation();
     return () => {
       progressAnim.stopAnimation();
     };
-  }, [currentIndex, isHoldActive, isMenuOpen, isDragging]);
+  }, [currentIndex]);
 
   // Postgres realtime changes listener to automatically update localFiles when database changes
   useEffect(() => {
@@ -493,7 +503,12 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
       {!isHoldActive && !isMenuOpen && (
         <View style={styles.topHudContainer}>
           {/* Time and Title Header */}
-          <View style={styles.topBar}>
+          <View style={[
+            styles.topBar,
+            (Platform.OS === 'web'
+              ? { marginTop: 'calc(env(safe-area-inset-top) + 10px)' }
+              : { marginTop: Math.max(insets.top, 10) }) as any
+          ]}>
             <View style={styles.topBarLeft}>
               <Calendar size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
               <Text style={styles.dateText}>
@@ -566,7 +581,17 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
             
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Type</Text>
-              <Text style={styles.infoValue}>{activeFile.file_type === 'video' ? '🎬 Video' : '📸 Image'}</Text>
+              <Text style={styles.infoValue}>
+                {(() => {
+                  const name = activeFile.file_name || '';
+                  const mime = activeFile.mime_type || '';
+                  const isAudio = mime.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)($|\?)/i.test(name);
+                  if (isAudio) return '🎵 Audio';
+                  if (activeFile.file_type === 'video') return '🎬 Video';
+                  if (activeFile.file_type === 'image') return '📸 Image';
+                  return '📁 Document';
+                })()}
+              </Text>
             </View>
 
             <View style={styles.infoRow}>
@@ -688,7 +713,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     height: 44,
-    marginTop: Platform.OS === 'ios' ? 44 : 20,
     marginBottom: 10,
   },
   topBarLeft: {

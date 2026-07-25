@@ -10,7 +10,7 @@ import {
   Linking,
   ActivityIndicator,
 } from 'react-native';
-import { ArrowLeft, Trash2, Download, ExternalLink, FileText, Video, Eye, Star, Edit, FolderInput, Share2, Play, FileImage, AlertTriangle } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Download, ExternalLink, FileText, Video, Eye, Star, Edit, FolderInput, Share2, Play, FileImage, AlertTriangle, Music } from 'lucide-react-native';
 import Screen from '../components/Screen';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
@@ -19,6 +19,7 @@ import { fileService } from '../services/fileService';
 import { friendService } from '../services/friendService';
 import { fileOpenService } from '../services/fileOpenService';
 import VideoPlayer from '../components/VideoPlayer';
+import { AudioPlayer } from '../viewer/AudioPlayer';
 import AppHeader from '../components/AppHeader';
 import AppCard from '../components/AppCard';
 import AppButton from '../components/AppButton';
@@ -359,6 +360,37 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
       );
     }
 
+    const name = file.file_name || '';
+    const mime = file.mime_type || '';
+    const isAudio = mime.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)($|\?)/i.test(name);
+
+    if (isAudio) {
+      if (mediaUrl) {
+        return (
+          <AudioPlayer
+            source={mediaUrl}
+            fileName={file.file_name}
+            fileSize={file.file_size}
+            paused={false}
+          />
+        );
+      }
+      return (
+        <View style={styles.previewPlaceholder}>
+          <Music size={56} color="#FFFC00" />
+          <Text style={styles.placeholderText}>Audio Stored on Telegram</Text>
+          <Text style={styles.docSubtitle}>{file.file_name} ({formatSize(file.file_size)})</Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => fetchTelegramUrl()}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.retryBtnText}>Load Audio</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     if (file.file_type === 'image') {
       if (mediaUrl) {
         return (
@@ -549,7 +581,15 @@ export const FileDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
 
             <View style={styles.metaRow}>
               <Text style={styles.metaLabel}>Type</Text>
-              <Text style={styles.metaValue}>{file.file_type.toUpperCase()}</Text>
+              <Text style={styles.metaValue}>
+                {(() => {
+                  const name = file.file_name || '';
+                  const mime = file.mime_type || '';
+                  const isAudio = mime.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)($|\?)/i.test(name);
+                  if (isAudio) return 'AUDIO';
+                  return file.file_type.toUpperCase();
+                })()}
+              </Text>
             </View>
 
             <View style={styles.metaRow}>

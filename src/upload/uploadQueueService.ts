@@ -380,7 +380,34 @@ export const uploadQueueService = {
           );
           const totalChunks = Math.ceil(finalSize / CHUNK_SIZE_BYTES);
           await largeFileService.createChunkRecords(largeFileId, totalChunks, finalSize, pendingItem.file_name);
-          await this.updateUploadQueueItem(itemId, { large_file_id: largeFileId, upload_mode: 'chunked' });
+          
+          // Create placeholder file in Supabase files table to preserve overlay_metadata
+          let placeholderId = null;
+          try {
+            const placeholder = await fileService.saveFileMetadata({
+              folder_id: pendingItem.folder_id,
+              file_name: pendingItem.file_name,
+              file_type: pendingItem.file_type,
+              mime_type: pendingItem.mime_type,
+              file_size: finalSize,
+              is_private: pendingItem.is_private,
+              is_drive_file: pendingItem.destination === 'drive' || pendingItem.destination === 'private',
+              telegram_message_id: null,
+              telegram_file_id: null,
+              telegram_file_unique_id: null,
+              local_thumbnail_uri: pendingItem.local_thumbnail_uri || null,
+              overlay_metadata: pendingItem.overlay_metadata || {},
+            });
+            placeholderId = placeholder.id;
+          } catch (metaErr) {
+            console.warn('[QueueService] Failed to create chunked upload placeholder metadata:', metaErr);
+          }
+
+          await this.updateUploadQueueItem(itemId, { 
+            large_file_id: largeFileId, 
+            upload_mode: 'chunked',
+            db_file_id: placeholderId
+          });
         }
 
         await this.updateUploadQueueItem(itemId, { status: 'uploading' });
