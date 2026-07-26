@@ -455,23 +455,13 @@ export const uploadQueueService = {
 
       await this.updateUploadQueueItem(itemId, { stage: 'Uploading...', progress: 85 });
 
-      // 5b. Upload video thumbnail to Telegram (native only) so web can display it
-      // On native, local_thumbnail_uri is a file:// path that only exists on this device.
-      // Upload it as a small photo to Telegram and store its file_id prefixed with "tgthumb:".
+      // 5b. Upload thumbnail to Telegram for cross-platform availability
       let resolvedThumbnailUri: string | null = null;
-      if (
-        Platform.OS !== 'web' &&
-        pendingItem.file_type === 'video' &&
-        pendingItem.local_thumbnail_uri &&
-        !pendingItem.local_thumbnail_uri.startsWith('tgthumb:') &&
-        !pendingItem.local_thumbnail_uri.startsWith('webblob:')
-      ) {
-        try {
-          const thumbLocalPath = pendingItem.local_thumbnail_uri;
-          const thumbInfo = await FileSystem.getInfoAsync(thumbLocalPath);
-          if (thumbInfo.exists) {
+      if (Platform.OS === 'web') {
+        if (pendingItem.local_thumbnail_uri && pendingItem.local_thumbnail_uri.startsWith('webblob:')) {
+          try {
             const thumbResult = await telegramService.uploadToTelegram(
-              thumbLocalPath,
+              pendingItem.local_thumbnail_uri,
               'image',
               `thumb_${pendingItem.file_name.replace(/\.[^.]+$/, '')}.jpg`,
               'image/jpeg',
@@ -480,20 +470,46 @@ export const uploadQueueService = {
               undefined
             );
             resolvedThumbnailUri = `tgthumb:${thumbResult.telegramFileId}`;
+          } catch (thumbErr) {
+            console.warn('[QueueService] Failed to upload web thumbnail to Telegram:', thumbErr);
           }
-        } catch (thumbErr) {
-          console.warn('[QueueService] Failed to upload video thumbnail to Telegram:', thumbErr);
-          // Non-fatal: fall back to null so web will generate from video
         }
-      } else if (pendingItem.file_type === 'video') {
-        resolvedThumbnailUri = pendingItem.local_thumbnail_uri || null;
+      } else {
+        // Native
+        if (
+          pendingItem.file_type === 'video' &&
+          pendingItem.local_thumbnail_uri &&
+          !pendingItem.local_thumbnail_uri.startsWith('tgthumb:')
+        ) {
+          try {
+            const thumbLocalPath = pendingItem.local_thumbnail_uri;
+            const thumbInfo = await FileSystem.getInfoAsync(thumbLocalPath);
+            if (thumbInfo.exists) {
+              const thumbResult = await telegramService.uploadToTelegram(
+                thumbLocalPath,
+                'image',
+                `thumb_${pendingItem.file_name.replace(/\.[^.]+$/, '')}.jpg`,
+                'image/jpeg',
+                undefined,
+                controller.signal,
+                undefined
+              );
+              resolvedThumbnailUri = `tgthumb:${thumbResult.telegramFileId}`;
+            }
+          } catch (thumbErr) {
+            console.warn('[QueueService] Failed to upload native video thumbnail to Telegram:', thumbErr);
+          }
+        } else if (pendingItem.file_type === 'video') {
+          resolvedThumbnailUri = pendingItem.local_thumbnail_uri || null;
+        }
       }
 
-      // For images: use the uploaded Telegram file itself as preview source for cross-platform availability
+      // Use resolved small thumbnail if available; fallback for images is the full image file
       const finalThumbnailUri =
-        pendingItem.file_type === 'image'
+        resolvedThumbnailUri ||
+        (pendingItem.file_type === 'image'
           ? `tgthumb:${telegramResult.telegramFileId}`
-          : resolvedThumbnailUri;
+          : null);
 
       // 6. Supabase DB metadata synchronization
       await this.updateUploadQueueItem(itemId, {

@@ -93,11 +93,16 @@ const inMemoryBlobCache = new Map<string, string>();
 
 async function resolveWebBlobUrl(webBlobUri: string): Promise<string> {
   if (!webBlobUri.startsWith('webblob:')) return webBlobUri;
+  if (inMemoryBlobCache.has(webBlobUri)) {
+    return inMemoryBlobCache.get(webBlobUri)!;
+  }
   const { getWebBlob } = require('./webBlobStore');
   const key = webBlobUri.split(':')[1];
   const blob = await getWebBlob(key);
   if (blob) {
-    return URL.createObjectURL(blob);
+    const objectUrl = URL.createObjectURL(blob);
+    inMemoryBlobCache.set(webBlobUri, objectUrl);
+    return objectUrl;
   }
   return '';
 }

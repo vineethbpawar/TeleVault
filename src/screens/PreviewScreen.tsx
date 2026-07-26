@@ -67,6 +67,50 @@ function dataURItoBlob(dataURI: string): Blob {
   return new Blob([u8arr], { type: mime });
 }
 
+function generateWebThumbnailBlob(sourceBlob: Blob, maxDim = 256): Promise<Blob> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width;
+        let h = img.height;
+        if (w > h) {
+          if (w > maxDim) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          }
+        } else {
+          if (h > maxDim) {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(sourceBlob);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            resolve(sourceBlob);
+          }
+        }, 'image/jpeg', 0.7);
+      };
+      img.onerror = () => resolve(sourceBlob);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve(sourceBlob);
+    reader.readAsDataURL(sourceBlob);
+  });
+}
+
 export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
   const { uri, type, fromGallery, defaultLens, sendToUserId, sendToUsername, conversationId, isVault, isPrivate, locationText, fromChatCamera } = route.params as any;
   const insets = useSafeAreaInsets();
@@ -824,9 +868,21 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         if (mainBlob) {
           await setWebBlob(itemId, mainBlob);
           finalUri = `webblob:${itemId}`;
+
+          // Generate small thumbnail for images
+          if (type === 'image') {
+            try {
+              const thumbBlob = await generateWebThumbnailBlob(mainBlob, 256);
+              await setWebBlob(`thumb_${itemId}`, thumbBlob);
+              finalThumbUri = `webblob:thumb_${itemId}`;
+            } catch (err) {
+              console.warn('[PreviewScreen] Failed to generate image thumbnail:', err);
+              finalThumbUri = `webblob:${itemId}`; // Fallback to full size
+            }
+          }
         }
 
-        if (localThumbnailUri) {
+        if (type === 'video' && localThumbnailUri) {
           let thumbBlob: Blob | null = null;
           if (localThumbnailUri.startsWith('data:')) {
             thumbBlob = dataURItoBlob(localThumbnailUri);
@@ -836,8 +892,15 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
             } catch (_) {}
           }
           if (thumbBlob) {
-            await setWebBlob(`thumb_${itemId}`, thumbBlob);
-            finalThumbUri = `webblob:thumb_${itemId}`;
+            try {
+              const smallThumbBlob = await generateWebThumbnailBlob(thumbBlob, 256);
+              await setWebBlob(`thumb_${itemId}`, smallThumbBlob);
+              finalThumbUri = `webblob:thumb_${itemId}`;
+            } catch (err) {
+              console.warn('[PreviewScreen] Failed to downscale video thumbnail:', err);
+              await setWebBlob(`thumb_${itemId}`, thumbBlob);
+              finalThumbUri = `webblob:thumb_${itemId}`;
+            }
           }
         }
       } else {
