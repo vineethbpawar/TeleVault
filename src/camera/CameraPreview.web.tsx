@@ -334,6 +334,12 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
             const blobType = recorder.mimeType || 'video/webm';
             const videoBlob = new Blob(recordedChunksRef.current, { type: blobType });
             const fileUri = URL.createObjectURL(videoBlob);
+            try {
+              const { tempBlobCache } = require('../utils/tempBlobCache');
+              tempBlobCache.set(fileUri, videoBlob);
+            } catch (err) {
+              console.warn('[CameraPreview] Failed to cache video blob:', err);
+            }
             resolve({
               uri: fileUri,
               type: 'video',

@@ -545,7 +545,14 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
         recorder.onstop = () => {
           const finalMime = mimeType.split(';')[0];
           const blob = new Blob(chunks, { type: finalMime });
-          resolve(URL.createObjectURL(blob));
+          const blobUrl = URL.createObjectURL(blob);
+          try {
+            const { tempBlobCache } = require('../utils/tempBlobCache');
+            tempBlobCache.set(blobUrl, blob);
+          } catch (err) {
+            console.warn('[VideoBake] Failed to cache baked video blob:', err);
+          }
+          resolve(blobUrl);
         };
         recorder.onerror = (e: any) => reject(e.error || new Error('MediaRecorder error'));
 
@@ -803,8 +810,15 @@ export const PreviewScreen: React.FC<Props> = ({ navigation, route }) => {
           mainBlob = dataURItoBlob(sourceUri);
         } else if (sourceUri.startsWith('blob:')) {
           try {
-            mainBlob = await fetch(sourceUri).then(r => r.blob());
+            const { tempBlobCache } = require('../utils/tempBlobCache');
+            mainBlob = tempBlobCache.get(sourceUri) || null;
           } catch (_) {}
+
+          if (!mainBlob) {
+            try {
+              mainBlob = await fetch(sourceUri).then(r => r.blob());
+            } catch (_) {}
+          }
         }
 
         if (mainBlob) {
