@@ -11,7 +11,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useCallState } from '../hooks/useCallState';
 import { callingService } from '../services/callingService';
@@ -31,40 +31,47 @@ const CallOverlay: React.FC = () => {
       console.error('[CallOverlay] callingService.initialize error:', err);
     });
 
-    // Check if the app was launched by a notification click (cold start)
-    Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (response) {
-        handleNotificationResponse(response);
-      }
-    });
+    let receivedSubscription: any = null;
+    let responseSubscription: any = null;
 
-    // Listen for incoming call notifications received in foreground
-    const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
-      const data = notification.request.content.data as any;
-      if (data && data.type === 'incoming_call') {
-        if (!callStateStore.isInCall()) {
-          const incomingData: IncomingCallData = {
-            callId: data.callId as string,
-            callType: data.callType as CallType,
-            callScope: (data.callScope || 'one_to_one') as CallScope,
-            callerId: data.callerId as string,
-            callerProfile: (data.callerProfile || {
-              id: data.callerId,
-              username: data.callerName || 'Unknown Caller',
-            }) as UserCallProfile,
-            groupId: data.groupId as string | undefined,
-            offerSdp: data.offerSdp as string | undefined,
-            timestamp: Date.now(),
-          };
-          callStateStore.setIncomingCall(incomingData);
+    if (Platform.OS !== 'web') {
+      // Check if the app was launched by a notification click (cold start)
+      Notifications.getLastNotificationResponseAsync().then((response) => {
+        if (response) {
+          handleNotificationResponse(response);
         }
-      }
-    });
+      }).catch((err) => {
+        console.warn('[CallOverlay] Failed to get last notification response:', err);
+      });
 
-    // Listen for notification responses (clicks / actions)
-    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      handleNotificationResponse(response);
-    });
+      // Listen for incoming call notifications received in foreground
+      receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
+        const data = notification.request.content.data as any;
+        if (data && data.type === 'incoming_call') {
+          if (!callStateStore.isInCall()) {
+            const incomingData: IncomingCallData = {
+              callId: data.callId as string,
+              callType: data.callType as CallType,
+              callScope: (data.callScope || 'one_to_one') as CallScope,
+              callerId: data.callerId as string,
+              callerProfile: (data.callerProfile || {
+                id: data.callerId,
+                username: data.callerName || 'Unknown Caller',
+              }) as UserCallProfile,
+              groupId: data.groupId as string | undefined,
+              offerSdp: data.offerSdp as string | undefined,
+              timestamp: Date.now(),
+            };
+            callStateStore.setIncomingCall(incomingData);
+          }
+        }
+      });
+
+      // Listen for notification responses (clicks / actions)
+      responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+        handleNotificationResponse(response);
+      });
+    }
 
     function handleNotificationResponse(response: Notifications.NotificationResponse) {
       const data = response.notification.request.content.data as any;
@@ -98,8 +105,8 @@ const CallOverlay: React.FC = () => {
     }
 
     return () => {
-      receivedSubscription.remove();
-      responseSubscription.remove();
+      if (receivedSubscription) receivedSubscription.remove();
+      if (responseSubscription) responseSubscription.remove();
     };
   }, []);
 

@@ -137,7 +137,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
       const fileType = item.mediaType === 'photo' || item.mediaType === 'image' ? 'image' : (item.mediaType === 'video' ? 'video' : 'document');
       await uploadQueueService.addToUploadQueue({
         file_name: item.fileName,
-        local_uri: item.uri,
+        local_uri: `webblob:${item.id}`,
         file_type: fileType,
         mime_type: blob.type || 'application/octet-stream',
         file_size: blob.size,
@@ -256,7 +256,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
               if (autoSyncEnabled) {
                 await uploadQueueService.addToUploadQueue({
                   file_name: fileName,
-                  local_uri: newAsset.uri,
+                  local_uri: `webblob:${id}`,
                   file_type: isVideo ? 'video' : 'image',
                   mime_type: blob.type || (isVideo ? 'video/mp4' : 'image/jpeg'),
                   file_size: blob.size,
@@ -340,7 +340,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
             if (autoSyncEnabled) {
               await uploadQueueService.addToUploadQueue({
                 file_name: fileName,
-                local_uri: newAsset.uri,
+                local_uri: `webblob:${id}`,
                 file_type: fileType === 'image' ? 'image' : (fileType === 'video' ? 'video' : 'document'),
                 mime_type: asset.mimeType || 'application/octet-stream',
                 file_size: blob.size,

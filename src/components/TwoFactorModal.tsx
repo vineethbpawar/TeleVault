@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Shield, RefreshCw, LogOut } from 'lucide-react-native';
 import * as SecureStore from 'expo-secure-store';
+import { storageService } from '../services/storageService';
 import { supabase } from '../lib/supabase';
 import { telegramService } from '../services/telegramService';
 
@@ -75,10 +76,10 @@ export const TwoFactorModal: React.FC<Props> = ({ visible, onSuccess, onLogout }
       if (!user) throw new Error('User session not found.');
 
       // Get or create unique device ID
-      let deviceId = await SecureStore.getItemAsync('televault_device_id');
+      let deviceId = await storageService.getItem('televault_device_id');
       if (!deviceId) {
         deviceId = Math.random().toString(36).substring(2) + Date.now().toString(36);
-        await SecureStore.setItemAsync('televault_device_id', deviceId);
+        await storageService.setItem('televault_device_id', deviceId);
       }
 
       // Add device to metadata

@@ -40,6 +40,7 @@ import CallOverlay from '../components/CallOverlay';
 import { Session } from '@supabase/supabase-js';
 import { authEvents } from '../utils/authEvent';
 import * as SecureStore from 'expo-secure-store';
+import { storageService } from '../services/storageService';
 import { telegramService } from '../services/telegramService';
 import { TwoFactorModal } from '../components/TwoFactorModal';
 import { Alert, AppState, AppStateStatus, Platform, View, Text, StyleSheet } from 'react-native';
@@ -212,10 +213,10 @@ export const AppNavigator: React.FC = () => {
         await checkUsername(currSession.user.id, currSession.user.email);
 
         try {
-          let deviceId = await SecureStore.getItemAsync('televault_device_id');
+          let deviceId = await storageService.getItem('televault_device_id');
           if (!deviceId) {
             deviceId = Math.random().toString(36).substring(2) + Date.now().toString(36);
-            await SecureStore.setItemAsync('televault_device_id', deviceId);
+            await storageService.setItem('televault_device_id', deviceId);
           }
           
           const authorizedDevices = currSession.user.user_metadata?.authorized_devices || [];
