@@ -57,7 +57,19 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
         }}
       >
         {imgUri ? (
-          <Image source={{ uri: imgUri }} style={styles.image} resizeMode="cover" />
+          <Image
+            source={{ uri: imgUri }}
+            style={styles.image}
+            resizeMode="cover"
+            onError={async () => {
+              if (item.telegram_file_id) {
+                const repaired = await previewCacheService.forceRepairPreview(item.telegram_file_id, item);
+                if (repaired && repaired.previewUri) {
+                  setImgUri(repaired.previewUri);
+                }
+              }
+            }}
+          />
         ) : (
           <View style={styles.fallbackContainer}>
             {isVideo ? (

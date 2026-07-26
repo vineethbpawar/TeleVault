@@ -715,10 +715,13 @@ export const previewCacheService = {
             console.warn('[previewCacheService] tgthumb fetch failed:', e);
           }
         } else if (Platform.OS === 'web') {
-          if (!isWebValidUri(file.local_thumbnail_uri)) {
+          let thumbUri = file.local_thumbnail_uri;
+          if (file.telegram_file_id && typeof thumbUri === 'string' && thumbUri.startsWith('blob:')) {
+            thumbUri = '';
+          }
+          if (thumbUri && !isWebValidUri(thumbUri)) {
             // Ignore native file paths on Web
-          } else {
-            let thumbUri = file.local_thumbnail_uri;
+          } else if (thumbUri) {
             if (thumbUri.startsWith('webblob:')) {
               thumbUri = await resolveWebBlobUrl(thumbUri);
             }
