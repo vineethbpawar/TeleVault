@@ -408,7 +408,8 @@ export const previewCacheService = {
           const thumbUrl = await telegramService.getTelegramFileDownloadUrl(thumbFileId, signal);
           let previewUri = thumbUrl;
           if (Platform.OS === 'web') {
-            const res = await fetch(thumbUrl, { signal });
+            const proxiedUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(thumbUrl)}`;
+            const res = await fetch(proxiedUrl, { signal });
             const blob = await res.blob();
             previewUri = URL.createObjectURL(blob);
           } else {
@@ -525,7 +526,8 @@ export const previewCacheService = {
               const proxiedUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(downloadUrl)}`;
               previewUri = await encryptionService.decryptFile(proxiedUrl, fileName, file.mime_type);
             } else {
-              const res = await fetch(downloadUrl, { signal });
+              const proxiedUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(downloadUrl)}`;
+              const res = await fetch(proxiedUrl, { signal });
               const blob = await res.blob();
               previewUri = URL.createObjectURL(blob);
             }
@@ -696,7 +698,8 @@ export const previewCacheService = {
             } else {
               const thumbUrl = await telegramService.getTelegramFileDownloadUrl(thumbFileId, signal);
               if (Platform.OS === 'web') {
-                const res = await fetch(thumbUrl, { signal });
+                const proxiedUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(thumbUrl)}`;
+                const res = await fetch(proxiedUrl, { signal });
                 const blob = await res.blob();
                 previewUri = URL.createObjectURL(blob);
               } else {

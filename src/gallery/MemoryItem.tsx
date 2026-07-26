@@ -18,6 +18,7 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
     const [imgUri, setImgUri] = useState<string | null>(() => {
       return previewCacheService.getInMemoryPreview(item.telegram_file_id || item.id);
     });
+    const repairAttempted = React.useRef(false);
 
     useEffect(() => {
       let active = true;
@@ -62,6 +63,8 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
             style={styles.image}
             resizeMode="cover"
             onError={async () => {
+              if (repairAttempted.current) return;
+              repairAttempted.current = true;
               if (item.telegram_file_id) {
                 const repaired = await previewCacheService.forceRepairPreview(item.telegram_file_id, item);
                 if (repaired && repaired.previewUri) {
