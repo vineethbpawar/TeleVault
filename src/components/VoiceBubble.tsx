@@ -31,7 +31,7 @@ export const VoiceBubble: React.FC<Props> = ({ message, isMe, onLongPress }) => 
 
   useEffect(() => {
     AudioModule.setAudioModeAsync({
-      playsInSilentModeIOS: true,
+      playsInSilentMode: true,
     }).catch(() => {});
   }, []);
 

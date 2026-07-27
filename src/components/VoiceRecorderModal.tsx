@@ -41,7 +41,7 @@ export const VoiceRecorderModal: React.FC<Props> = ({ visible, onClose, onSend }
       }
 
       await AudioModule.setAudioModeAsync({
-        playsInSilentModeIOS: true,
+        playsInSilentMode: true,
       });
 
       setRecordedUri(null);
@@ -59,7 +59,7 @@ export const VoiceRecorderModal: React.FC<Props> = ({ visible, onClose, onSend }
       setFinalDuration(recorder.currentTime);
 
       AudioModule.setAudioModeAsync({
-        playsInSilentModeIOS: true,
+        playsInSilentMode: true,
       }).catch(() => {});
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to stop recording.');

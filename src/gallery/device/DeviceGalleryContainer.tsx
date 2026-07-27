@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, Switch, Platform, FlatList, ScrollView, ProgressBarAndroid, ProgressViewIOS } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, Switch, Platform, FlatList, ScrollView } from 'react-native';
 import { Search, Lock, Share2, Trash2, ArrowUpCircle, CheckSquare, Plus, RefreshCw, ChevronDown, Check, Play, Pause, X, AlertTriangle, ShieldCheck, Cloud, Database, Smartphone, Laptop, HardDrive, Filter, Clock, Star, AlertCircle, Heart, Folder } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { DeviceMedia, DeviceInnerTab, DeviceFilterType, DeviceSortType } from './deviceTypes';
@@ -63,16 +63,21 @@ export const DeviceGalleryContainer: React.FC<DeviceGalleryContainerProps> = ({
 
   // Detect network status
   useEffect(() => {
-    setIsConnected(networkService.isConnected());
-    const unsubscribe = networkService.subscribeToConnection((connected) => {
-      setIsConnected(connected);
-      if (!connected) {
-        showToast('Internet connection lost. Queue paused.');
-      } else {
-        showToast('Internet restored. Resuming queue.');
-      }
-    });
-    return () => unsubscribe();
+    let active = true;
+    const checkNet = async () => {
+      try {
+        const online = await networkService.isOnline();
+        if (active) {
+          setIsConnected(online);
+        }
+      } catch (_) {}
+    };
+    checkNet();
+    const interval = setInterval(checkNet, 5000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, []);
 
   // Update sync statistics dynamically
@@ -667,10 +672,11 @@ export const DeviceGalleryContainer: React.FC<DeviceGalleryContainerProps> = ({
   }, [syncingQueue]);
 
   const renderProgress = (progress: number) => {
-    if (Platform.OS === 'ios') {
-      return <ProgressViewIOS progress={progress / 100} progressTintColor="#FFFC00" trackTintColor="rgba(255,255,255,0.1)" />;
-    }
-    return <ProgressBarAndroid styleAttr="Horizontal" color="#FFFC00" progress={progress / 100} indeterminate={false} />;
+    return (
+      <View style={{ height: 4, width: '100%', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden', marginVertical: 6 }}>
+        <View style={{ height: '100%', width: `${progress}%`, backgroundColor: '#FFFC00' }} />
+      </View>
+    );
   };
 
   const renderSyncItem = ({ item }: { item: any }) => {

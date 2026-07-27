@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, Modal, TouchableOpacity, Image, Dimensions, ScrollView, Platform } from 'react-native';
+import { StyleSheet, View, Text, Modal, TouchableOpacity, Image, Dimensions, ScrollView, Platform, Alert } from 'react-native';
 import { X, Play, Share2, Trash2, ShieldCheck, Heart, Info, ArrowUpCircle, Cloud } from 'lucide-react-native';
 import { DeviceMedia } from './deviceTypes';
 

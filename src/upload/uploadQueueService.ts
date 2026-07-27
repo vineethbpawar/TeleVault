@@ -538,28 +538,36 @@ export const uploadQueueService = {
         progress: 90
       });
 
-      if (pendingItem.db_file_id) {
-        await fileService.updateFileMetadata(pendingItem.db_file_id, {
-          telegram_message_id: telegramResult.telegramMessageId,
-          telegram_file_id: telegramResult.telegramFileId,
-          telegram_file_unique_id: telegramResult.telegramFileUniqueId,
-          local_thumbnail_uri: finalThumbnailUri,
-        });
-      } else {
-        await fileService.saveFileMetadata({
-          folder_id: pendingItem.folder_id,
-          file_name: pendingItem.file_name,
-          file_type: pendingItem.file_type,
-          mime_type: pendingItem.mime_type,
-          file_size: finalSize,
-          is_private: pendingItem.is_private,
-          is_drive_file: pendingItem.is_drive_file,
-          telegram_message_id: telegramResult.telegramMessageId,
-          telegram_file_id: telegramResult.telegramFileId,
-          telegram_file_unique_id: telegramResult.telegramFileUniqueId,
-          local_thumbnail_uri: finalThumbnailUri,
-          overlay_metadata: pendingItem.overlay_metadata,
-        });
+      try {
+        if (pendingItem.db_file_id) {
+          await fileService.updateFileMetadata(pendingItem.db_file_id, {
+            telegram_message_id: telegramResult.telegramMessageId,
+            telegram_file_id: telegramResult.telegramFileId,
+            telegram_file_unique_id: telegramResult.telegramFileUniqueId,
+            local_thumbnail_uri: finalThumbnailUri,
+          });
+        } else {
+          await fileService.saveFileMetadata({
+            folder_id: pendingItem.folder_id,
+            file_name: pendingItem.file_name,
+            file_type: pendingItem.file_type,
+            mime_type: pendingItem.mime_type,
+            file_size: finalSize,
+            is_private: pendingItem.is_private,
+            is_drive_file: pendingItem.is_drive_file,
+            telegram_message_id: telegramResult.telegramMessageId,
+            telegram_file_id: telegramResult.telegramFileId,
+            telegram_file_unique_id: telegramResult.telegramFileUniqueId,
+            local_thumbnail_uri: finalThumbnailUri,
+            overlay_metadata: pendingItem.overlay_metadata,
+          });
+        }
+      } catch (dbError) {
+        if (telegramResult && telegramResult.telegramMessageId) {
+          console.warn(`[QueueService] Supabase write failed. Rolling back Telegram file message: ${telegramResult.telegramMessageId}`);
+          await telegramService.deleteTelegramMessage(telegramResult.telegramMessageId).catch(() => {});
+        }
+        throw dbError;
       }
 
       await this.updateUploadQueueItem(itemId, { status: 'completed', stage: 'Completed (Single File)', progress: 100 });
