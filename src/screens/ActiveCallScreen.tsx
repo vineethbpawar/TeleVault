@@ -283,10 +283,13 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({ callState }) => {
       return <WebVideoView stream={stream} mirror={mirror} style={style} />;
     }
 
-    if (RTCView && (stream as any).toURL) {
+    if (RTCView) {
+      const streamURL = typeof (stream as any).toURL === 'function'
+        ? (stream as any).toURL()
+        : (stream as any).id || '';
       return (
         <RTCView
-          streamURL={(stream as any).toURL()}
+          streamURL={streamURL}
           style={style}
           mirror={mirror}
           objectFit="cover"

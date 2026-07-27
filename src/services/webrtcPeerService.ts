@@ -141,22 +141,36 @@ class WebRTCPeerService {
     };
 
     try {
-      const primaryConstraints = {
-        audio: audio
-          ? {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-            }
-          : false,
-        video: video
-          ? {
-              width: { ideal: 1280, max: 1920 },
-              height: { ideal: 720, max: 1080 },
-              facingMode: 'user',
-            }
-          : false,
-      };
+      const primaryConstraints = Platform.OS === 'web'
+        ? {
+            audio: audio
+              ? {
+                  echoCancellation: true,
+                  noiseSuppression: true,
+                  autoGainControl: true,
+                }
+              : false,
+            video: video
+              ? {
+                  width: { ideal: 1280, max: 1920 },
+                  height: { ideal: 720, max: 1080 },
+                  facingMode: 'user',
+                }
+              : false,
+          }
+        : {
+            audio: audio,
+            video: video
+              ? {
+                  mandatory: {
+                    minWidth: 640,
+                    minHeight: 480,
+                    minFrameRate: 30,
+                  },
+                  facingMode: 'user',
+                }
+              : false,
+          };
 
       const stream = await tryGetUserMedia(primaryConstraints);
       this.localStream = stream;
@@ -167,7 +181,7 @@ class WebRTCPeerService {
       try {
         const fallbackConstraints = {
           audio: audio ? true : false,
-          video: video ? { facingMode: 'user' } : false,
+          video: video ? (Platform.OS === 'web' ? { facingMode: 'user' } : { facingMode: 'user' }) : false,
         };
         const stream = await tryGetUserMedia(fallbackConstraints);
         this.localStream = stream;

@@ -40,6 +40,8 @@ class CallingService {
   private reconnectAttempts = 0;
   private reconnectHandle: ReturnType<typeof setTimeout> | null = null;
   private isInitialized = false;
+  private candidatePollInterval: ReturnType<typeof setInterval> | null = null;
+  private processedCandidates: Set<string> = new Set();
 
   // ─── Initialization ────────────────────────────────────────────────────────
 
@@ -214,6 +216,9 @@ class CallingService {
       // 14. Set call timeout
       this.startCallTimeout(callId, params.targetUserId);
 
+      // Start candidate polling fallback
+      this.startCandidatePolling(callId, params.targetUserId);
+
       // 15. Send push notification to target user
       await notificationService.sendNotification(
         params.targetUserId,
@@ -337,6 +342,9 @@ class CallingService {
       // Start call audio
       audioManager.startCallAudio(callType === 'video');
 
+      // Start candidate polling fallback
+      this.startCandidatePolling(callId, callerId);
+
       return true;
     } catch (error) {
       console.error('[CallingService] acceptCall error:', error);
@@ -450,6 +458,7 @@ class CallingService {
     const state = callStateStore.getState();
     if (!state && reason !== 'missed') return;
 
+    this.stopCandidatePolling();
     this.clearCallTimeout();
     this.clearReconnectTimer();
 
@@ -598,6 +607,7 @@ class CallingService {
     const callState = callStateStore.getState();
     if (!callState || callState.status === 'connected') return;
 
+    this.stopCandidatePolling();
     this.reconnectAttempts = 0;
     callStateStore.setReconnecting(false);
     callStateStore.setStatus('connected');
@@ -903,6 +913,45 @@ class CallingService {
     if (this.reconnectHandle) {
       clearTimeout(this.reconnectHandle);
       this.reconnectHandle = null;
+    }
+  }
+
+  private startCandidatePolling(callId: string, remoteId: string): void {
+    this.stopCandidatePolling();
+    this.processedCandidates.clear();
+
+    if (__DEV__) {
+      console.log(`[CallingService] Starting candidate DB fallback polling for call: ${callId}`);
+    }
+
+    this.candidatePollInterval = setInterval(async () => {
+      if (!this.currentUserId) return;
+      try {
+        const stored = await callHistoryService.getStoredCandidates(
+          callId,
+          remoteId,
+          this.currentUserId
+        );
+        for (const c of stored) {
+          const key = JSON.stringify(c);
+          if (!this.processedCandidates.has(key)) {
+            this.processedCandidates.add(key);
+            if (__DEV__) {
+              console.log('[CallingService] Loaded candidate from DB fallback:', c.candidate);
+            }
+            await webRTCPeerService.addIceCandidate(c);
+          }
+        }
+      } catch (err) {
+        console.warn('[CallingService] Candidate DB polling error:', err);
+      }
+    }, 1500);
+  }
+
+  private stopCandidatePolling(): void {
+    if (this.candidatePollInterval) {
+      clearInterval(this.candidatePollInterval);
+      this.candidatePollInterval = null;
     }
   }
 
