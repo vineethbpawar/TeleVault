@@ -380,7 +380,7 @@ export const DeviceGalleryContainer: React.FC<DeviceGalleryContainerProps> = ({
   };
 
   // Click & Multi-Select controllers
-  const handlePressItem = (item: DeviceMedia) => {
+  const handlePressItem = useCallback((item: DeviceMedia) => {
     if (isSelectionMode) {
       setSelectedIds(prev => {
         const next = new Set(prev);
@@ -395,13 +395,13 @@ export const DeviceGalleryContainer: React.FC<DeviceGalleryContainerProps> = ({
     } else {
       setSelectedPreviewAsset(item);
     }
-  };
+  }, [isSelectionMode]);
 
-  const handleLongPressItem = (item: DeviceMedia) => {
+  const handleLongPressItem = useCallback((item: DeviceMedia) => {
     if (isSelectionMode) return;
     setIsSelectionMode(true);
     setSelectedIds(new Set([item.assetId]));
-  };
+  }, [isSelectionMode]);
 
   const toggleSelectionMode = () => {
     setIsSelectionMode(!isSelectionMode);
