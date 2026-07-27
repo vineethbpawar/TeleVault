@@ -9,7 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { Mic, Square, Trash2, Send, Play, Pause } from 'lucide-react-native';
-import { Audio } from 'expo-av';
+import { AudioModule, useAudioPlayer, useAudioRecorder, RecordingPresets } from 'expo-audio';
 
 interface Props {
   visible: boolean;
@@ -18,159 +18,76 @@ interface Props {
 }
 
 export const VoiceRecorderModal: React.FC<Props> = ({ visible, onClose, onSend }) => {
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordDuration, setRecordDuration] = useState(0);
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
-  
-  // Playback state
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackPosition, setPlaybackPosition] = useState(0);
+  const [finalDuration, setFinalDuration] = useState(0);
 
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const timerRef = useRef<any>(null);
-
-  useEffect(() => {
-    return () => {
-      cleanupResources();
-    };
-  }, []);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const player = useAudioPlayer(recordedUri);
 
   useEffect(() => {
     if (visible) {
       // Reset state on open
       setRecordedUri(null);
-      setIsRecording(false);
-      setRecordDuration(0);
-      setIsPlaying(false);
-    } else {
-      cleanupResources();
+      setFinalDuration(0);
     }
   }, [visible]);
 
-  const cleanupResources = async () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-    if (recordingRef.current) {
-      try {
-        await recordingRef.current.stopAndUnloadAsync();
-      } catch (_) {}
-      recordingRef.current = null;
-    }
-    if (soundRef.current) {
-      try {
-        await soundRef.current.unloadAsync();
-      } catch (_) {}
-      soundRef.current = null;
-    }
-  };
-
   const startRecording = async () => {
     try {
-      const { status } = await Audio.requestPermissionsAsync();
+      const { status } = await AudioModule.requestRecordingPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission Denied', 'Audio recording permission is required to send voice notes.');
         return;
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
+      await AudioModule.setAudioModeAsync({
         playsInSilentModeIOS: true,
       });
 
-      // Unload previous sound if any
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
-        setRecordedUri(null);
-      }
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      recordingRef.current = recording;
-      setIsRecording(true);
-      setRecordDuration(0);
-
-      timerRef.current = setInterval(() => {
-        setRecordDuration((prev) => prev + 1);
-      }, 1000);
+      setRecordedUri(null);
+      setFinalDuration(0);
+      recorder.record();
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to start recording.');
     }
   };
 
-  const stopRecording = async () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-    if (!recordingRef.current) return;
-
+  const stopRecording = () => {
     try {
-      setIsRecording(false);
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
-      setRecordedUri(uri);
-      recordingRef.current = null;
-      
-      // Reset audio mode to playback
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
+      recorder.stop();
+      setRecordedUri(recorder.uri);
+      setFinalDuration(recorder.currentTime);
+
+      AudioModule.setAudioModeAsync({
         playsInSilentModeIOS: true,
-      });
+      }).catch(() => {});
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to stop recording.');
     }
   };
 
-  const playRecordedAudio = async () => {
-    if (!recordedUri) return;
+  const playRecordedAudio = () => {
+    if (!recordedUri || !player) return;
 
     try {
-      if (soundRef.current) {
-        if (isPlaying) {
-          await soundRef.current.pauseAsync();
-          setIsPlaying(false);
-        } else {
-          await soundRef.current.playAsync();
-          setIsPlaying(true);
-        }
-        return;
+      if (player.playing) {
+        player.pause();
+      } else {
+        player.play();
       }
-
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: recordedUri },
-        { shouldPlay: true },
-        (status: any) => {
-          if (status.didJustFinish) {
-            setIsPlaying(false);
-            setPlaybackPosition(0);
-          } else if (status.positionMillis) {
-            setPlaybackPosition(status.positionMillis);
-          }
-        }
-      );
-      soundRef.current = sound;
-      setIsPlaying(true);
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Playback failed.');
     }
   };
 
-  const handleDelete = async () => {
-    if (soundRef.current) {
-      await soundRef.current.unloadAsync();
-      soundRef.current = null;
-    }
+  const handleDelete = () => {
     setRecordedUri(null);
-    setRecordDuration(0);
-    setIsPlaying(false);
+    setFinalDuration(0);
   };
 
   const handleSend = () => {
     if (!recordedUri) return;
-    onSend(recordedUri, recordDuration);
+    onSend(recordedUri, finalDuration);
     onClose();
   };
 
@@ -186,10 +103,10 @@ export const VoiceRecorderModal: React.FC<Props> = ({ visible, onClose, onSend }
         <View style={styles.container}>
           <Text style={styles.title}>Secure Voice Note</Text>
 
-          {isRecording ? (
+          {recorder.isRecording ? (
             <View style={styles.activeRecordBox}>
               <View style={styles.pulseDot} />
-              <Text style={styles.durationText}>{formatTime(recordDuration)}</Text>
+              <Text style={styles.durationText}>{formatTime(Math.floor(recorder.currentTime || 0))}</Text>
               <Text style={styles.helperText}>Recording audio securely...</Text>
 
               <TouchableOpacity style={styles.stopBtn} onPress={stopRecording}>
@@ -198,7 +115,7 @@ export const VoiceRecorderModal: React.FC<Props> = ({ visible, onClose, onSend }
             </View>
           ) : recordedUri ? (
             <View style={styles.reviewBox}>
-              <Text style={styles.durationText}>{formatTime(recordDuration)}</Text>
+              <Text style={styles.durationText}>{formatTime(Math.floor(finalDuration))}</Text>
               <Text style={styles.helperText}>Review your secure voice note</Text>
 
               <View style={styles.controlsRow}>
@@ -207,7 +124,7 @@ export const VoiceRecorderModal: React.FC<Props> = ({ visible, onClose, onSend }
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.playBtn} onPress={playRecordedAudio}>
-                  {isPlaying ? (
+                  {player?.playing ? (
                     <Pause size={24} color="#000000" fill="#000000" />
                   ) : (
                     <Play size={24} color="#000000" fill="#000000" />
@@ -229,7 +146,7 @@ export const VoiceRecorderModal: React.FC<Props> = ({ visible, onClose, onSend }
             </View>
           )}
 
-          <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={isRecording}>
+          <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={recorder.isRecording}>
             <Text style={styles.cancelBtnText}>Cancel</Text>
           </TouchableOpacity>
         </View>

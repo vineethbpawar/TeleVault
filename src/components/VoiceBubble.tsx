@@ -8,7 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { Play, Pause, Mic } from 'lucide-react-native';
-import { Audio } from 'expo-av';
+import { AudioModule, useAudioPlayer } from 'expo-audio';
 import { telegramService } from '../services/telegramService';
 import { encryptionService } from '../services/encryptionService';
 
@@ -25,17 +25,22 @@ export const VoiceBubble: React.FC<Props> = ({ message, isMe, onLongPress }) => 
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [decryptedUri, setDecryptedUri] = useState<string | null>(null);
-  const [position, setPosition] = useState(0);
+  const [shouldAutoPlay, setShouldAutoPlay] = useState(false);
 
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const player = useAudioPlayer(decryptedUri);
 
   useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
-      }
-    };
+    AudioModule.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+    }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (shouldAutoPlay && player && !loading) {
+      player.play();
+      setShouldAutoPlay(false);
+    }
+  }, [player, shouldAutoPlay, loading]);
 
   const handlePlayPause = async () => {
     if (loading) return;
@@ -62,24 +67,18 @@ export const VoiceBubble: React.FC<Props> = ({ message, isMe, onLongPress }) => 
         );
 
         setDecryptedUri(cleanUri);
+        setShouldAutoPlay(true);
         setLoading(false);
-
-        // Play the newly decrypted file
-        await playAudio(cleanUri);
         return;
       }
 
       // 2. Already decrypted, toggle play state
-      if (soundRef.current) {
-        if (isPlaying) {
-          await soundRef.current.pauseAsync();
-          setIsPlaying(false);
+      if (player) {
+        if (player.playing) {
+          player.pause();
         } else {
-          await soundRef.current.playAsync();
-          setIsPlaying(true);
+          player.play();
         }
-      } else {
-        await playAudio(decryptedUri);
       }
     } catch (err: any) {
       setLoading(false);
@@ -87,31 +86,7 @@ export const VoiceBubble: React.FC<Props> = ({ message, isMe, onLongPress }) => 
     }
   };
 
-  const playAudio = async (uri: string) => {
-    try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-      });
 
-      const { sound } = await Audio.Sound.createAsync(
-        { uri },
-        { shouldPlay: true },
-        (status: any) => {
-          if (status.didJustFinish) {
-            setIsPlaying(false);
-            setPosition(0);
-          } else if (status.positionMillis) {
-            setPosition(status.positionMillis / 1000);
-          }
-        }
-      );
-      soundRef.current = sound;
-      setIsPlaying(true);
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Audio playback initialization failed.');
-    }
-  };
 
   const formatTime = (secs: number) => {
     const mins = Math.floor(secs / 60);
@@ -142,7 +117,7 @@ export const VoiceBubble: React.FC<Props> = ({ message, isMe, onLongPress }) => 
         >
           {loading ? (
             <ActivityIndicator size="small" color={isMe ? '#FFFFFF' : '#FFFC00'} />
-          ) : isPlaying ? (
+          ) : player?.playing ? (
             <Pause size={18} color={isMe ? '#000000' : '#FFFFFF'} fill={isMe ? '#000000' : '#FFFFFF'} />
           ) : (
             <Play size={18} color={isMe ? '#000000' : '#FFFFFF'} fill={isMe ? '#000000' : '#FFFFFF'} />
@@ -161,10 +136,10 @@ export const VoiceBubble: React.FC<Props> = ({ message, isMe, onLongPress }) => 
                   {
                     height: 4 + Math.sin(i * 0.8) * 12,
                     backgroundColor: isMe
-                      ? i / 15 < position / (duration || 1)
+                      ? i / 15 < (player?.currentTime || 0) / (duration || 1)
                         ? '#000000'
                         : 'rgba(0, 0, 0, 0.2)'
-                      : i / 15 < position / (duration || 1)
+                      : i / 15 < (player?.currentTime || 0) / (duration || 1)
                       ? '#FFFC00'
                       : 'rgba(255, 255, 255, 0.2)'
                   }
@@ -175,7 +150,7 @@ export const VoiceBubble: React.FC<Props> = ({ message, isMe, onLongPress }) => 
         </View>
 
         <Text style={[styles.durationText, isMe ? styles.myText : styles.otherText]}>
-          {formatTime(isPlaying ? position : duration)}
+          {formatTime(player?.playing ? (player?.currentTime || 0) : duration)}
         </Text>
       </View>
     </TouchableOpacity>
