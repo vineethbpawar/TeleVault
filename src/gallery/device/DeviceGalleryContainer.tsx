@@ -9,7 +9,7 @@ import { DevicePreviewModal } from './DevicePreviewModal';
 import { uploadQueueService } from '../../services/uploadQueueService';
 import { showToast } from '../../components/ToastBanner';
 import { networkService } from '../../services/networkService';
-
+import { performanceMonitor } from '../../services/performanceMonitor';
 interface DeviceGalleryContainerProps {
   navigation: any;
   isFocused: boolean;
@@ -243,7 +243,7 @@ export const DeviceGalleryContainer: React.FC<DeviceGalleryContainerProps> = ({
 
   // Main load assets loop
   const loadInitialMedia = useCallback(async (showSpinner = true) => {
-    const startTime = performance.now();
+    performanceMonitor.start('gallery_mount', 'gallery');
     if (showSpinner) setLoading(true);
     try {
       const permission = await deviceMediaService.requestPermissions();
@@ -253,12 +253,12 @@ export const DeviceGalleryContainer: React.FC<DeviceGalleryContainerProps> = ({
         return;
       }
 
-      const fetchStart = performance.now();
+      performanceMonitor.start('media_fetch', 'gallery');
       const isSmartAlbum = ['Selfies', 'Screenshots', 'Receipts', 'Pets & Food', 'Large Videos', 'Recently Edited'].includes(selectedAlbum);
       const queryAlbum = isSmartAlbum ? 'All' : selectedAlbum;
 
       const result = await deviceMediaService.fetchDeviceMedia(queryAlbum, 100);
-      const fetchEnd = performance.now();
+      performanceMonitor.end('media_fetch');
       let filteredAssets = result.assets;
 
       // Filter local items if a virtual Smart Album is selected
@@ -277,18 +277,17 @@ export const DeviceGalleryContainer: React.FC<DeviceGalleryContainerProps> = ({
         filteredAssets = result.assets.filter(a => a.modifiedDate >= threeDaysAgo);
       }
 
-      const syncStart = performance.now();
+      performanceMonitor.start('sync_computation', 'gallery');
       const { localComputed, cloudOnlyAssets: cloudAssets } = 
         await deviceMediaService.computeSyncAndCloudAssets(filteredAssets, cloudFiles);
-      const syncEnd = performance.now();
+      performanceMonitor.end('sync_computation');
       
       setLocalAssets(localComputed);
       setCloudOnlyAssets(cloudAssets);
       setHasNextPage(result.hasNextPage);
       setEndCursor(result.endCursor);
 
-      const totalDuration = performance.now() - startTime;
-      console.log(`[Profiler] Gallery Mount / Initial Load completed in ${totalDuration.toFixed(1)}ms (Permission check & fetch: ${(fetchEnd - fetchStart).toFixed(1)}ms, Sync computation: ${(syncEnd - syncStart).toFixed(1)}ms)`);
+      performanceMonitor.end('gallery_mount');
     } catch (e) {
       console.warn('Failed to load device media:', e);
     } finally {
