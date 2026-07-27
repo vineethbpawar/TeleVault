@@ -476,6 +476,12 @@ class DeviceMediaService {
     } catch (_) {}
     return localUri;
   }
+
+  async bulkRestoreAssets(assets: DeviceMedia[]): Promise<void> {
+    for (const asset of assets) {
+      await this.downloadAndRestoreAsset(asset);
+    }
+  }
 }
 
 export const deviceMediaService = new DeviceMediaService();
