@@ -28,6 +28,8 @@ class CacheEvictionService {
         if (
           fileName.startsWith('cache_') ||
           fileName.startsWith('temp_enc_') ||
+          fileName.startsWith('enc_') ||
+          fileName.startsWith('dec_') ||
           fileName.startsWith('tgthumb_')
         ) {
           try {
