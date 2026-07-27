@@ -18,6 +18,7 @@ import { fileOpenService } from '../services/fileOpenService';
 import { uploadQueueService } from '../services/uploadQueueService';
 import { UploadQueueBadge } from '../components/UploadQueueBadge';
 import { previewCacheService } from '../services/previewCacheService';
+import { DeviceGalleryContainer } from './device/DeviceGalleryContainer';
 
 // Session-level in-memory cache for instant first-paint
 let sessionMemoriesCache: GalleryItem[] | null = null;
@@ -800,122 +801,12 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
       </View>
 
       {subTab === 'device' ? (
-        <View style={{ flex: 1 }}>
-          {/* Header Controls for Auto-Sync and Add File */}
-          <View style={styles.deviceHeader}>
-            <View style={styles.autoSyncRow}>
-              <RefreshCw size={18} color="#FFFC00" style={{ marginRight: 8 }} />
-              <View>
-                <Text style={styles.deviceHeaderTitle}>Auto-Sync to Cloud</Text>
-                <Text style={styles.deviceHeaderSubtitle}>Backup new items automatically</Text>
-              </View>
-              <Switch
-                value={autoSyncEnabled}
-                onValueChange={handleToggleAutoSync}
-                style={{ marginLeft: 'auto' }}
-                trackColor={{ false: '#2C2C2E', true: '#FFFC00' }}
-                thumbColor={autoSyncEnabled ? '#000000' : '#8E8E93'}
-              />
-            </View>
-            <TouchableOpacity style={styles.importBtn} onPress={handleImportPress}>
-              <Plus size={20} color="#000000" style={{ marginRight: 6 }} />
-              <Text style={styles.importBtnText}>Import / Upload Files</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Category Tabs for local assets */}
-          <View style={[styles.tabContainer, { marginTop: 12, marginBottom: 12 }]}>
-            {(['all', 'image', 'video', 'audio', 'document'] as const).map((tab) => (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.tabItem, deviceFilterType === tab && styles.tabItemActive]}
-                onPress={() => setDeviceFilterType(tab)}
-              >
-                {tab === 'audio' && <Music size={12} color={deviceFilterType === tab ? '#000000' : '#8E8E93'} style={{ marginRight: 4 }} />}
-                {tab === 'document' && <FileText size={12} color={deviceFilterType === tab ? '#000000' : '#8E8E93'} style={{ marginRight: 4 }} />}
-                <Text style={[styles.tabText, deviceFilterType === tab && styles.tabTextActive]}>
-                  {tab.toUpperCase()}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Local Grid */}
-          {localLoading ? (
-            <View style={styles.center}>
-              <ActivityIndicator size="large" color="#FFFC00" />
-            </View>
-          ) : filteredLocalAssets.length === 0 ? (
-            <View style={styles.center}>
-              <Text style={styles.noMediaText}>
-                {Platform.OS === 'web' 
-                  ? 'No local files imported under this category. Tap "Import / Upload Files" to add items.' 
-                  : 'No device media found under this category.'}
-              </Text>
-            </View>
-          ) : (
-            <FlatList<any>
-              data={filteredLocalAssets}
-              keyExtractor={(item) => item.id}
-              numColumns={3}
-              renderItem={({ item }: { item: any }) => {
-                const isVideo = item.mediaType === 'video';
-                const isPhoto = item.mediaType === 'photo' || item.mediaType === 'image';
-                
-                const renderInner = () => {
-                  if (isPhoto || isVideo) {
-                    return (
-                      <>
-                        <Image source={{ uri: item.uri }} style={styles.localItemImage} />
-                        {isVideo && (
-                          <View style={styles.videoBadge}>
-                            <Video size={12} color="#000000" />
-                          </View>
-                        )}
-                      </>
-                    );
-                  }
-                  
-                  const isAudio = item.mediaType === 'audio' || (item.fileName || item.filename)?.match(/\.(mp3|wav|m4a|aac|ogg|flac)$/i);
-                  return (
-                    <View style={{ flex: 1, backgroundColor: '#1C1C1E', justifyContent: 'center', alignItems: 'center', padding: 8 }}>
-                      {isAudio ? (
-                        <Music size={28} color="#FFFC00" />
-                      ) : (
-                        <FileText size={28} color="#007AFF" />
-                      )}
-                      <Text style={{ color: '#FFFFFF', fontSize: 10, marginTop: 4, textAlign: 'center' }} numberOfLines={1}>
-                        {item.fileName || item.filename}
-                      </Text>
-                    </View>
-                  );
-                };
-
-                return (
-                  <TouchableOpacity 
-                    style={styles.localItemWrapper}
-                    activeOpacity={0.7}
-                    onPress={() => {
-                      const title = Platform.OS === 'web' ? item.fileName : item.filename;
-                      showAlert(
-                        'Import Item',
-                        `Would you like to import "${title || 'this file'}" to your cloud memories?`,
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          { text: 'Import', onPress: () => Platform.OS === 'web' ? importLocalAsset(item) : importNativeAsset(item) }
-                        ]
-                      );
-                    }}
-                  >
-                    {renderInner()}
-                  </TouchableOpacity>
-                );
-              }}
-              contentContainerStyle={styles.localGridContent}
-              showsVerticalScrollIndicator={false}
-            />
-          )}
-        </View>
+        <DeviceGalleryContainer
+          navigation={navigation}
+          isFocused={isFocused}
+          cloudFiles={items}
+          onImportSuccess={() => loadMemories(false)}
+        />
       ) : (
         <View style={{ flex: 1 }}>
           {/* Tabs Filter Row */}
