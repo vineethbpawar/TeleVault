@@ -92,8 +92,10 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
     }
   };
 
+  const isFirstLoad = React.useRef(true);
+
   const loadAllData = useCallback(async (showSpinner = true) => {
-    if (showSpinner && conversations.length === 0) setLoading(true);
+    if (showSpinner && isFirstLoad.current) setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -138,10 +140,11 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
     } catch (err) {
       console.error('[ChatListContainer] Failed to load data:', err);
     } finally {
+      isFirstLoad.current = false;
       setLoading(false);
       setRefreshing(false);
     }
-  }, [conversations.length]);
+  }, []);
 
   // Tab focus load
   useEffect(() => {
@@ -441,6 +444,8 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
             }
 
             // 4. Friend Requests tab
+            const senderProfile = item.sender;
+            const senderName = senderProfile?.username || senderProfile?.full_name || `User ${item.sender_id?.slice(0, 8) || '?'}`;
             return (
               <View style={styles.feedRow}>
                 <View style={styles.rowLeft}>
@@ -448,7 +453,7 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
                     <User size={20} color="#8E8E93" />
                   </View>
                   <View style={styles.detailsWrapper}>
-                    <Text style={styles.titleText}>{item.sender_profile.username}</Text>
+                    <Text style={styles.titleText}>{senderName}</Text>
                     <Text style={styles.subtitleText}>Wants to be friends</Text>
                   </View>
                 </View>
