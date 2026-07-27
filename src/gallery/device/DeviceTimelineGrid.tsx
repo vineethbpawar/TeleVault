@@ -40,6 +40,93 @@ interface DeviceTimelineGridProps {
   loadingMore?: boolean;
 }
 
+interface GridItemCellProps {
+  item: DeviceMedia;
+  itemSize: number;
+  isSelected: boolean;
+  isSelectionMode: boolean;
+  onPressItem: (item: DeviceMedia) => void;
+  onLongPressItem: (item: DeviceMedia) => void;
+}
+
+const GridItemCell = React.memo<GridItemCellProps>(({
+  item,
+  itemSize,
+  isSelected,
+  isSelectionMode,
+  onPressItem,
+  onLongPressItem
+}) => {
+  const hasThumb = !!item.thumbnailUri;
+  return (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={() => onPressItem(item)}
+      onLongPress={() => onLongPressItem(item)}
+      style={{
+        width: itemSize,
+        height: itemSize,
+        margin: 2,
+        position: 'relative',
+        borderRadius: 12,
+        overflow: 'hidden',
+        backgroundColor: '#1E1E1E',
+      }}
+    >
+      {hasThumb ? (
+        <Image
+          source={{ uri: item.thumbnailUri || item.uri }}
+          style={styles.image}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={styles.fallbackMediaIcon}>
+          {item.isVideo ? <Video size={24} color="#8E8E93" /> : <Cloud size={24} color="#8E8E93" />}
+        </View>
+      )}
+
+      {/* Video Badge */}
+      {item.isVideo && (
+        <View style={styles.videoBadge}>
+          <Video size={10} color="#FFFFFF" fill="#FFFFFF" style={{ marginRight: 2 }} />
+          {item.duration > 0 && <Text style={styles.durationText}>{Math.round(item.duration)}s</Text>}
+        </View>
+      )}
+
+      {/* Sync / Cloud Location Indicators */}
+      <View style={styles.syncBadge}>
+        {item.isCloudOnly ? (
+          <Cloud size={14} color="#00B2FF" />
+        ) : item.syncStatus === 'verified' || item.syncStatus === 'uploaded' ? (
+          <ShieldCheck size={14} color="#34C759" />
+        ) : item.syncStatus === 'uploading' || item.syncStatus === 'queued' ? (
+          <ActivityIndicator size="small" color="#FFFC00" />
+        ) : item.syncStatus === 'failed' ? (
+          <AlertCircle size={14} color="#FF3B30" />
+        ) : (
+          <ArrowUpCircle size={14} color="rgba(255, 255, 255, 0.6)" />
+        )}
+      </View>
+
+      {/* Favorite Star */}
+      {item.favorite && (
+        <View style={styles.starBadge}>
+          <Star size={10} color="#FFFC00" fill="#FFFC00" />
+        </View>
+      )}
+
+      {/* Selection Overlay */}
+      {isSelectionMode && (
+        <View style={[styles.selectionOverlay, isSelected && styles.selectionOverlaySelected]}>
+          <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+            {isSelected && <Text style={styles.checkboxCheck}>✓</Text>}
+          </View>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+});
+
 export const DeviceTimelineGrid: React.FC<DeviceTimelineGridProps> = ({
   items,
   onPressItem,
@@ -124,78 +211,17 @@ export const DeviceTimelineGrid: React.FC<DeviceTimelineGridProps> = ({
           )}
           renderItem={({ item: row }) => (
             <View style={styles.rowContainer}>
-              {row.map((item) => {
-                const isSelected = selectedIds.has(item.assetId);
-                const hasThumb = !!item.thumbnailUri;
-                return (
-                  <TouchableOpacity
-                    key={item.assetId}
-                    activeOpacity={0.8}
-                    onPress={() => onPressItem(item)}
-                    onLongPress={() => onLongPressItem(item)}
-                    style={{
-                      width: itemSize,
-                      height: itemSize,
-                      margin: 2,
-                      position: 'relative',
-                      borderRadius: 12,
-                      overflow: 'hidden',
-                      backgroundColor: '#1E1E1E',
-                    }}
-                  >
-                    {hasThumb ? (
-                      <Image
-                        source={{ uri: item.thumbnailUri || item.uri }}
-                        style={styles.image}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={styles.fallbackMediaIcon}>
-                        {item.isVideo ? <Video size={24} color="#8E8E93" /> : <Cloud size={24} color="#8E8E93" />}
-                      </View>
-                    )}
-
-                    {/* Video Badge */}
-                    {item.isVideo && (
-                      <View style={styles.videoBadge}>
-                        <Video size={10} color="#FFFFFF" fill="#FFFFFF" style={{ marginRight: 2 }} />
-                        {item.duration > 0 && <Text style={styles.durationText}>{Math.round(item.duration)}s</Text>}
-                      </View>
-                    )}
-
-                    {/* Sync / Cloud Location Indicators */}
-                    <View style={styles.syncBadge}>
-                      {item.isCloudOnly ? (
-                        <Cloud size={14} color="#00B2FF" />
-                      ) : item.syncStatus === 'verified' || item.syncStatus === 'uploaded' ? (
-                        <ShieldCheck size={14} color="#34C759" />
-                      ) : item.syncStatus === 'uploading' || item.syncStatus === 'queued' ? (
-                        <ActivityIndicator size="small" color="#FFFC00" />
-                      ) : item.syncStatus === 'failed' ? (
-                        <AlertCircle size={14} color="#FF3B30" />
-                      ) : (
-                        <ArrowUpCircle size={14} color="rgba(255, 255, 255, 0.6)" />
-                      )}
-                    </View>
-
-                    {/* Favorite Star */}
-                    {item.favorite && (
-                      <View style={styles.starBadge}>
-                        <Star size={10} color="#FFFC00" fill="#FFFC00" />
-                      </View>
-                    )}
-
-                    {/* Selection Overlay */}
-                    {isSelectionMode && (
-                      <View style={[styles.selectionOverlay, isSelected && styles.selectionOverlaySelected]}>
-                        <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-                          {isSelected && <Text style={styles.checkboxCheck}>✓</Text>}
-                        </View>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
+              {row.map((item) => (
+                <GridItemCell
+                  key={item.assetId}
+                  item={item}
+                  itemSize={itemSize}
+                  isSelected={selectedIds.has(item.assetId)}
+                  isSelectionMode={isSelectionMode}
+                  onPressItem={onPressItem}
+                  onLongPressItem={onLongPressItem}
+                />
+              ))}
               {row.length < columns && 
                 Array.from({ length: columns - row.length }).map((_, i) => (
                   <View key={`pad-${i}`} style={{ width: itemSize, margin: 2 }} />
