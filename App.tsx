@@ -46,13 +46,6 @@ export default function App() {
 
         // Run cache eviction scan
         cacheEvictionService.evictCacheIfNecessary();
-        if (__DEV__) {
-          import('./scratch/verify_sync_transaction').then(({ runUploadSyncCertification }) => {
-            runUploadSyncCertification().catch(err => {
-              console.error('[Profiler] Sync Engine Certification Error:', err);
-            });
-          });
-        }
       }).catch(err => {
         console.warn('[STARTUP_OPTIMIZATION] Failed lazy-loading background services:', err);
       });

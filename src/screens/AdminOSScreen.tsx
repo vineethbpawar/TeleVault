@@ -40,6 +40,8 @@ import {
 import { supabase } from '../lib/supabase';
 import { securityService } from '../services/securityService';
 import { showToast } from '../components/ToastBanner';
+import { validationRunner } from '../validation/validationRunner';
+import { runUploadSyncCertification } from '../../scratch/verify_sync_transaction';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -82,6 +84,40 @@ export const AdminOSScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   const [disableCalls, setDisableCalls] = useState(false);
   const [disableUploads, setDisableUploads] = useState(false);
   const [rolloutPercentage, setRolloutPercentage] = useState(100);
+
+  // Subsystem certification states
+  const [certReport, setCertReport] = useState<any | null>(null);
+  const [runningCert, setRunningCert] = useState(false);
+
+  const executeCertification = async () => {
+    setRunningCert(true);
+    try {
+      const testCases = [
+        {
+          name: 'Telegram Upload -> Supabase Fail Rollback',
+          fn: async () => {
+            const passed = await runUploadSyncCertification();
+            if (!passed) throw new Error('Certification assertions failed.');
+          }
+        }
+      ];
+
+      const report = await validationRunner.runSuite(
+        'Upload & Sync Engine',
+        'v0.9.1',
+        'f8a172d',
+        Platform.OS === 'web' ? 'Web Browser' : 'Android Device',
+        Platform.OS,
+        testCases
+      );
+      setCertReport(report);
+      showToast('Upload & Sync Engine suite complete!');
+    } catch (err: any) {
+      showToast('Validation execution error!');
+    } finally {
+      setRunningCert(false);
+    }
+  };
 
   // Fetch real metrics from Supabase
   const fetchLiveMetrics = async () => {
@@ -275,6 +311,7 @@ export const AdminOSScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
               { id: 'storage', label: 'Storage', icon: <HardDrive size={16} /> },
               { id: 'config', label: 'Remote Config', icon: <Sliders size={16} /> },
               { id: 'audit', label: 'Audit Logs', icon: <CheckCircle size={16} /> },
+              { id: 'validation', label: 'Certification', icon: <Shield size={16} /> },
             ].map(item => {
               const active = activeTab === item.id;
               return (
@@ -550,6 +587,60 @@ export const AdminOSScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                     </View>
                   ))}
                 </View>
+              </View>
+            )}
+            {/* 7. CERTIFICATION PANEL */}
+            {activeTab === 'validation' && (
+              <View>
+                {renderSectionHeader('Subsystem Certification Panel', <Shield size={20} color="#FFFC00" />)}
+                <View style={styles.certCard}>
+                  <Text style={styles.certCardTitle}>Structured Validation Suites</Text>
+                  <Text style={styles.certCardDesc}>
+                    Run isolated integration and transaction validations to certify core application modules.
+                  </Text>
+                  
+                  <View style={{ marginTop: 16, flexDirection: 'row', gap: 10 }}>
+                    <TouchableOpacity 
+                      style={[styles.certActionBtn, { backgroundColor: '#FFFC00' }]} 
+                      onPress={executeCertification}
+                      disabled={runningCert}
+                    >
+                      {runningCert ? (
+                        <ActivityIndicator size="small" color="#000" />
+                      ) : (
+                        <Text style={{ color: '#000', fontWeight: 'bold' }}>Run Upload & Sync Suite</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {certReport && (
+                  <View style={[styles.certCard, { marginTop: 16 }]}>
+                    <Text style={styles.certCardTitle}>Certification Report: {certReport.subsystem}</Text>
+                    <Text style={styles.certCardDesc}>Version: {certReport.version} | Commit: {certReport.commitHash}</Text>
+                    <Text style={styles.certCardDesc}>Device: {certReport.deviceInfo} | Platform: {certReport.platform}</Text>
+                    
+                    <View style={{ marginVertical: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', paddingTop: 12 }}>
+                      {certReport.tests.map((test: any, idx: number) => (
+                        <View key={idx} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 }}>
+                          <Text style={{ color: '#FFF' }}>{test.name}</Text>
+                          <Text style={{ color: test.status === 'PASS' ? '#34C759' : '#FF3B30', fontWeight: 'bold' }}>
+                            {test.status} ({test.durationMs}ms)
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                      <Text style={{ color: '#AAA' }}>Summary: {certReport.summary.passed}/{certReport.summary.total} Passed</Text>
+                      <View style={{ backgroundColor: certReport.summary.certified ? 'rgba(52,199,89,0.2)' : 'rgba(255,59,48,0.2)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 }}>
+                        <Text style={{ color: certReport.summary.certified ? '#34C759' : '#FF3B30', fontWeight: 'bold', fontSize: 12 }}>
+                          {certReport.summary.certified ? 'CERTIFIED' : 'FAILED'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
               </View>
             )}
 
@@ -987,6 +1078,32 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     fontSize: 11,
     marginTop: 4,
+  },
+  certCard: {
+    backgroundColor: '#161618',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+  },
+  certCardTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  certCardDesc: {
+    color: '#8E8E93',
+    fontSize: 12,
+    marginTop: 4,
+    lineHeight: 16,
+  },
+  certActionBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 
