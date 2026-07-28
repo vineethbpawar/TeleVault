@@ -1,3 +1,6 @@
+import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export interface TestResult {
   name: string;
   status: 'PASS' | 'FAIL';
@@ -20,6 +23,8 @@ export interface CertificationReport {
     certified: boolean;
   };
 }
+
+const VALIDATION_HISTORY_KEY = '@televault_validation_history_v1';
 
 class ValidationRunner {
   private activeReports: Map<string, CertificationReport> = new Map();
@@ -78,6 +83,9 @@ class ValidationRunner {
       `Summary: ${passedCount}/${testsToRun.length} Passed`
     );
 
+    // Save report to historical log
+    await this.persistReport(report);
+
     return report;
   }
 
@@ -87,6 +95,42 @@ class ValidationRunner {
 
   getAllReports(): CertificationReport[] {
     return Array.from(this.activeReports.values());
+  }
+
+  // Persists report validation logs
+  private async persistReport(report: CertificationReport): Promise<void> {
+    try {
+      const stored = await AsyncStorage.getItem(VALIDATION_HISTORY_KEY);
+      let history: CertificationReport[] = [];
+      if (stored) {
+        history = JSON.parse(stored);
+      }
+      history.unshift(report);
+      // Keep last 50 certification runs
+      if (history.length > 50) {
+        history = history.slice(0, 50);
+      }
+      await AsyncStorage.setItem(VALIDATION_HISTORY_KEY, JSON.stringify(history));
+    } catch (e) {
+      console.error('[ValidationRunner] Failed to persist report:', e);
+    }
+  }
+
+  async getHistoricalReports(): Promise<CertificationReport[]> {
+    try {
+      const stored = await AsyncStorage.getItem(VALIDATION_HISTORY_KEY);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // Generates JSON metadata export payload
+  exportReportJSON(report: CertificationReport): string {
+    return JSON.stringify(report, null, 2);
   }
 }
 
