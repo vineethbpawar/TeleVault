@@ -1057,7 +1057,11 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 value={twoFactorEnabled}
                 onValueChange={async (val) => {
                   if (val && (!maskedBotToken || !telegramChannelId)) {
-                    showAlert('Telegram Required', 'Please connect your Telegram Bot and Channel below before enabling 2FA.');
+                    if (Platform.OS === 'web') {
+                      window.alert('Telegram Required: Please connect your Telegram Bot and Channel below before enabling 2FA.');
+                    } else {
+                      Alert.alert('Telegram Required', 'Please connect your Telegram Bot and Channel below before enabling 2FA.');
+                    }
                     return;
                   }
                   await securityService.setTwoFactorEnabled(val);
