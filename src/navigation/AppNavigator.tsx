@@ -42,6 +42,7 @@ import { telegramService } from '../services/telegramService';
 import { Alert, AppState, AppStateStatus, Platform, View, Text, StyleSheet } from 'react-native';
 import { securityService } from '../services/securityService';
 import { PinLockModal } from '../components/PinLockModal';
+import { TwoFactorModal } from '../components/TwoFactorModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { networkService } from '../services/networkService';
@@ -54,6 +55,7 @@ export const AppNavigator: React.FC = () => {
   const [hasUsername, setHasUsername] = useState<boolean | null>(null);
   const [restoringConfig, setRestoringConfig] = useState(false);
   const [appLocked, setAppLocked] = useState(false);
+  const [twoFactorLocked, setTwoFactorLocked] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const insets = useSafeAreaInsets();
 
@@ -109,6 +111,11 @@ export const AppNavigator: React.FC = () => {
       const appLockActive = await securityService.isAppLockEnabled();
       if (appLockActive) {
         setAppLocked(true);
+      }
+
+      const twoFactorActive = await securityService.isTwoFactorEnabled();
+      if (twoFactorActive) {
+        setTwoFactorLocked(true);
       }
       
       if (session) {
@@ -344,6 +351,14 @@ export const AppNavigator: React.FC = () => {
           onSuccess={() => setAppLocked(false)}
           mode="verify"
           undismissable={true}
+        />
+      )}
+
+      {twoFactorLocked && (
+        <TwoFactorModal
+          visible={twoFactorLocked}
+          onSuccess={() => setTwoFactorLocked(false)}
+          onCancel={() => setTwoFactorLocked(false)}
         />
       )}
 

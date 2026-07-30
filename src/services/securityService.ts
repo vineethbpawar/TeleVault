@@ -6,6 +6,7 @@ const LOCK_DRIVE_ENABLED_KEY = 'lock_drive_enabled';
 const LOCK_PRIVATE_DRIVE_ENABLED_KEY = 'lock_private_drive_enabled';
 const BIOMETRICS_ENABLED_KEY = 'biometrics_enabled';
 const CHAT_LOCK_ENABLED_KEY = 'chat_lock_enabled'; // Placeholder
+const TWO_FACTOR_ENABLED_KEY = 'two_factor_enabled';
 
 let tempIgnoreLock = false;
 let activeVaultPassword: string | null = null;
@@ -91,6 +92,15 @@ export const securityService = {
 
   async setChatLockEnabled(enabled: boolean): Promise<void> {
     await storageService.setItem(CHAT_LOCK_ENABLED_KEY, enabled ? 'true' : 'false');
+  },
+
+  async isTwoFactorEnabled(): Promise<boolean> {
+    const enabled = await storageService.getItem(TWO_FACTOR_ENABLED_KEY);
+    return enabled === 'true';
+  },
+
+  async setTwoFactorEnabled(enabled: boolean): Promise<void> {
+    await storageService.setItem(TWO_FACTOR_ENABLED_KEY, enabled ? 'true' : 'false');
   },
 
   async hasPin(): Promise<boolean> {

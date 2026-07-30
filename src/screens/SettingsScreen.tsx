@@ -123,6 +123,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [chatLockEnabled, setChatLockEnabled] = useState(false);
   const [deviceSupportsBiometrics, setDeviceSupportsBiometrics] = useState(false);
   const [appLockEnabled, setAppLockEnabled] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
 
   // Snap States
   const [defaultSnapViewOnce, setDefaultSnapViewOnce] = useState(true);
@@ -223,6 +224,9 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
     const appLockActive = await securityService.isAppLockEnabled();
     setAppLockEnabled(appLockActive);
+
+    const twoFactorActive = await securityService.isTwoFactorEnabled();
+    setTwoFactorEnabled(twoFactorActive);
 
     if (pinExists) {
       const driveEnabled = await securityService.isDriveLockEnabled();
@@ -1038,6 +1042,30 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 onValueChange={handleTogglePinLock}
                 trackColor={{ false: '#2C2C2E', true: '#FFFC00' }}
                 thumbColor={appLockEnabled ? '#000000' : '#8E8E93'}
+              />
+            </View>
+
+            <View style={styles.itemRowNoPress}>
+              <View style={styles.itemLeft}>
+                <Shield size={20} color="#FFFC00" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Telegram 2FA Security</Text>
+                  <Text style={styles.itemSubtitle}>Require 6-digit Telegram code on startup</Text>
+                </View>
+              </View>
+              <Switch
+                value={twoFactorEnabled}
+                onValueChange={async (val) => {
+                  if (val && (!maskedBotToken || !telegramChannelId)) {
+                    showAlert('Telegram Required', 'Please connect your Telegram Bot and Channel below before enabling 2FA.');
+                    return;
+                  }
+                  await securityService.setTwoFactorEnabled(val);
+                  setTwoFactorEnabled(val);
+                  showToast(val ? 'Telegram 2FA enabled.' : 'Telegram 2FA disabled.');
+                }}
+                trackColor={{ false: '#2C2C2E', true: '#FFFC00' }}
+                thumbColor={twoFactorEnabled ? '#000000' : '#8E8E93'}
               />
             </View>
 
