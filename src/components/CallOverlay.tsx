@@ -11,7 +11,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useCallState } from '../hooks/useCallState';
 import { callingService } from '../services/callingService';
