@@ -8,11 +8,10 @@ import { ToastBanner } from './src/components/ToastBanner';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as ExpoSplash from 'expo-splash-screen';
 
-// Keep the native splash screen visible while auth state loads.
-// AppNavigator will call ExpoSplash.hideAsync() once ready.
-ExpoSplash.preventAutoHideAsync().catch(() => {
-  // Already hidden or error — safe to ignore
-});
+// Keep the native splash screen visible while auth state loads (Native only).
+if (Platform.OS !== 'web') {
+  ExpoSplash.preventAutoHideAsync().catch(() => {});
+}
 
 export const navigationRef = createNavigationContainerRef();
 

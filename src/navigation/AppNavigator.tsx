@@ -59,13 +59,14 @@ export const AppNavigator: React.FC = () => {
   const [isOnline, setIsOnline] = useState(true);
   const insets = useSafeAreaInsets();
 
-  // Safety net: always hide the native splash after 5 seconds max,
-  // in case auth/network check hangs (e.g. no connectivity on first launch)
+  // Safety net: always hide the native splash max 5s (Native only)
   useEffect(() => {
-    const safetyTimer = setTimeout(() => {
-      ExpoSplash.hideAsync().catch(() => {});
-    }, 5000);
-    return () => clearTimeout(safetyTimer);
+    if (Platform.OS !== 'web') {
+      const safetyTimer = setTimeout(() => {
+        ExpoSplash.hideAsync().catch(() => {});
+      }, 5000);
+      return () => clearTimeout(safetyTimer);
+    }
   }, []);
 
   useEffect(() => {
