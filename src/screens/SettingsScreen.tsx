@@ -76,19 +76,16 @@ import { largeFileService } from '../services/largeFileService';
 import { exportHelper } from '../utils/exportHelper';
 import { showToast } from '../components/ToastBanner';
 import * as LocalAuthentication from 'expo-local-authentication';
-import PinLockModal from '../components/PinLockModal';
 import UploadProgress from '../components/UploadProgress';
 import { UploadQueueBadge } from '../components/UploadQueueBadge';
 import TeleVaultLogo from '../components/TeleVaultLogo';
 import { fileService } from '../services/fileService';
 import { storageService } from '../services/storageService';
 import { uploadQueueService } from '../services/uploadQueueService';
-import { StorageManagerModal } from '../components/StorageManagerModal';
-import { autoSyncService } from '../services/autoSyncService';
-
 import { PinLockModal } from '../components/PinLockModal';
 import { StorageManagerModal } from '../components/StorageManagerModal';
 import { AdminAuthModal } from '../components/AdminAuthModal';
+import { autoSyncService } from '../services/autoSyncService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = CompositeScreenProps<
