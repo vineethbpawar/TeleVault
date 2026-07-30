@@ -57,7 +57,15 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
         }}
       >
         {imgUri ? (
-          <Image source={{ uri: imgUri }} style={styles.image} resizeMode="cover" />
+          <Image
+            source={{ uri: imgUri }}
+            style={styles.image}
+            resizeMode="cover"
+            onError={() => {
+              // If blob object URL fails/evicted, fallback to placeholder icon smoothly
+              setImgUri(null);
+            }}
+          />
         ) : (
           <View style={styles.fallbackContainer}>
             {isVideo ? (
