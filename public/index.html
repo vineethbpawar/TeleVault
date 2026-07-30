@@ -20,13 +20,20 @@
     <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
 
-    <!-- Service Worker Cleanup (Unregistered per AGENTS.md PWA Guidelines) -->
+    <!-- Service Worker Cleanup (Unregistered & Cache Purged per AGENTS.md Guidelines) -->
     <script>
       try {
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.getRegistrations().then(function(registrations) {
             for (var registration of registrations) {
               registration.unregister();
+            }
+          });
+        }
+        if ('caches' in window) {
+          caches.keys().then(function(names) {
+            for (var name of names) {
+              caches.delete(name);
             }
           });
         }
