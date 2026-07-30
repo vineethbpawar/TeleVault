@@ -79,6 +79,10 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
   // Check biometric support
   useEffect(() => {
     const checkBiometrics = async () => {
+      if (Platform.OS === 'web') {
+        setBiometricsAvailable(false);
+        return;
+      }
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
       const isEnabled = await securityService.isBiometricsEnabled();
@@ -102,7 +106,7 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
         const activeMode = hasPin ? mode : 'create';
         setLocalMode(activeMode);
 
-        if (activeMode === 'verify' && lockoutSec <= 0) {
+        if (activeMode === 'verify' && lockoutSec <= 0 && Platform.OS !== 'web') {
           // Auto trigger biometrics
           setTimeout(() => {
             triggerBiometrics();
@@ -115,7 +119,7 @@ export const PinLockModal: React.FC<PinLockModalProps> = ({
   }, [visible, biometricsAvailable, lockoutSec, mode]);
 
   const triggerBiometrics = async () => {
-    if (lockoutSec > 0) return;
+    if (lockoutSec > 0 || Platform.OS === 'web') return;
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     const isEnrolled = await LocalAuthentication.isEnrolledAsync();
     const isEnabled = await securityService.isBiometricsEnabled();
