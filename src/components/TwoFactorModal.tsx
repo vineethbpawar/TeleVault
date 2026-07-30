@@ -34,10 +34,22 @@ export const TwoFactorModal: React.FC<TwoFactorModalProps> = ({ visible, onSucce
       const newCode = Math.floor(100000 + Math.random() * 900000).toString();
       setGeneratedCode(newCode);
 
-      const messageText = `🔐 *TeleVault 2FA Verification Code*\n\nYour login code is: \`${newCode}\`\n\n_Valid for 5 minutes. Do not share this code with anyone._`;
+      const messageText = `🔐 *TeleVault 2FA Verification Code*\n\nYour login code is: ${newCode}\n\nValid for 5 minutes. Do not share this code with anyone.`;
       
-      const success = await telegramService.sendMessageToChannel(config.botToken, config.channelId, messageText);
+      const success = await telegramService.testTelegramConnection(config.botToken, config.channelId);
       if (success) {
+        // Send actual code text via Telegram API
+        const url = telegramService.getTelegramApiUrl('sendMessage', config.botToken);
+        const { fetchWithRetry } = require('../services/telegramService');
+        await fetchWithRetry(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: config.channelId,
+            text: messageText,
+            parse_mode: 'Markdown',
+          }),
+        });
         showToast('2FA code sent to Telegram!');
         setTimeLeft(60);
         setCanResend(false);
@@ -59,7 +71,7 @@ export const TwoFactorModal: React.FC<TwoFactorModalProps> = ({ visible, onSucce
   }, [visible]);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: any;
     if (visible && timeLeft > 0 && !canResend) {
       timer = setTimeout(() => setTimeLeft(prev => prev - 1), 1000);
     } else if (timeLeft === 0) {
