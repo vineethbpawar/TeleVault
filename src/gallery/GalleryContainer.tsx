@@ -233,9 +233,8 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
 
     // Filter to only include items of the current tab/search that are ready
     const index = filteredItems.findIndex((f) => f.id === item.id);
-    const { viewerStateService } = require('../services/viewerStateService');
-    viewerStateService.setActiveFiles(filteredItems);
     navigation.navigate('MemoriesViewer', {
+      files: filteredItems,
       initialIndex: index >= 0 ? index : 0,
     });
   };
