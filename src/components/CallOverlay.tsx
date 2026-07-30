@@ -31,12 +31,14 @@ const CallOverlay: React.FC = () => {
       console.error('[CallOverlay] callingService.initialize error:', err);
     });
 
-    // Check if the app was launched by a notification click (cold start)
-    Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (response) {
-        handleNotificationResponse(response);
-      }
-    });
+    // Check if the app was launched by a notification click (cold start, Native only)
+    if (Platform.OS !== 'web') {
+      Notifications.getLastNotificationResponseAsync().then((response) => {
+        if (response) {
+          handleNotificationResponse(response);
+        }
+      }).catch(() => {});
+    }
 
     // Listen for incoming call notifications received in foreground
     const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
@@ -61,10 +63,13 @@ const CallOverlay: React.FC = () => {
       }
     });
 
-    // Listen for notification responses (clicks / actions)
-    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      handleNotificationResponse(response);
-    });
+    // Listen for notification responses (clicks / actions, Native only)
+    let responseSubscription: any = null;
+    if (Platform.OS !== 'web') {
+      responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+        handleNotificationResponse(response);
+      });
+    }
 
     function handleNotificationResponse(response: Notifications.NotificationResponse) {
       const data = response.notification.request.content.data as any;
@@ -99,7 +104,9 @@ const CallOverlay: React.FC = () => {
 
     return () => {
       receivedSubscription.remove();
-      responseSubscription.remove();
+      if (responseSubscription) {
+        responseSubscription.remove();
+      }
     };
   }, []);
 
