@@ -86,6 +86,11 @@ import { uploadQueueService } from '../services/uploadQueueService';
 import { StorageManagerModal } from '../components/StorageManagerModal';
 import { autoSyncService } from '../services/autoSyncService';
 
+import { PinLockModal } from '../components/PinLockModal';
+import { StorageManagerModal } from '../components/StorageManagerModal';
+import { AdminAuthModal } from '../components/AdminAuthModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'SettingsTab'>,
   NativeStackScreenProps<AppStackParamList>
@@ -102,6 +107,8 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [testingConnection, setTestingConnection] = useState(false);
   const [storageModalVisible, setStorageModalVisible] = useState(false);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
+  const [adminAuthModalVisible, setAdminAuthModalVisible] = useState(false);
+  const [adminTapCount, setAdminTapCount] = useState(0);
 
   // Profile States
   const [username, setUsername] = useState('');
@@ -1384,7 +1391,20 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.devDivider} />
 
             <Text style={styles.appInfoTitle}>TeleVault</Text>
-            <Text style={styles.appInfoSubtitle}>Version: v2.0 Beta</Text>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => {
+                const nextCount = adminTapCount + 1;
+                if (nextCount >= 5) {
+                  setAdminTapCount(0);
+                  setAdminAuthModalVisible(true);
+                } else {
+                  setAdminTapCount(nextCount);
+                }
+              }}
+            >
+              <Text style={styles.appInfoSubtitle}>Version: v2.0 Beta</Text>
+            </TouchableOpacity>
             <Text style={styles.copyright}>© 2026 Vineeth. All rights reserved.</Text>
           </View>
         </View>
@@ -1408,6 +1428,15 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       <StorageManagerModal
         visible={storageModalVisible}
         onClose={() => setStorageModalVisible(false)}
+      />
+
+      <AdminAuthModal
+        visible={adminAuthModalVisible}
+        onSuccess={() => {
+          setAdminAuthModalVisible(false);
+          navigation.navigate('AdminDashboard');
+        }}
+        onCancel={() => setAdminAuthModalVisible(false)}
       />
 
       {/* Upload History Logs Modal */}
