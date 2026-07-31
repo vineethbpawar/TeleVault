@@ -91,7 +91,7 @@ async function uploadFileHelper(
       // Only non-upload GET/metadata calls use the Vercel proxy for CORS safety.
       const isUploadEndpoint = ['sendVideo', 'sendPhoto', 'sendDocument', 'sendAnimation', 'sendAudio', 'sendVoice'].includes(endpoint);
       if (!isUploadEndpoint) {
-        telegramDirectUrl = `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(telegramDirectUrl)}`;
+        telegramDirectUrl = `/api/telegram-proxy?url=${encodeURIComponent(telegramDirectUrl)}`;
       }
       // Upload endpoints POST directly — no proxy needed.
     }
@@ -293,7 +293,7 @@ export const telegramService = {
   getTelegramApiUrl(endpoint: string, botToken: string): string {
     const url = `https://api.telegram.org/bot${botToken}/${endpoint}`;
     if (Platform.OS === 'web') {
-      return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(url)}`;
+      return `/api/telegram-proxy?url=${encodeURIComponent(url)}`;
     }
     return url;
   },
@@ -929,13 +929,7 @@ export const telegramService = {
     const { fileInfo, workingToken } = await this.getTelegramFileInfo(fileId, signal, senderId);
     const url = `https://api.telegram.org/file/bot${workingToken}/${fileInfo.file_path}`;
     if (Platform.OS === 'web') {
-      if (typeof window !== 'undefined' && window.location) {
-        const hostname = window.location.hostname;
-        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.')) {
-          return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(url)}`;
-        }
-      }
-      return `https://tele-vault-seven.vercel.app/api/telegram-proxy?url=${encodeURIComponent(url)}`;
+      return `/api/telegram-proxy?url=${encodeURIComponent(url)}`;
     }
     return url;
   },
