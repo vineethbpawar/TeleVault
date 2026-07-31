@@ -82,7 +82,12 @@ export const largeFileDownloadService = {
             chunkUrl = await encryptionService.decryptFile(cachedUri, chunk.chunk_file_name, mimeType || undefined);
           }
 
-          const res = await fetch(chunkUrl);
+          let proxiedUrl = chunkUrl;
+          if (!chunkUrl.startsWith('/') && !chunkUrl.startsWith('blob:')) {
+            proxiedUrl = `/api/telegram-proxy?url=${encodeURIComponent(chunkUrl)}`;
+          }
+
+          const res = await fetch(proxiedUrl);
           if (!res.ok) throw new Error(`Failed to download chunk ${chunk.chunk_index}`);
           const blob = await res.blob();
           chunkBlobs[index] = blob;

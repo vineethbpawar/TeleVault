@@ -196,6 +196,11 @@ export const previewCacheService = {
       }
 
       if (Platform.OS === 'web') {
+        if (url && typeof url === 'string' && url.startsWith('blob:')) {
+          // String-cached blob URLs are transient and expire on page reload — clear stale entry
+          await cacheRemoveItem(CACHE_PREFIX + fileId);
+          return null;
+        }
         if (url && !isWebValidUri(url)) {
           // Revoke/evict transient blob URLs or native files that don't belong on Web
           await cacheRemoveItem(CACHE_PREFIX + fileId);
