@@ -522,7 +522,9 @@ export const previewCacheService = {
               const proxiedUrl = `/api/telegram-proxy?url=${encodeURIComponent(downloadUrl)}`;
               previewUri = await encryptionService.decryptFile(proxiedUrl, fileName, file.mime_type);
             } else {
-              const res = await fetch(downloadUrl, { signal });
+              const proxiedUrl = `/api/telegram-proxy?url=${encodeURIComponent(downloadUrl)}`;
+              const res = await fetch(proxiedUrl, { signal });
+              if (!res.ok) throw new Error(`Image fetch failed with status ${res.status}`);
               const blob = await res.blob();
               previewUri = URL.createObjectURL(blob);
             }
@@ -642,7 +644,9 @@ export const previewCacheService = {
               } else {
                 if (Platform.OS === 'web') {
                   const downloadUrl = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
-                  const res = await fetch(downloadUrl, { signal });
+                  const proxiedUrl = `/api/telegram-proxy?url=${encodeURIComponent(downloadUrl)}`;
+                  const res = await fetch(proxiedUrl, { signal });
+                  if (!res.ok) throw new Error(`Media fetch failed with status ${res.status}`);
                   const blob = await res.blob();
                   playableUri = URL.createObjectURL(blob);
                 } else {
