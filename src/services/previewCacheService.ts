@@ -104,10 +104,11 @@ async function resolveWebBlobUrl(webBlobUri: string): Promise<string> {
 
 function isWebValidUri(uri: any): boolean {
   if (typeof uri !== 'string') return false;
+  // Reject stale string-cached blob: URIs because browser blob URLs expire across page reloads
+  if (uri.startsWith('blob:')) return false;
   return (
     uri.startsWith('http://') ||
     uri.startsWith('https://') ||
-    uri.startsWith('blob:') ||
     uri.startsWith('data:') ||
     uri.startsWith('webblob:')
   );

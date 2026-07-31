@@ -55,14 +55,9 @@ sw.addEventListener('fetch', (event: any) => {
   if (url.origin !== sw.location.origin) return;
 
   // For HTML navigation requests, implement a network-first strategy falling back to cached index.html
-  if (request.mode === 'navigate') {
+  if (request.mode === 'navigate' || url.search.length > 0) {
     event.respondWith(
       fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          return response;
-        })
         .catch(() => {
           return caches.match('/index.html').then((cached) => cached || Response.error());
         })
