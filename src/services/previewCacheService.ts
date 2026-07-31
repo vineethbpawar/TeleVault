@@ -982,19 +982,33 @@ export const previewCacheService = {
     if (!config.botToken) return;
 
     const eligible = files.filter(f => f.telegram_file_id && (f.file_type === 'image' || f.file_type === 'video'));
+    if (eligible.length === 0) return;
 
-    (async () => {
-      for (const file of eligible) {
+    const CONCURRENCY = Platform.OS === 'web' ? 6 : 4;
+    let currentIndex = 0;
+
+    const worker = async () => {
+      while (currentIndex < eligible.length) {
+        const file = eligible[currentIndex++];
+        if (!file) break;
+
         try {
           const cacheKey = file.file_type === 'video' ? `televault_vid_thumb_${file.id}` : CACHE_PREFIX + file.telegram_file_id;
           const exists = await cacheGetItem(cacheKey);
-          if (exists) continue;
-
-          await this.resolveFilePreview(file, false);
-          await new Promise(r => setTimeout(r, 1200));
+          if (!exists) {
+            await this.resolveFilePreview(file, false);
+          }
         } catch (_) {}
       }
-    })();
+    };
+
+    const workers = [];
+    const activeLimit = Math.min(CONCURRENCY, eligible.length);
+    for (let w = 0; w < activeLimit; w++) {
+      workers.push(worker());
+    }
+
+    Promise.all(workers).catch(() => {});
   },
 
   async evictCacheIfLimitExceeded(maxSizeBytes = 50 * 1024 * 1024): Promise<void> {
