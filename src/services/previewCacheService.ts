@@ -21,7 +21,11 @@ async function cacheSetItem(key: string, value: string): Promise<void> {
 
 class ConcurrencyQueue {
   private activeCount = 0;
-  private maxConcurrency = Platform.OS === 'web' ? 6 : 4;
+  // Mobile Safari (iOS) allows max 6 concurrent connections domain-wide.
+  // Keep queue maxConcurrency at 3 on iOS Web so UI network calls are never blocked.
+  private maxConcurrency = Platform.OS === 'web'
+    ? (typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent) ? 3 : 6)
+    : 4;
   private queue: (() => Promise<any>)[] = [];
 
   async run<T>(task: () => Promise<T>): Promise<T> {
@@ -984,7 +988,8 @@ export const previewCacheService = {
     const eligible = files.filter(f => f.telegram_file_id && (f.file_type === 'image' || f.file_type === 'video'));
     if (eligible.length === 0) return;
 
-    const CONCURRENCY = Platform.OS === 'web' ? 6 : 4;
+    const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const CONCURRENCY = Platform.OS === 'web' ? (isIOS ? 3 : 6) : 4;
     let currentIndex = 0;
 
     const worker = async () => {
