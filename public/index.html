@@ -19,26 +19,17 @@
     <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
 
-    <!-- Service Worker Registration -->
+    <!-- Service Worker Cleanup: Keep unregistered per PWA Guidelines Rule 1 to prevent iOS white-screen cache locks -->
     <script>
       try {
         if ('serviceWorker' in navigator) {
-          window.addEventListener('load', function() {
-            navigator.serviceWorker.register('/sw.js')
-              .then(function(reg) {
-                console.log('Service Worker registered:', reg.scope);
-                if (reg && typeof reg.update === 'function') {
-                  reg.update().catch(function() {});
-                }
-              })
-              .catch(function(err) {
-                console.error('Service Worker registration failed:', err);
-              });
-          });
+          navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for (let reg of registrations) {
+              reg.unregister();
+            }
+          }).catch(function() {});
         }
-      } catch (e) {
-        console.error('SW registration failed:', e);
-      }
+      } catch (e) {}
     </script>
 
     <!-- The `react-native-web` recommended style reset and premium visual enhancements -->
