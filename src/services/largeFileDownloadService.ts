@@ -68,13 +68,11 @@ export const largeFileDownloadService = {
       }
 
       if (Platform.OS === 'web') {
-        const chunkBlobs: Blob[] = [];
-        for (let i = 0; i < completedChunks.length; i++) {
-          const chunk = completedChunks[i];
-          if (onProgress) {
-            onProgress(Math.round((i / completedChunks.length) * 100));
-          }
-          
+        const chunkBlobs: Blob[] = new Array(completedChunks.length);
+        let downloadedCount = 0;
+        const CONCURRENCY = 4;
+
+        const downloadSingleChunk = async (chunk: LargeFileChunk, index: number) => {
           let chunkUrl = '';
           if (!isPrivate) {
             chunkUrl = await telegramService.getTelegramFileDownloadUrl(chunk.telegram_file_id!);
@@ -87,8 +85,29 @@ export const largeFileDownloadService = {
           const res = await fetch(chunkUrl);
           if (!res.ok) throw new Error(`Failed to download chunk ${chunk.chunk_index}`);
           const blob = await res.blob();
-          chunkBlobs.push(blob);
+          chunkBlobs[index] = blob;
+
+          downloadedCount++;
+          if (onProgress) {
+            onProgress(Math.round((downloadedCount / completedChunks.length) * 100));
+          }
+        };
+
+        let currentIndex = 0;
+        const worker = async () => {
+          while (currentIndex < completedChunks.length) {
+            const idx = currentIndex++;
+            await downloadSingleChunk(completedChunks[idx], idx);
+          }
+        };
+
+        const workers = [];
+        const activeLimit = Math.min(CONCURRENCY, completedChunks.length);
+        for (let w = 0; w < activeLimit; w++) {
+          workers.push(worker());
         }
+
+        await Promise.all(workers);
 
         const combinedBlob = new Blob(chunkBlobs, { type: mimeType || 'application/octet-stream' });
         const localUri = URL.createObjectURL(combinedBlob);

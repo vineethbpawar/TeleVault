@@ -21,7 +21,7 @@ async function cacheSetItem(key: string, value: string): Promise<void> {
 
 class ConcurrencyQueue {
   private activeCount = 0;
-  private maxConcurrency = 2;
+  private maxConcurrency = Platform.OS === 'web' ? 6 : 4;
   private queue: (() => Promise<any>)[] = [];
 
   async run<T>(task: () => Promise<T>): Promise<T> {
