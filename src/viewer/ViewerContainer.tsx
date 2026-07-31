@@ -233,13 +233,29 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
 
   const activeFile = localFiles[currentIndex];
 
-  // Auto-skip disabled: user manually swipes or taps to navigate media
   useEffect(() => {
-    progressAnim.setValue(1);
+    progressAnim.setValue(0);
+    if (isHoldActive || isMenuOpen || isDragging) {
+      progressAnim.stopAnimation();
+      return;
+    }
+
+    const duration = activeFile?.file_type === 'video' ? 10000 : 5000;
+
+    Animated.timing(progressAnim, {
+      toValue: 1,
+      duration: duration,
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (finished) {
+        goToNext();
+      }
+    });
+
     return () => {
       progressAnim.stopAnimation();
     };
-  }, [currentIndex]);
+  }, [currentIndex, isHoldActive, isMenuOpen, isDragging]);
 
   // Postgres realtime changes listener to automatically update localFiles when database changes
   useEffect(() => {
