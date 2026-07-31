@@ -242,16 +242,21 @@ export const AppNavigator: React.FC = () => {
       }
     };
 
-    // Get initial session with 3-second safety timeout
+    // Get initial session with resilient safety timeout
     const sessionPromise = supabase.auth.getSession();
     const sessionTimeout = new Promise<any>((resolve) =>
-      setTimeout(() => resolve({ data: { session: null } }), 3000)
+      setTimeout(() => resolve({ data: { session: null } }), 4000)
     );
 
-    Promise.race([sessionPromise, sessionTimeout]).then(({ data: { session: initialSession } }) => {
-      setSession(initialSession);
-      checkUserAndSession(initialSession);
-    });
+    Promise.race([sessionPromise, sessionTimeout])
+      .then(({ data: { session: initialSession } }) => {
+        setSession(initialSession);
+        checkUserAndSession(initialSession);
+      })
+      .catch(() => {
+        setLoading(false);
+        setHasUsername(false);
+      });
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
