@@ -54,19 +54,8 @@ sw.addEventListener('fetch', (event: any) => {
   // Only handle requests to our own origin
   if (url.origin !== sw.location.origin) return;
 
-  // For HTML navigation requests, implement a network-first strategy falling back to cached index.html
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          return response;
-        })
-        .catch(() => {
-          return caches.match('/index.html').then((cached) => cached || Response.error());
-        })
-    );
+  // Do not intercept navigation / HTML requests per PWA Guidelines (prevents White Screen / FetchEvent errors)
+  if (request.mode === 'navigate' || url.pathname.endsWith('.html') || url.search.length > 0) {
     return;
   }
 
