@@ -37,13 +37,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           video.src = source;
           video.load();
         }
+        video.muted = false;
         video.play().catch(() => {
-          // Fallback to muted playback if autoplay policy blocks unmuted audio
+          // Auto-fallback to muted if blocked
           video.muted = true;
-          video.play().catch((err) => {
-            console.warn('[VideoPlayer Web] Autoplay failed:', err);
-            if (onError) onError(err);
-          });
+          video.play().catch(() => {});
         });
       } else {
         video.pause();
@@ -53,6 +51,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         video.removeEventListener('error', handleError);
         try {
           video.pause();
+          video.src = '';
+          video.load();
         } catch (_) {}
       };
     }, [source, isFocused, paused]);
@@ -61,11 +61,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       <View style={[styles.container, style]}>
         <video
           ref={videoRef}
-          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           loop
           playsInline
-          webkit-playsinline="true"
-          controls
+          controls={false}
         />
       </View>
     );

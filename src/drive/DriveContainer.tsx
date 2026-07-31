@@ -183,28 +183,16 @@ export const DriveFileGridItem: React.FC<{
     if (!isImage && !isVideo) return null;
     return previewCacheService.getInMemoryPreview(file.telegram_file_id || file.id);
   });
-  const [loading, setLoading] = useState<boolean>(() => {
-    if (!isImage && !isVideo) return false;
-    const cached = previewCacheService.getInMemoryPreview(file.telegram_file_id || file.id);
-    return !cached;
-  });
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
 
     if (isImage || isVideo) {
-      const cached = previewCacheService.getInMemoryPreview(file.telegram_file_id || file.id);
-      if (cached) {
-        setImgUri(cached);
-        setLoading(false);
-      } else {
-        setLoading(true);
-      }
-
+      setLoading(true);
       previewCacheService.resolveFilePreview(file, false, undefined, (generatedUri) => {
         if (active) {
           setImgUri(generatedUri);
-          setLoading(false);
         }
       }, 'low').then(res => {
         if (active) {
