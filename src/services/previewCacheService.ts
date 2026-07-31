@@ -103,12 +103,11 @@ async function resolveWebBlobUrl(webBlobUri: string): Promise<string> {
 }
 
 function isWebValidUri(uri: any): boolean {
-  if (typeof uri !== 'string') return false;
-  // Reject stale string-cached blob: URIs because browser blob URLs expire across page reloads
-  if (uri.startsWith('blob:')) return false;
+  if (typeof uri !== 'string' || !uri.trim()) return false;
   return (
     uri.startsWith('http://') ||
     uri.startsWith('https://') ||
+    uri.startsWith('blob:') ||
     uri.startsWith('data:') ||
     uri.startsWith('webblob:')
   );
@@ -1061,22 +1060,33 @@ async function getWebVideoThumbnail(videoUri: string): Promise<string> {
     video.onseeked = () => {
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth || 320;
+        canvas.height = video.videoHeight || 240;
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          resolve(canvas.toDataURL('image/jpeg'));
+          try {
+            resolve(canvas.toDataURL('image/jpeg'));
+          } catch (_) {
+            // Tainted canvas fallback
+            resolve('');
+          }
         } else {
-          reject(new Error('Failed to get 2D canvas context'));
+          resolve('');
         }
       } catch (err) {
-        reject(err);
+        resolve('');
+      } finally {
+        try {
+          video.pause();
+          video.removeAttribute('src');
+          video.load();
+        } catch (_) {}
       }
     };
 
-    video.onerror = (err) => {
-      reject(err);
+    video.onerror = () => {
+      resolve('');
     };
   });
 }
