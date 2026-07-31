@@ -61,7 +61,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       <View style={[styles.container, style]}>
         <video
           ref={videoRef}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
           loop
           playsInline
           controls={false}

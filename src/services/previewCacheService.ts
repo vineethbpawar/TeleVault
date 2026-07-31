@@ -157,8 +157,8 @@ export const previewCacheService = {
       }
     });
 
-    // Run in parallel batches of 8
-    const BATCH = 8;
+    // Run in parallel batches of 24 for instant grid thumbnail loading
+    const BATCH = 24;
     for (let i = 0; i < tasks.length; i += BATCH) {
       await Promise.allSettled(tasks.slice(i, i + BATCH));
     }
