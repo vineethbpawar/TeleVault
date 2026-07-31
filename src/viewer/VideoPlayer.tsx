@@ -38,21 +38,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           video.load();
         }
         video.play().catch(() => {
+          // Fallback to muted playback if autoplay policy blocks unmuted audio
           video.muted = true;
-          video.play().catch(() => {});
+          video.play().catch((err) => {
+            console.warn('[VideoPlayer Web] Autoplay failed:', err);
+            if (onError) onError(err);
+          });
         });
       } else {
         video.pause();
-        video.currentTime = 0;
       }
 
       return () => {
         video.removeEventListener('error', handleError);
         try {
           video.pause();
-          video.currentTime = 0;
-          video.removeAttribute('src');
-          video.load();
         } catch (_) {}
       };
     }, [source, isFocused, paused]);
@@ -61,10 +61,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       <View style={[styles.container, style]}>
         <video
           ref={videoRef}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
           loop
           playsInline
-          controls={false}
+          webkit-playsinline="true"
+          controls
         />
       </View>
     );
