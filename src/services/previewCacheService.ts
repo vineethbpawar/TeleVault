@@ -660,11 +660,8 @@ export const previewCacheService = {
               } else {
                 if (Platform.OS === 'web') {
                   const downloadUrl = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
-                  const proxiedUrl = `/api/telegram-proxy?url=${encodeURIComponent(downloadUrl)}`;
-                  const res = await fetch(proxiedUrl, { signal });
-                  if (!res.ok) throw new Error(`Media fetch failed with status ${res.status}`);
-                  const blob = await res.blob();
-                  playableUri = URL.createObjectURL(blob);
+                  // On Web, use direct proxied URL so iOS Safari AVPlayer can perform HTTP Range requests
+                  playableUri = `/api/telegram-proxy?url=${encodeURIComponent(downloadUrl)}`;
                 } else {
                   const localCachePath = `${FileSystem.cacheDirectory}cache_${file.id}_${fileName}`;
                   await FileSystem.downloadAsync(url, localCachePath);
