@@ -16,15 +16,28 @@ export async function onRequest(context) {
   }
 
   const urlObj = new URL(request.url);
-  const targetUrl = urlObj.searchParams.get('url');
+  let targetUrl = urlObj.searchParams.get('url');
 
   if (!targetUrl) {
     return new Response('Missing url parameter', { status: 400 });
   }
 
+  // Handle double-encoded or decoded URLs
+  try {
+    if (targetUrl.includes('%3A') || targetUrl.includes('%2F')) {
+      targetUrl = decodeURIComponent(targetUrl);
+    }
+  } catch (_) {}
+
+  // If path was passed relatively, prepend Telegram base URL
+  if (targetUrl.startsWith('/file/bot') || targetUrl.startsWith('file/bot') || targetUrl.startsWith('/bot')) {
+    const cleanPath = targetUrl.startsWith('/') ? targetUrl : '/' + targetUrl;
+    targetUrl = `https://api.telegram.org${cleanPath}`;
+  }
+
   // Validate the URL is to Telegram API
   if (!targetUrl.startsWith('https://api.telegram.org/')) {
-    return new Response('Only telegram API requests are allowed', { status: 400 });
+    return new Response(`Only telegram API requests are allowed (got: ${targetUrl.slice(0, 50)})`, { status: 400 });
   }
 
   try {
