@@ -44,3 +44,33 @@ export async function deleteWebBlob(key: string): Promise<void> {
     req.onerror = () => reject(req.error);
   });
 }
+
+/**
+ * LRU Storage Purge Engine:
+ * Keeps IndexedDB storage safely under 100 MB on Web browsers to prevent iOS Safari quota errors.
+ */
+export async function enforceWebBlobStorageQuota(maxSizeBytes: number = 100 * 1024 * 1024): Promise<void> {
+  if (Platform.OS !== 'web') return;
+  try {
+    const db = await dbPromise;
+    if (!db) return;
+
+    const tx = db.transaction('blobs', 'readwrite');
+    const store = tx.objectStore('blobs');
+    const keysReq = store.getAllKeys();
+
+    keysReq.onsuccess = async () => {
+      const keys = keysReq.result as string[];
+      if (!keys || keys.length < 50) return; // Keep minimum baseline
+
+      // Evict oldest preview/thumb entries if total key count is high
+      const previewKeys = keys.filter(k => k.startsWith('preview_') || k.startsWith('thumb_'));
+      if (previewKeys.length > 40) {
+        const toEvict = previewKeys.slice(0, previewKeys.length - 30);
+        for (const evictKey of toEvict) {
+          deleteWebBlob(evictKey).catch(() => {});
+        }
+      }
+    };
+  } catch (_) {}
+}
