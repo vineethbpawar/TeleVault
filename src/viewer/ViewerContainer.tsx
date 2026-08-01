@@ -14,7 +14,7 @@ const { width, height } = Dimensions.get('window');
 
 // Controlled Isolation Experiment Mode Toggle
 // 'OFF' | 'EXP1_HTTPS' | 'EXP2_BASE64' | 'EXP3_MINIMAL_HTML'
-const ISOLATION_EXPERIMENT_MODE: 'OFF' | 'EXP1_HTTPS' | 'EXP2_BASE64' | 'EXP3_MINIMAL_HTML' = 'EXP2_BASE64';
+const ISOLATION_EXPERIMENT_MODE: 'OFF' | 'EXP1_HTTPS' | 'EXP2_BASE64' | 'EXP3_MINIMAL_HTML' = 'EXP3_MINIMAL_HTML';
 
 // Hardcoded Base64 1x1 Red PNG Pixel Data URL for Experiment 2
 const TEST_BASE64_IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -151,11 +151,29 @@ const ViewerItem = React.memo<{
       delayLongPress={250}
     >
       {/* 
-        Strict Single Video Player Policy:
-        Mount VideoPlayer ONLY when this slide is the active fullscreen slide.
-        This destroys player instances on non-active preloaded slides.
+        EXP3_MINIMAL_HTML: Bypass ImageViewer/VideoPlayer abstractions entirely on Web
       */}
-      {isVideo ? (
+      {ISOLATION_EXPERIMENT_MODE === 'EXP3_MINIMAL_HTML' && Platform.OS === 'web' ? (
+        isVideo ? (
+          <video
+            src={resolvedUri || undefined}
+            controls
+            autoPlay
+            playsInline
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            onLoadedMetadata={() => console.log(`[EXPERIMENT_LOG] EXP3_HTML_VIDEO LOADED_METADATA | file_id=${file.id}`)}
+            onError={(e) => console.error(`[EXPERIMENT_LOG] EXP3_HTML_VIDEO ERROR | file_id=${file.id}`, e)}
+          />
+        ) : (
+          <img
+            src={resolvedUri || undefined}
+            alt="exp3"
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            onLoad={() => console.log(`[EXPERIMENT_LOG] EXP3_HTML_IMG LOADED | file_id=${file.id}`)}
+            onError={(e) => console.error(`[EXPERIMENT_LOG] EXP3_HTML_IMG ERROR | file_id=${file.id}`, e)}
+          />
+        )
+      ) : isVideo ? (
         isActive ? (
           <VideoPlayer
             source={resolvedUri}
