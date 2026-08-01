@@ -109,6 +109,43 @@ export const MemoryGrid: React.FC<MemoryGridProps> = ({
     return result;
   }, [items, columns]);
 
+  // On Web PWA, render a fast direct grid to bypass React Native SectionList overhead on Mobile Safari
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.container}>
+        <View style={styles.gridContent}>
+          {sections.map((section) => (
+            <View key={section.title}>
+              <View style={styles.sectionHeaderContainer}>
+                <Text style={styles.sectionHeaderTitle}>{section.title}</Text>
+              </View>
+              {section.data.map((row, rowIndex) => (
+                <View key={`web-row-${rowIndex}`} style={styles.rowContainer}>
+                  {row.map((item) => (
+                    <MemoryItem
+                      key={item.id}
+                      item={item}
+                      size={itemSize}
+                      onPress={() => onPressItem(item)}
+                      onLongPress={() => onLongPressItem(item)}
+                      isSelected={selectedIds.has(item.id)}
+                      isSelectionMode={isSelectionMode}
+                    />
+                  ))}
+                  {row.length < columns &&
+                    Array.from({ length: columns - row.length }).map((_, i) => (
+                      <View key={`pad-${i}`} style={{ width: itemSize, margin: 2 }} />
+                    ))
+                  }
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <GestureDetector gesture={pinchGesture}>
       <View style={styles.container}>
