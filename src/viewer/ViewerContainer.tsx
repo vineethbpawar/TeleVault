@@ -14,7 +14,7 @@ const { width, height } = Dimensions.get('window');
 
 // Controlled Isolation Experiment Mode Toggle
 // 'OFF' | 'EXP1_HTTPS' | 'EXP2_BASE64' | 'EXP3_MINIMAL_HTML'
-const ISOLATION_EXPERIMENT_MODE: 'OFF' | 'EXP1_HTTPS' | 'EXP2_BASE64' | 'EXP3_MINIMAL_HTML' = 'OFF';
+const ISOLATION_EXPERIMENT_MODE: 'OFF' | 'EXP1_HTTPS' | 'EXP2_BASE64' | 'EXP3_MINIMAL_HTML' = 'EXP1_HTTPS';
 
 // Individual Slide Item wrapper
 const ViewerItem = React.memo<{
