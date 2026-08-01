@@ -105,13 +105,10 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
 
       setItems(data);
 
-      // Background: pre-warm preview thumbnails for first screenful of items
-      // Deferred 1.5s so UI renders first (per AGENTS.md lazy startup rule)
+      // Pre-warm preview thumbnails for top items immediately when data arrives
       if (data.length > 0) {
-        setTimeout(() => {
-          const toWarm = data.slice(0, 24); // first ~3 rows
-          previewCacheService.pregenerateThumbnailsInBackground(toWarm).catch(() => {});
-        }, 1500);
+        const toWarm = data.slice(0, 30);
+        previewCacheService.pregenerateThumbnailsInBackground(toWarm).catch(() => {});
       }
     } catch (err) {
       console.error('[GalleryContainer] Failed to load memories:', err);
