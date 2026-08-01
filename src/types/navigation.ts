@@ -92,7 +92,7 @@ export type AppStackParamList = {
     saveDirectlyTo?: 'memories' | 'drive' | 'private_drive' | 'story' | 'snap' | 'download' | null;
   };
   MemoriesViewer: {
-    files: TeleVaultFile[];
+    files?: TeleVaultFile[];
     initialIndex: number;
   };
   CallHistory: undefined;

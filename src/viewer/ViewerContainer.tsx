@@ -225,8 +225,10 @@ const ViewerItem = React.memo<{
          prev.paused === next.paused;
 });
 
+import { activeMemoriesStore } from '../gallery/GalleryContainer';
+
 interface ViewerContainerProps {
-  files: any[];
+  files?: any[];
   initialIndex: number;
   navigation: any;
 }
@@ -255,7 +257,7 @@ const showAlert = (
 };
 
 export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initialIndex, navigation }) => {
-  const [localFiles, setLocalFiles] = useState(files);
+  const [localFiles, setLocalFiles] = useState(() => (files && files.length > 0 ? files : activeMemoriesStore));
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isHoldActive, setIsHoldActive] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);

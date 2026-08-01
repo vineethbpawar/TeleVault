@@ -14,8 +14,8 @@ import { uploadQueueService } from '../services/uploadQueueService';
 import { UploadQueueBadge } from '../components/UploadQueueBadge';
 import { previewCacheService } from '../services/previewCacheService';
 
-// Session-level in-memory cache for instant first-paint
-let sessionMemoriesCache: GalleryItem[] | null = null;
+// Export activeMemoriesStore so ViewerContainer can read files without passing 15,000-char URL query strings
+export let activeMemoriesStore: GalleryItem[] = [];
 
 interface GalleryContainerProps {
   navigation: any;
@@ -230,8 +230,8 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
 
     // Filter to only include items of the current tab/search that are ready
     const index = filteredItems.findIndex((f) => f.id === item.id);
+    activeMemoriesStore = filteredItems;
     navigation.navigate('MemoriesViewer', {
-      files: filteredItems,
       initialIndex: index >= 0 ? index : 0,
     });
   };
