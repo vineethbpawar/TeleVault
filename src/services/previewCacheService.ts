@@ -828,10 +828,15 @@ export const previewCacheService = {
         })();
       }
 
+      // Fallback: If no dedicated thumbnail was found, use playableUri or media_url directly as preview
+      if (!previewUri) {
+        previewUri = playableUri || file.media_url;
+      }
+
       return {
         type: 'video',
-        previewUri,
-        playableUri,
+        previewUri: previewUri,
+        playableUri: playableUri,
         fallbackIcon,
       };
     }
