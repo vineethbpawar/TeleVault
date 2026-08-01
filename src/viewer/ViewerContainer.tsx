@@ -12,12 +12,9 @@ import { supabase } from '../lib/supabase';
 
 const { width, height } = Dimensions.get('window');
 
-// Controlled Isolation Experiment Mode Toggle
-// 'OFF' | 'EXP1_HTTPS' | 'EXP2_BASE64' | 'EXP3_MINIMAL_HTML'
-const ISOLATION_EXPERIMENT_MODE: 'OFF' | 'EXP1_HTTPS' | 'EXP2_BASE64' | 'EXP3_MINIMAL_HTML' = 'EXP3_MINIMAL_HTML';
-
-// Hardcoded Base64 1x1 Red PNG Pixel Data URL for Experiment 2
-const TEST_BASE64_IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+// Single-Subsystem Isolation Experiment Toggle
+// 'OFF' | 'EXPA_NATIVE_HTML_ONLY' | 'EXPB_FLATLIST_ONLY'
+const SINGLE_SUBSYSTEM_EXPERIMENT: 'OFF' | 'EXPA_NATIVE_HTML_ONLY' | 'EXPB_FLATLIST_ONLY' = 'EXPA_NATIVE_HTML_ONLY';
 
 // Individual Slide Item wrapper
 const ViewerItem = React.memo<{
@@ -34,34 +31,16 @@ const ViewerItem = React.memo<{
   const [loading, setLoading] = useState(true);
   const [mediaError, setMediaError] = useState<string | null>(null);
 
-  // Isolation Experiment Logging Lifecycle
+  // Single-Subsystem Experiment Logging
   useEffect(() => {
-    console.log(`[EXPERIMENT_LOG] MOUNT | file_id=${file.id} isActive=${isActive} mode=${ISOLATION_EXPERIMENT_MODE}`);
+    console.log(`[SINGLE_SUBSYSTEM_LOG] MOUNT | file_id=${file.id} isActive=${isActive} mode=${SINGLE_SUBSYSTEM_EXPERIMENT}`);
     return () => {
-      console.log(`[EXPERIMENT_LOG] UNMOUNT | file_id=${file.id} isActive=${isActive}`);
+      console.log(`[SINGLE_SUBSYSTEM_LOG] UNMOUNT | file_id=${file.id} isActive=${isActive}`);
     };
   }, [file.id, isActive]);
 
   useEffect(() => {
     let active = true;
-
-    if (ISOLATION_EXPERIMENT_MODE === 'EXP1_HTTPS') {
-      const isVid = file.file_type === 'video';
-      const testHttpsUrl = isVid
-        ? 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
-        : 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=800';
-      setResolvedUri(testHttpsUrl);
-      setLoading(false);
-      console.log(`[EXPERIMENT_LOG] EXP1_HTTPS RESOLVED | file_id=${file.id} uri=${testHttpsUrl}`);
-      return;
-    }
-
-    if (ISOLATION_EXPERIMENT_MODE === 'EXP2_BASE64') {
-      setResolvedUri(TEST_BASE64_IMG);
-      setLoading(false);
-      console.log(`[EXPERIMENT_LOG] EXP2_BASE64 RESOLVED | file_id=${file.id} base64_len=${TEST_BASE64_IMG.length}`);
-      return;
-    }
 
     if (!isActive && !isPreload) {
       setLoading(true);
@@ -73,14 +52,10 @@ const ViewerItem = React.memo<{
 
     previewCacheService.resolveFilePreview(file).then(res => {
       if (active) {
-        let uri = res.playableUri || res.previewUri;
-        if (ISOLATION_EXPERIMENT_MODE === 'EXP2_BASE64' && uri) {
-          // Wrap in Base64 if testing EXP2
-          console.log(`[EXPERIMENT_LOG] EXP2_BASE64 TESTING | file_id=${file.id} uri_length=${uri.length}`);
-        }
+        const uri = res.playableUri || res.previewUri;
         if (uri) {
           setResolvedUri(uri);
-          console.log(`[EXPERIMENT_LOG] RESOLVED | file_id=${file.id} uri=${uri.slice(0, 60)}`);
+          console.log(`[SINGLE_SUBSYSTEM_LOG] RESOLVED | file_id=${file.id} uri=${uri.slice(0, 60)}`);
         } else if ((res as any).error) {
           setMediaError((res as any).error);
         }
@@ -151,9 +126,10 @@ const ViewerItem = React.memo<{
       delayLongPress={250}
     >
       {/* 
-        EXP3_MINIMAL_HTML: Bypass ImageViewer/VideoPlayer abstractions entirely on Web
+        EXPA_NATIVE_HTML_ONLY: Replace ONLY ImageViewer / VideoPlayer with raw <img> / <video>
+        while preserving all Pressable gestures, overlays, captions, animations, and FlatList logic.
       */}
-      {ISOLATION_EXPERIMENT_MODE === 'EXP3_MINIMAL_HTML' && Platform.OS === 'web' ? (
+      {SINGLE_SUBSYSTEM_EXPERIMENT === 'EXPA_NATIVE_HTML_ONLY' && Platform.OS === 'web' ? (
         isVideo ? (
           <video
             src={resolvedUri || undefined}
@@ -161,16 +137,16 @@ const ViewerItem = React.memo<{
             autoPlay
             playsInline
             style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-            onLoadedMetadata={() => console.log(`[EXPERIMENT_LOG] EXP3_HTML_VIDEO LOADED_METADATA | file_id=${file.id}`)}
-            onError={(e) => console.error(`[EXPERIMENT_LOG] EXP3_HTML_VIDEO ERROR | file_id=${file.id}`, e)}
+            onLoadedMetadata={() => console.log(`[SINGLE_SUBSYSTEM_LOG] EXPA_VIDEO LOADED_METADATA | file_id=${file.id}`)}
+            onError={(e) => console.error(`[SINGLE_SUBSYSTEM_LOG] EXPA_VIDEO ERROR | file_id=${file.id}`, e)}
           />
         ) : (
           <img
             src={resolvedUri || undefined}
-            alt="exp3"
+            alt="expA"
             style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-            onLoad={() => console.log(`[EXPERIMENT_LOG] EXP3_HTML_IMG LOADED | file_id=${file.id}`)}
-            onError={(e) => console.error(`[EXPERIMENT_LOG] EXP3_HTML_IMG ERROR | file_id=${file.id}`, e)}
+            onLoad={() => console.log(`[SINGLE_SUBSYSTEM_LOG] EXPA_IMG LOADED | file_id=${file.id}`)}
+            onError={(e) => console.error(`[SINGLE_SUBSYSTEM_LOG] EXPA_IMG ERROR | file_id=${file.id}`, e)}
           />
         )
       ) : isVideo ? (
