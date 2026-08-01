@@ -258,11 +258,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
       toValue: 1,
       duration: duration,
       useNativeDriver: false,
-    }).start(({ finished }) => {
-      if (finished) {
-        goToNext();
-      }
-    });
+    }).start();
 
     return () => {
       progressAnim.stopAnimation();
