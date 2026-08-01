@@ -53,11 +53,6 @@ const ViewerItem = React.memo<{
 
     return () => {
       active = false;
-      if (Platform.OS === 'web' && resolvedUri && resolvedUri.startsWith('blob:')) {
-        try {
-          URL.revokeObjectURL(resolvedUri);
-        } catch (_) {}
-      }
     };
   }, [file, isActive, isPreload]);
 
