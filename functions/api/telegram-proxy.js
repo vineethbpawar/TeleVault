@@ -46,10 +46,14 @@ export async function onRequest(context) {
       headers: {},
     };
 
-    // Forward content-type header if present
+    // Forward content-type & range headers for iOS Safari HTTP byte-range video streaming
     const contentType = request.headers.get('content-type');
     if (contentType) {
       fetchOptions.headers['content-type'] = contentType;
+    }
+    const range = request.headers.get('range');
+    if (range) {
+      fetchOptions.headers['range'] = range;
     }
 
     if (request.method === 'POST') {
@@ -61,6 +65,10 @@ export async function onRequest(context) {
     const responseHeaders = new Headers(telegramResponse.headers);
     responseHeaders.set('Access-Control-Allow-Origin', '*');
     responseHeaders.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
+    responseHeaders.set('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
+    if (!responseHeaders.has('Accept-Ranges')) {
+      responseHeaders.set('Accept-Ranges', 'bytes');
+    }
 
     return new Response(telegramResponse.body, {
       status: telegramResponse.status,
