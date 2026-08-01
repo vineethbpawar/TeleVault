@@ -28,6 +28,13 @@ const ViewerItem = React.memo<{
 
   useEffect(() => {
     let active = true;
+
+    // Only resolve media for active slide and adjacent slots [previous, current, next]
+    if (!isActive) {
+      setLoading(true);
+      return;
+    }
+
     setLoading(true);
     setMediaError(null);
 
@@ -51,7 +58,7 @@ const ViewerItem = React.memo<{
         } catch (_) {}
       }
     };
-  }, [file]);
+  }, [file, isActive]);
 
   const renderPressableContent = (content: React.ReactNode) => {
     return (
