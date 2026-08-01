@@ -176,7 +176,13 @@ export const previewCacheService = {
         }
 
         const { getWebBlob } = require('./webBlobStore');
-        const blob = await getWebBlob('preview_' + fileId);
+        let blob: Blob | null = await getWebBlob(fileId).catch(() => null);
+        if (!blob) {
+          blob = await getWebBlob('preview_' + fileId).catch(() => null);
+        }
+        if (!blob) {
+          blob = await getWebBlob('thumb_' + fileId).catch(() => null);
+        }
         if (blob) {
           const blobUrl = URL.createObjectURL(blob);
           inMemoryBlobCache.set(fileId, blobUrl);
@@ -242,10 +248,13 @@ export const previewCacheService = {
       if (Platform.OS === 'web') {
         if (url && url.startsWith('blob:')) {
           inMemoryBlobCache.set(fileId, url);
-          const res = await fetch(url);
-          const blob = await res.blob();
-          const { setWebBlob } = require('./webBlobStore');
-          await setWebBlob('preview_' + fileId, blob);
+          try {
+            const res = await fetch(url);
+            const blob = await res.blob();
+            const { setWebBlob } = require('./webBlobStore');
+            await setWebBlob(fileId, blob);
+            await setWebBlob('preview_' + fileId, blob);
+          } catch (_) {}
         }
         return;
       }
