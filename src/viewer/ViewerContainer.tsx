@@ -14,7 +14,10 @@ const { width, height } = Dimensions.get('window');
 
 // Controlled Isolation Experiment Mode Toggle
 // 'OFF' | 'EXP1_HTTPS' | 'EXP2_BASE64' | 'EXP3_MINIMAL_HTML'
-const ISOLATION_EXPERIMENT_MODE: 'OFF' | 'EXP1_HTTPS' | 'EXP2_BASE64' | 'EXP3_MINIMAL_HTML' = 'EXP1_HTTPS';
+const ISOLATION_EXPERIMENT_MODE: 'OFF' | 'EXP1_HTTPS' | 'EXP2_BASE64' | 'EXP3_MINIMAL_HTML' = 'EXP2_BASE64';
+
+// Hardcoded Base64 1x1 Red PNG Pixel Data URL for Experiment 2
+const TEST_BASE64_IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 // Individual Slide Item wrapper
 const ViewerItem = React.memo<{
@@ -50,6 +53,13 @@ const ViewerItem = React.memo<{
       setResolvedUri(testHttpsUrl);
       setLoading(false);
       console.log(`[EXPERIMENT_LOG] EXP1_HTTPS RESOLVED | file_id=${file.id} uri=${testHttpsUrl}`);
+      return;
+    }
+
+    if (ISOLATION_EXPERIMENT_MODE === 'EXP2_BASE64') {
+      setResolvedUri(TEST_BASE64_IMG);
+      setLoading(false);
+      console.log(`[EXPERIMENT_LOG] EXP2_BASE64 RESOLVED | file_id=${file.id} base64_len=${TEST_BASE64_IMG.length}`);
       return;
     }
 
