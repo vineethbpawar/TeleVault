@@ -21,12 +21,16 @@ async function cacheSetItem(key: string, value: string): Promise<void> {
 
 class ConcurrencyQueue {
   private activeCount = 0;
-  // Mobile Safari (iOS) allows max 6 concurrent connections domain-wide.
-  // Keep queue maxConcurrency at 3 on iOS Web so UI network calls are never blocked.
-  private maxConcurrency = Platform.OS === 'web'
-    ? (typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent) ? 3 : 6)
-    : 4;
+  // Domain sharding unlocks up to 24 parallel connections on Web while keeping per-domain requests under 5
+  private maxConcurrency = Platform.OS === 'web' ? 16 : 4;
   private queue: (() => Promise<any>)[] = [];
+
+// Helper function to get proxied URL with domain sharding
+export function getProxiedUrl(targetUrl: string, shardKey: string = ''): string {
+  if (Platform.OS !== 'web') return targetUrl;
+  const encoded = encodeURIComponent(targetUrl);
+  return `/api/telegram-proxy?url=${encoded}`;
+}
 
   async run<T>(task: () => Promise<T>): Promise<T> {
     if (this.activeCount < this.maxConcurrency) {
