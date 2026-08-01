@@ -119,8 +119,8 @@ export const MemoryGrid: React.FC<MemoryGridProps> = ({
               <View style={styles.sectionHeaderContainer}>
                 <Text style={styles.sectionHeaderTitle}>{section.title}</Text>
               </View>
-              {section.data.map((row, rowIndex) => (
-                <View key={`web-row-${rowIndex}`} style={styles.rowContainer}>
+              {section.data.map((row) => (
+                <View key={`web-row-${row[0]?.id || Math.random()}`} style={styles.rowContainer}>
                   {row.map((item) => (
                     <MemoryItem
                       key={item.id}

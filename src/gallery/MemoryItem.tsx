@@ -23,11 +23,12 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
     useEffect(() => {
       let active = true;
 
-      // If already cached in memory, skip resolution
+      // Always check in-memory cache when item changes
       const current = previewCacheService.getInMemoryPreview(item.telegram_file_id || item.id);
       if (current) {
         setImgUri(current);
-        return;
+      } else {
+        setImgUri(null);
       }
 
       previewCacheService
