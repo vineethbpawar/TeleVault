@@ -109,10 +109,10 @@ export const MemoryGrid: React.FC<MemoryGridProps> = ({
     return result;
   }, [items, columns]);
 
-  // On Web PWA, render a fast direct grid to bypass React Native SectionList overhead on Mobile Safari
+  // On Web PWA, render a fast scrollable grid with native web scrolling
   if (Platform.OS === 'web') {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { overflowY: 'auto' } as any]}>
         <View style={styles.gridContent}>
           {sections.map((section) => (
             <View key={section.title}>
