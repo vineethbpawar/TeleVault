@@ -28,8 +28,8 @@ export function getProxiedUrl(targetUrl: string, shardKey: string = ''): string 
 
 class ConcurrencyQueue {
   private activeCount = 0;
-  // Domain sharding unlocks up to 24 parallel connections on Web while keeping per-domain requests under 5
-  private maxConcurrency = Platform.OS === 'web' ? 16 : 4;
+  // Cap maxConcurrency at 6 for Web browsers to match browser socket pool standards
+  private maxConcurrency = Platform.OS === 'web' ? 6 : 4;
   private queue: (() => Promise<any>)[] = [];
 
   async run<T>(task: () => Promise<T>): Promise<T> {
