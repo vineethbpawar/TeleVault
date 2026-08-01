@@ -84,20 +84,11 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
             }}
           />
         ) : (
-          <View
-            style={[
-              styles.fallbackContainer,
-              {
-                backgroundColor: `#${(item.id || 'abc')
-                  .slice(0, 6)
-                  .padEnd(6, '1a')}`,
-              },
-            ]}
-          >
+          <View style={styles.fallbackContainer}>
             {isVideo ? (
-              <Video size={22} color="#FFFFFF" opacity={0.7} />
+              <Video size={22} color="#6C6C70" />
             ) : (
-              <ImageIcon size={22} color="#FFFFFF" opacity={0.7} />
+              <ImageIcon size={22} color="#6C6C70" />
             )}
           </View>
         )}

@@ -423,11 +423,7 @@ export const previewCacheService = {
           const thumbUrl = await telegramService.getTelegramFileDownloadUrl(thumbFileId, signal);
           let previewUri = thumbUrl;
           if (Platform.OS === 'web') {
-            const proxiedUrl = `/api/telegram-proxy?url=${encodeURIComponent(thumbUrl)}`;
-            const res = await fetch(proxiedUrl, { signal });
-            if (!res.ok) throw new Error(`tgthumb image fetch failed with status ${res.status}`);
-            const blob = await res.blob();
-            previewUri = URL.createObjectURL(blob);
+            previewUri = thumbUrl; // thumbUrl is already proxied via getTelegramFileDownloadUrl
           } else {
             const localPath = `${FileSystem.cacheDirectory}tgthumb_${thumbFileId}.jpg`;
             const dl = await FileSystem.downloadAsync(thumbUrl, localPath);
@@ -542,11 +538,8 @@ export const previewCacheService = {
               const proxiedUrl = `/api/telegram-proxy?url=${encodeURIComponent(downloadUrl)}`;
               previewUri = await encryptionService.decryptFile(proxiedUrl, fileName, file.mime_type);
             } else {
-              const proxiedUrl = `/api/telegram-proxy?url=${encodeURIComponent(downloadUrl)}`;
-              const res = await fetch(proxiedUrl, { signal });
-              if (!res.ok) throw new Error(`Image fetch failed with status ${res.status}`);
-              const blob = await res.blob();
-              previewUri = URL.createObjectURL(blob);
+              // On Web, downloadUrl is already proxied via getTelegramFileDownloadUrl
+              previewUri = downloadUrl;
             }
           } else {
             if (file.is_private) {
