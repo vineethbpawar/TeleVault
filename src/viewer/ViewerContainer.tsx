@@ -16,12 +16,13 @@ const { width, height } = Dimensions.get('window');
 const ViewerItem = React.memo<{
   file: any;
   isActive: boolean;
+  isPreload: boolean;
   paused: boolean;
   onTapLeft: () => void;
   onTapRight: () => void;
   onHoldStart: () => void;
   onHoldEnd: () => void;
-}>(({ file, isActive, paused, onTapLeft, onTapRight, onHoldStart, onHoldEnd }) => {
+}>(({ file, isActive, isPreload, paused, onTapLeft, onTapRight, onHoldStart, onHoldEnd }) => {
   const [resolvedUri, setResolvedUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mediaError, setMediaError] = useState<string | null>(null);
@@ -29,8 +30,8 @@ const ViewerItem = React.memo<{
   useEffect(() => {
     let active = true;
 
-    // Only resolve media for active slide and adjacent slots [previous, current, next]
-    if (!isActive) {
+    // Resolve media for active slide AND next/prev pre-buffered slides
+    if (!isActive && !isPreload) {
       setLoading(true);
       return;
     }
@@ -58,7 +59,7 @@ const ViewerItem = React.memo<{
         } catch (_) {}
       }
     };
-  }, [file, isActive]);
+  }, [file, isActive, isPreload]);
 
   const renderPressableContent = (content: React.ReactNode) => {
     return (
@@ -482,6 +483,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
             <ViewerItem
               file={item}
               isActive={isCurrent}
+              isPreload={isPrev || isNext}
               paused={!isCurrent || isHoldActive || isDragging || isMenuOpen}
               onTapLeft={goToPrevious}
               onTapRight={goToNext}
