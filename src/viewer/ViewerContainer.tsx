@@ -14,7 +14,7 @@ const { width, height } = Dimensions.get('window');
 
 // Single-Subsystem Isolation Experiment Toggle
 // 'OFF' | 'EXPA_NATIVE_HTML_ONLY' | 'EXPB_FLATLIST_ONLY'
-const SINGLE_SUBSYSTEM_EXPERIMENT: 'OFF' | 'EXPA_NATIVE_HTML_ONLY' | 'EXPB_FLATLIST_ONLY' = 'EXPA_NATIVE_HTML_ONLY';
+const SINGLE_SUBSYSTEM_EXPERIMENT: 'OFF' | 'EXPA_NATIVE_HTML_ONLY' | 'EXPB_FLATLIST_ONLY' = 'EXPB_FLATLIST_ONLY';
 
 // Individual Slide Item wrapper
 const ViewerItem = React.memo<{
@@ -467,63 +467,78 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
       ]}
       {...panResponder.panHandlers}
     >
-      {/* Horizontal virtual swiper */}
-      <FlatList
-        ref={flatListRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        data={localFiles}
-        keyExtractor={(item) => item.id}
-        initialScrollIndex={initialIndex}
-        getItemLayout={(_, index) => ({
-          length: width,
-          offset: width * index,
-          index,
-        })}
-        onScrollBeginDrag={() => setIsDragging(true)}
-        onMomentumScrollEnd={handleScrollEnd}
-        renderItem={({ item, index }) => {
-          const isCurrent = index === currentIndex;
-          const isPrev = index === currentIndex - 1;
-          const isNext = index === currentIndex + 1;
-          const isNearby = isCurrent || isPrev || isNext;
+      {/* Single-Subsystem Experiment B: Replace ONLY FlatList with a direct CSS flex container */}
+      {SINGLE_SUBSYSTEM_EXPERIMENT === 'EXPB_FLATLIST_ONLY' && Platform.OS === 'web' ? (
+        <View style={{ width, height, overflow: 'hidden', position: 'relative' }}>
+          <ViewerItem
+            file={activeFile}
+            isActive={true}
+            isPreload={false}
+            paused={isHoldActive || isDragging || isMenuOpen}
+            onTapLeft={goToPrevious}
+            onTapRight={goToNext}
+            onHoldStart={() => setIsHoldActive(true)}
+            onHoldEnd={() => setIsHoldActive(false)}
+          />
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          data={localFiles}
+          keyExtractor={(item) => item.id}
+          initialScrollIndex={initialIndex}
+          getItemLayout={(_, index) => ({
+            length: width,
+            offset: width * index,
+            index,
+          })}
+          onScrollBeginDrag={() => setIsDragging(true)}
+          onMomentumScrollEnd={handleScrollEnd}
+          renderItem={({ item, index }) => {
+            const isCurrent = index === currentIndex;
+            const isPrev = index === currentIndex - 1;
+            const isNext = index === currentIndex + 1;
+            const isNearby = isCurrent || isPrev || isNext;
 
-          if (!isNearby) {
+            if (!isNearby) {
+              return (
+                <Pressable
+                  style={{ width, height, backgroundColor: '#000000' }}
+                  onPress={(e) => {
+                    const x = e.nativeEvent.pageX;
+                    if (x < width * 0.3) {
+                      goToPrevious();
+                    } else {
+                      goToNext();
+                    }
+                  }}
+                />
+              );
+            }
+
             return (
-              <Pressable
-                style={{ width, height, backgroundColor: '#000000' }}
-                onPress={(e) => {
-                  const x = e.nativeEvent.pageX;
-                  if (x < width * 0.3) {
-                    goToPrevious();
-                  } else {
-                    goToNext();
-                  }
-                }}
+              <ViewerItem
+                file={item}
+                isActive={isCurrent}
+                isPreload={isPrev || isNext}
+                paused={!isCurrent || isHoldActive || isDragging || isMenuOpen}
+                onTapLeft={goToPrevious}
+                onTapRight={goToNext}
+                onHoldStart={() => setIsHoldActive(true)}
+                onHoldEnd={() => setIsHoldActive(false)}
               />
             );
-          }
-
-          return (
-            <ViewerItem
-              file={item}
-              isActive={isCurrent}
-              isPreload={isPrev || isNext}
-              paused={!isCurrent || isHoldActive || isDragging || isMenuOpen}
-              onTapLeft={goToPrevious}
-              onTapRight={goToNext}
-              onHoldStart={() => setIsHoldActive(true)}
-              onHoldEnd={() => setIsHoldActive(false)}
-            />
-          );
-        }}
-        windowSize={5}
-        maxToRenderPerBatch={1}
-        updateCellsBatchingPeriod={100}
-        initialNumToRender={1}
-        removeClippedSubviews={Platform.OS !== 'web'}
-      />
+          }}
+          windowSize={5}
+          maxToRenderPerBatch={1}
+          updateCellsBatchingPeriod={100}
+          initialNumToRender={1}
+          removeClippedSubviews={Platform.OS !== 'web'}
+        />
+      )}
 
       {/* Top HUD (Details and close button) */}
       {!isHoldActive && !isMenuOpen && (
