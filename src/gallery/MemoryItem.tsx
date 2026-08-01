@@ -15,6 +15,7 @@ interface MemoryItemProps {
 
 export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
   ({ item, size, onPress, onLongPress, isSelected, isSelectionMode }) => {
+    // Synchronously check in-memory cache on initial render
     const [imgUri, setImgUri] = useState<string | null>(() => {
       return previewCacheService.getInMemoryPreview(item.telegram_file_id || item.id);
     });
@@ -22,17 +23,31 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
     useEffect(() => {
       let active = true;
 
+      // If already cached in memory, skip resolution
+      const current = previewCacheService.getInMemoryPreview(item.telegram_file_id || item.id);
+      if (current) {
+        setImgUri(current);
+        return;
+      }
+
       previewCacheService
-        .resolveFilePreview(item, false, undefined, (generatedUri) => {
-          if (active) {
-            setImgUri(generatedUri);
-          }
-        }, 'low')
+        .resolveFilePreview(
+          item,
+          false,
+          undefined,
+          (generatedUri) => {
+            if (active && generatedUri) {
+              setImgUri(generatedUri);
+            }
+          },
+          'low'
+        )
         .then((res) => {
-          if (active && res.previewUri) {
+          if (active && res && res.previewUri) {
             setImgUri(res.previewUri);
           }
-        });
+        })
+        .catch(() => {});
 
       return () => {
         active = false;
@@ -43,7 +58,7 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
 
     return (
       <TouchableOpacity
-        activeOpacity={0.8}
+        activeOpacity={0.85}
         onPress={onPress}
         onLongPress={onLongPress}
         style={{
@@ -53,7 +68,7 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
           position: 'relative',
           borderRadius: 16,
           overflow: 'hidden',
-          backgroundColor: '#1A1A1A',
+          backgroundColor: '#1E1E1E',
         }}
       >
         {imgUri ? (
@@ -61,17 +76,18 @@ export const MemoryItem: React.FC<MemoryItemProps> = React.memo(
             source={{ uri: imgUri }}
             style={styles.image}
             resizeMode="cover"
+            fadeDuration={0}
             onError={() => {
-              // If blob object URL fails/evicted, fallback to placeholder icon smoothly
+              // Smooth fallback on Blob URL eviction
               setImgUri(null);
             }}
           />
         ) : (
           <View style={styles.fallbackContainer}>
             {isVideo ? (
-              <Video size={24} color="#8E8E93" />
+              <Video size={22} color="#6C6C70" />
             ) : (
-              <ImageIcon size={24} color="#8E8E93" />
+              <ImageIcon size={22} color="#6C6C70" />
             )}
           </View>
         )}
