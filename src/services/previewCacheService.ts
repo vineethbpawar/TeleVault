@@ -19,18 +19,18 @@ async function cacheSetItem(key: string, value: string): Promise<void> {
   return await AsyncStorage.setItem(key, value);
 }
 
-class ConcurrencyQueue {
-  private activeCount = 0;
-  // Domain sharding unlocks up to 24 parallel connections on Web while keeping per-domain requests under 5
-  private maxConcurrency = Platform.OS === 'web' ? 16 : 4;
-  private queue: (() => Promise<any>)[] = [];
-
 // Helper function to get proxied URL with domain sharding
 export function getProxiedUrl(targetUrl: string, shardKey: string = ''): string {
   if (Platform.OS !== 'web') return targetUrl;
   const encoded = encodeURIComponent(targetUrl);
   return `/api/telegram-proxy?url=${encoded}`;
 }
+
+class ConcurrencyQueue {
+  private activeCount = 0;
+  // Domain sharding unlocks up to 24 parallel connections on Web while keeping per-domain requests under 5
+  private maxConcurrency = Platform.OS === 'web' ? 16 : 4;
+  private queue: (() => Promise<any>)[] = [];
 
   async run<T>(task: () => Promise<T>): Promise<T> {
     if (this.activeCount < this.maxConcurrency) {
