@@ -5,6 +5,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { File as EFSFile } from 'expo-file-system';
 import { telegramService } from './telegramService';
 
+const activeRebuilds = new Map<string, Promise<{ success: boolean; message: string; localUri: string | null }>>();
+
 export const largeFileDownloadService = {
   /**
    * List all chunks for a given large file.
@@ -58,7 +60,12 @@ export const largeFileDownloadService = {
     message: string;
     localUri: string | null;
   }> {
-    try {
+    if (activeRebuilds.has(largeFileId)) {
+      return activeRebuilds.get(largeFileId)!;
+    }
+
+    const rebuildTask = (async () => {
+      try {
       const { chunkCount, originalFileName } = await this.getChunkInfo(largeFileId);
       const chunks = await this.listChunks(largeFileId);
       
@@ -68,6 +75,21 @@ export const largeFileDownloadService = {
       }
 
       if (Platform.OS === 'web') {
+        const { getWebBlob, setWebBlob } = require('./webBlobStore');
+        const cacheKey = `large_file_${largeFileId}`;
+
+        // 1. Check IndexedDB cache for instant zero-buffering loading
+        const cachedBlob = await getWebBlob(cacheKey).catch(() => null);
+        if (cachedBlob) {
+          const localUri = URL.createObjectURL(cachedBlob);
+          if (onProgress) onProgress(100);
+          return {
+            success: true,
+            message: 'File retrieved from local cache.',
+            localUri,
+          };
+        }
+
         const chunkBlobs: Blob[] = new Array(completedChunks.length);
         let downloadedCount = 0;
         const CONCURRENCY = 4;
@@ -115,6 +137,10 @@ export const largeFileDownloadService = {
         await Promise.all(workers);
 
         const combinedBlob = new Blob(chunkBlobs, { type: mimeType || 'application/octet-stream' });
+        
+        // Save to IndexedDB so subsequent views open instantly without re-downloading
+        await setWebBlob(cacheKey, combinedBlob).catch(() => {});
+
         const localUri = URL.createObjectURL(combinedBlob);
         
         if (onProgress) {
@@ -191,6 +217,12 @@ export const largeFileDownloadService = {
         localUri: null,
       };
     }
+    })();
+
+    activeRebuilds.set(largeFileId, rebuildTask);
+    return rebuildTask.finally(() => {
+      activeRebuilds.delete(largeFileId);
+    });
   }
 };
 
