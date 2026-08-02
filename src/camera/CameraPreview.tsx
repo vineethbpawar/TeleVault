@@ -114,35 +114,51 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
       };
     }, []);
 
-    // Web PWA Torch / Flashlight track control
+    // Web PWA Torch & Double Tap Event Listener Setup
     useEffect(() => {
       if (Platform.OS !== 'web') return;
 
       const toggleWebTorch = async () => {
         try {
-          // Find active video elements in DOM
           const videoEls = Array.from(document.querySelectorAll('video')) as HTMLVideoElement[];
           for (const video of videoEls) {
             if (video.srcObject && 'getVideoTracks' in (video.srcObject as any)) {
               const stream = video.srcObject as MediaStream;
               const tracks = stream.getVideoTracks();
               for (const track of tracks) {
-                const capabilities = (track.getCapabilities ? track.getCapabilities() : {}) as any;
-                if ('torch' in capabilities) {
+                try {
                   await track.applyConstraints({
                     advanced: [{ torch: flash === 'on' }] as any,
                   });
-                }
+                } catch (_) {}
               }
             }
           }
         } catch (err) {
-          console.warn('[WebFlash] Web Torch API not supported by device hardware:', err);
+          console.warn('[WebFlash] Torch toggle error:', err);
         }
       };
 
       toggleWebTorch();
     }, [flash]);
+
+    // Attach native Web window double click / dblclick listener for Web PWA
+    useEffect(() => {
+      if (Platform.OS !== 'web') return;
+
+      const handleWebDblClick = (e: MouseEvent | TouchEvent) => {
+        const target = e.target as HTMLElement;
+        // Trigger flip if double click occurs on camera container or video preview
+        if (target && (target.tagName === 'VIDEO' || target.closest('[data-camera-preview="true"]'))) {
+          if (onDoubleTap) onDoubleTap();
+        }
+      };
+
+      window.addEventListener('dblclick', handleWebDblClick);
+      return () => {
+        window.removeEventListener('dblclick', handleWebDblClick);
+      };
+    }, [onDoubleTap]);
 
     useAnimatedReaction(
       () => zoomShared.value,
@@ -288,6 +304,7 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
       <GestureDetector gesture={combinedGesture}>
         <Pressable
           {...(Platform.OS === 'web' ? ({
+            'data-camera-preview': 'true',
             onTouchEnd: (e: any) => {
               const now = Date.now();
               const timeDiff = now - lastTapRef.current;
@@ -348,12 +365,12 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
 
           {focusTarget && <FocusRing x={focusTarget.x} y={focusTarget.y} />}
 
-          {/* Front Selfie Screen Flash Overlay */}
-          {flash === 'on' && facing === 'front' && (
+          {/* Flash Overlay for Front Camera OR Web PWA Camera */}
+          {flash === 'on' && (facing === 'front' || Platform.OS === 'web') && (
             <View
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: '#FFFFFF', opacity: 0.85, zIndex: 10, pointerEvents: 'none' }
+                { backgroundColor: '#FFFFFF', opacity: facing === 'front' ? 0.85 : 0.45, zIndex: 10, pointerEvents: 'none' }
               ]}
             />
           )}
