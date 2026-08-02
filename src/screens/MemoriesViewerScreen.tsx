@@ -10,7 +10,7 @@ export const MemoriesViewerScreen: React.FC<Props> = ({ route, navigation }) => 
   const { files, initialIndex } = route.params;
 
   return (
-    <Screen>
+    <Screen backgroundColor="transparent">
       <ViewerContainer
         files={files}
         initialIndex={initialIndex}
