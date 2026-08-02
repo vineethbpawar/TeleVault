@@ -318,7 +318,7 @@ export const CameraContainer: React.FC<CameraContainerProps> = ({ navigation, ro
         />
       )}
 
-      {/* Top Safe Action HUD (Avatar/Close, Mode badge, Settings cog) */}
+      {/* Top Safe Action HUD */}
       <View style={[styles.topBar, { top: insets.top > 0 ? insets.top + 10 : 20 }]}>
         {route.name === 'ChatCamera' ? (
           <TouchableOpacity
@@ -350,57 +350,68 @@ export const CameraContainer: React.FC<CameraContainerProps> = ({ navigation, ro
           </Text>
         </View>
 
-        <TouchableOpacity
-          style={[styles.circleBtn, showToolsPanel && styles.circleBtnActive]}
-          onPress={() => setShowToolsPanel(prev => !prev)}
-          activeOpacity={0.8}
-        >
-          <Settings size={20} color={showToolsPanel ? '#000000' : '#FFFFFF'} />
-        </TouchableOpacity>
+        {/* Empty placeholder for balance */}
+        <View style={{ width: 36 }} />
       </View>
 
-      {/* Settings Quick Panel Dropdown */}
-      {showToolsPanel && (
-        <View style={[styles.toolsPanel, { top: insets.top > 0 ? insets.top + 60 : 70 }]}>
-          <TouchableOpacity style={styles.toolsRow} onPress={() => { toggleFlash(); showToast(`Flash: ${flash === 'on' ? 'ON' : 'OFF'}`); }}>
-            <Zap size={18} color="#FFFFFF" style={{ marginRight: 10 }} />
-            <Text style={styles.toolsText}>Flash: {flash.toUpperCase()}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.toolsRow} onPress={toggleFacing}>
-            <RefreshCw size={18} color="#FFFFFF" style={{ marginRight: 10 }} />
-            <Text style={styles.toolsText}>Camera: {facing === 'back' ? 'BACK' : 'FRONT'}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.toolsRow} onPress={handleTimerToggle}>
-            <Clock size={18} color="#FFFFFF" style={{ marginRight: 10 }} />
-            <Text style={styles.toolsText}>Self-Timer: {timerOption === 'off' ? 'OFF' : timerOption}</Text>
-          </TouchableOpacity>
-
-          <View style={styles.toolsRowGroup}>
-            <Compass size={18} color="#FFFFFF" style={{ marginRight: 10 }} />
-            <Text style={styles.toolsText}>Destination:</Text>
-            <View style={styles.destToggleWrapper}>
-              {(['memories', 'drive', 'private'] as const).map((dest) => (
-                <TouchableOpacity
-                  key={dest}
-                  style={[styles.destBtn, defaultDestination === dest && styles.destBtnActive]}
-                  onPress={() => setDefaultDestination(dest)}
-                >
-                  <Text style={[styles.destBtnText, defaultDestination === dest && styles.destBtnTextActive]}>
-                    {dest.substring(0, 3).toUpperCase()}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+      {/* Snapchat-style Right Vertical Camera Sidebar Controls */}
+      <View style={[styles.rightSidebarContainer, { top: insets.top > 0 ? insets.top + 10 : 20 }]}>
+        {/* Flip Camera */}
+        <TouchableOpacity style={styles.snapToolItem} onPress={toggleFacing}>
+          {showToolsPanel && <Text style={styles.snapToolLabel}>Flip</Text>}
+          <View style={styles.snapToolIconCircle}>
+            <RefreshCw size={20} color="#FFFFFF" />
           </View>
+        </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.toolsRow, { borderBottomWidth: 0 }]} onPress={() => { setShowToolsPanel(false); navigation.navigate('SettingsTab'); }}>
-            <Shield size={18} color="#FFFFFF" style={{ marginRight: 10 }} />
-            <Text style={styles.toolsText}>Queue & Private PIN</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+        {/* Flash Toggle */}
+        <TouchableOpacity style={styles.snapToolItem} onPress={() => { toggleFlash(); showToast(`Flash: ${flash === 'on' ? 'ON' : 'OFF'}`); }}>
+          {showToolsPanel && <Text style={styles.snapToolLabel}>Flash</Text>}
+          <View style={[styles.snapToolIconCircle, flash === 'on' && styles.snapToolIconActive]}>
+            <Zap size={20} color={flash === 'on' ? '#000000' : '#FFFFFF'} />
+          </View>
+        </TouchableOpacity>
+
+        {/* Expanded Snapchat Tools */}
+        {showToolsPanel && (
+          <>
+            {/* Self-Timer */}
+            <TouchableOpacity style={styles.snapToolItem} onPress={handleTimerToggle}>
+              <Text style={styles.snapToolLabel}>Timer: {timerOption}</Text>
+              <View style={[styles.snapToolIconCircle, timerOption !== 'off' && styles.snapToolIconActive]}>
+                <Clock size={20} color={timerOption !== 'off' ? '#000000' : '#FFFFFF'} />
+              </View>
+            </TouchableOpacity>
+
+            {/* Destination Toggle */}
+            <TouchableOpacity
+              style={styles.snapToolItem}
+              onPress={() => {
+                const dests: ('memories' | 'drive' | 'private')[] = ['memories', 'drive', 'private'];
+                const nextIdx = (dests.indexOf(defaultDestination) + 1) % dests.length;
+                setDefaultDestination(dests[nextIdx]);
+                showToast(`Destination: ${dests[nextIdx].toUpperCase()}`);
+              }}
+            >
+              <Text style={styles.snapToolLabel}>Dest: {defaultDestination.toUpperCase()}</Text>
+              <View style={styles.snapToolIconCircle}>
+                <Compass size={20} color="#FFFC00" />
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* Expand / Collapse Chevron Button */}
+        <TouchableOpacity style={styles.snapToolItem} onPress={() => setShowToolsPanel(prev => !prev)}>
+          <View style={styles.snapToolIconCircle}>
+            {showToolsPanel ? (
+              <X size={20} color="#FFFFFF" />
+            ) : (
+              <Settings size={20} color="#FFFFFF" />
+            )}
+          </View>
+        </TouchableOpacity>
+      </View>
 
       {/* Countdown overlay indicator */}
       {countdown !== null && (
@@ -548,43 +559,39 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
   },
-  toolsPanel: {
+  rightSidebarContainer: {
     position: 'absolute',
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(15, 17, 35, 0.95)',
-    borderRadius: 24,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    right: 16,
+    alignItems: 'flex-end',
     zIndex: 25,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
   },
-  toolsRow: {
+  snapToolItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+    marginBottom: 14,
   },
-  toolsRowGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-    justifyContent: 'space-between',
-  },
-  toolsText: {
+  snapToolLabel: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
+    marginRight: 10,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
-  destToggleWrapper: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    borderRadius: 16,
-    padding: 2,
+  snapToolIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  snapToolIconActive: {
+    backgroundColor: '#FFFC00',
+    borderColor: '#FFFC00',
   },
   destBtn: {
     paddingVertical: 4,
