@@ -239,6 +239,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   const [showInfoModal, setShowInfoModal] = useState(false);
 
   // Swipe-down-to-dismiss gesture setup
+  const translateX = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(0)).current;
   const overlayOpacity = useRef(new Animated.Value(1)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -316,26 +317,32 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return gestureState.dy > 15 && Math.abs(gestureState.dx) < 35 && !isHoldActive && !isMenuOpen;
+        return gestureState.dy > 12 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && !isHoldActive && !isMenuOpen;
       },
       onPanResponderMove: (evt, gestureState) => {
         if (gestureState.dy > 0) {
+          translateX.setValue(gestureState.dx);
           translateY.setValue(gestureState.dy);
-          const nextScale = Math.max(0.82, 1 - (gestureState.dy / height) * 0.45);
+          const nextScale = Math.max(0.65, 1 - (gestureState.dy / height) * 0.55);
           scaleAnim.setValue(nextScale);
-          overlayOpacity.setValue(Math.max(0.2, 1 - gestureState.dy / (height * 0.6)));
+          overlayOpacity.setValue(Math.max(0.1, 1 - gestureState.dy / (height * 0.5)));
         }
       },
       onPanResponderRelease: (evt, gestureState) => {
-        if (gestureState.dy > 60 || gestureState.vy > 0.3) {
+        if (gestureState.dy > 80 || gestureState.vy > 0.4) {
           Animated.parallel([
             Animated.timing(translateY, {
-              toValue: height,
+              toValue: height * 0.8,
+              duration: 180,
+              useNativeDriver: true,
+            }),
+            Animated.timing(translateX, {
+              toValue: gestureState.dx * 1.5,
               duration: 180,
               useNativeDriver: true,
             }),
             Animated.timing(scaleAnim, {
-              toValue: 0.75,
+              toValue: 0.5,
               duration: 180,
               useNativeDriver: true,
             }),
@@ -349,37 +356,48 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
           });
         } else {
           Animated.parallel([
+            Animated.spring(translateX, {
+              toValue: 0,
+              friction: 9,
+              tension: 50,
+              useNativeDriver: true,
+            }),
             Animated.spring(translateY, {
               toValue: 0,
-              friction: 8,
-              tension: 40,
+              friction: 9,
+              tension: 50,
               useNativeDriver: true,
             }),
             Animated.spring(scaleAnim, {
               toValue: 1,
-              friction: 8,
-              tension: 40,
+              friction: 9,
+              tension: 50,
               useNativeDriver: true,
             }),
             Animated.spring(overlayOpacity, {
               toValue: 1,
-              friction: 8,
-              tension: 40,
+              friction: 9,
+              tension: 50,
               useNativeDriver: true,
             })
           ]).start();
         }
       },
       onPanResponderTerminate: (evt, gestureState) => {
-        if (gestureState.dy > 60 || gestureState.vy > 0.3) {
+        if (gestureState.dy > 80 || gestureState.vy > 0.4) {
           Animated.parallel([
             Animated.timing(translateY, {
-              toValue: height,
+              toValue: height * 0.8,
+              duration: 180,
+              useNativeDriver: true,
+            }),
+            Animated.timing(translateX, {
+              toValue: gestureState.dx * 1.5,
               duration: 180,
               useNativeDriver: true,
             }),
             Animated.timing(scaleAnim, {
-              toValue: 0.75,
+              toValue: 0.5,
               duration: 180,
               useNativeDriver: true,
             }),
@@ -393,22 +411,28 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
           });
         } else {
           Animated.parallel([
+            Animated.spring(translateX, {
+              toValue: 0,
+              friction: 9,
+              tension: 50,
+              useNativeDriver: true,
+            }),
             Animated.spring(translateY, {
               toValue: 0,
-              friction: 8,
-              tension: 40,
+              friction: 9,
+              tension: 50,
               useNativeDriver: true,
             }),
             Animated.spring(scaleAnim, {
               toValue: 1,
-              friction: 8,
-              tension: 40,
+              friction: 9,
+              tension: 50,
               useNativeDriver: true,
             }),
             Animated.spring(overlayOpacity, {
               toValue: 1,
-              friction: 8,
-              tension: 40,
+              friction: 9,
+              tension: 50,
               useNativeDriver: true,
             })
           ]).start();
@@ -500,6 +524,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
         {
           opacity: overlayOpacity,
           transform: [
+            { translateX: translateX },
             { translateY: translateY },
             { scale: scaleAnim }
           ],
