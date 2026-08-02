@@ -19,7 +19,7 @@ import { UserProfile } from '../types/chat';
 import { UserReport } from '../types/friends';
 import AppHeader from '../components/AppHeader';
 import AppCard from '../components/AppCard';
-import AppButton from '../components/AppButton';
+import Screen from '../components/Screen';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'AdminDashboard'>;
 
@@ -146,31 +146,30 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
   if (isAdmin === false) {
     return (
-      <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.container}>
+      <Screen edges={['top', 'bottom', 'left', 'right']}>
         <AppHeader title="Admin Panel" showBackButton={true} />
         <View style={styles.center}>
           <Shield size={64} color="#FF453A" style={{ marginBottom: 16 }} />
           <Text style={styles.accessDeniedTitle}>Access Denied</Text>
           <Text style={styles.accessDeniedSub}>Only users with 'admin' privileges can access this dashboard.</Text>
-          <AppButton title="Go Back" onPress={() => navigation.goBack()} style={{ marginTop: 24 }} />
         </View>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   if (loading) {
     return (
-      <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.container}>
+      <Screen edges={['top', 'bottom', 'left', 'right']}>
         <AppHeader title="Admin Dashboard" showBackButton={true} />
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#FFFC00" />
         </View>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   return (
-    <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.container}>
+    <Screen edges={['top', 'bottom', 'left', 'right']}>
       <AppHeader title="Admin Controls" showBackButton={true} />
 
       <ScrollView
@@ -282,7 +281,7 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
           ))}
         </AppCard>
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 };
 

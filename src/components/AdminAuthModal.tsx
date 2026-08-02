@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Text, Modal, TextInput, TouchableOpacity, Platform } from 'react-native';
 import { Shield, KeyRound, Check, X, AlertTriangle, UserCheck } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showToast } from './ToastBanner';
 
 interface AdminAuthModalProps {
@@ -13,6 +14,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ visible, onSucce
   const [adminId, setAdminId] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const insets = useSafeAreaInsets();
 
   const HARDCODED_ADMIN_ID = 'tv-vini-root';
   const HARDCODED_PASSWORD = 'bhoom@sandy@2007';
@@ -36,7 +38,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ visible, onSucce
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { paddingTop: Math.max(insets.top, 20), paddingBottom: Math.max(insets.bottom, 20) }]}>
         <View style={styles.card}>
           <TouchableOpacity style={styles.closeBtn} onPress={onCancel}>
             <X size={20} color="#8E8E93" />
