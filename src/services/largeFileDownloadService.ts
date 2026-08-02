@@ -69,9 +69,9 @@ export const largeFileDownloadService = {
       const { chunkCount, originalFileName } = await this.getChunkInfo(largeFileId);
       const chunks = await this.listChunks(largeFileId);
       
-      const completedChunks = chunks.filter(c => c.status === 'completed');
-      if (completedChunks.length !== chunkCount) {
-        throw new Error(`Cannot rebuild file: only ${completedChunks.length}/${chunkCount} chunks completed.`);
+      const completedChunks = chunks.filter(c => c.status === 'completed' || !!c.telegram_file_id);
+      if (completedChunks.length === 0) {
+        throw new Error(`Cannot rebuild file: 0/${chunkCount || chunks.length} chunks uploaded.`);
       }
 
       if (Platform.OS === 'web') {
@@ -95,29 +95,44 @@ export const largeFileDownloadService = {
         const CONCURRENCY = 8;
 
         const downloadSingleChunk = async (chunk: LargeFileChunk, index: number) => {
-          let chunkUrl = '';
-          if (!isPrivate) {
-            chunkUrl = await telegramService.getTelegramFileDownloadUrl(chunk.telegram_file_id!);
-          } else {
-            const cachedUri = await telegramService.downloadTelegramFileToCache(chunk.telegram_file_id!, chunk.chunk_file_name);
-            const { encryptionService } = require('./encryptionService');
-            chunkUrl = await encryptionService.decryptFile(cachedUri, chunk.chunk_file_name, mimeType || undefined);
-          }
+          let attempt = 0;
+          let lastErr: any;
+          while (attempt < 3) {
+            try {
+              let chunkUrl = '';
+              if (!isPrivate) {
+                chunkUrl = await telegramService.getTelegramFileDownloadUrl(chunk.telegram_file_id!);
+              } else {
+                const cachedUri = await telegramService.downloadTelegramFileToCache(chunk.telegram_file_id!, chunk.chunk_file_name);
+                const { encryptionService } = require('./encryptionService');
+                chunkUrl = await encryptionService.decryptFile(cachedUri, chunk.chunk_file_name, mimeType || undefined);
+              }
 
-          let proxiedUrl = chunkUrl;
-          if (!chunkUrl.startsWith('/') && !chunkUrl.startsWith('blob:')) {
-            proxiedUrl = `/api/telegram-proxy?url=${encodeURIComponent(chunkUrl)}`;
-          }
+              let proxiedUrl = chunkUrl;
+              if (!chunkUrl.startsWith('/') && !chunkUrl.startsWith('blob:')) {
+                proxiedUrl = `/api/telegram-proxy?url=${encodeURIComponent(chunkUrl)}`;
+              }
 
-          const res = await fetch(proxiedUrl);
-          if (!res.ok) throw new Error(`Failed to download chunk ${chunk.chunk_index}`);
-          const blob = await res.blob();
-          chunkBlobs[index] = blob;
-
-          downloadedCount++;
-          if (onProgress) {
-            onProgress(Math.round((downloadedCount / completedChunks.length) * 100));
+              const res = await fetch(proxiedUrl);
+              if (!res.ok) throw new Error(`HTTP ${res.status} downloading chunk ${chunk.chunk_index}`);
+              const blob = await res.blob();
+              if (!blob || blob.size === 0) throw new Error(`Empty blob returned for chunk ${chunk.chunk_index}`);
+              
+              chunkBlobs[index] = blob;
+              downloadedCount++;
+              if (onProgress) {
+                onProgress(Math.round((downloadedCount / completedChunks.length) * 100));
+              }
+              return;
+            } catch (err) {
+              lastErr = err;
+              attempt++;
+              if (attempt < 3) {
+                await new Promise((r) => setTimeout(r, 500 * attempt));
+              }
+            }
           }
+          throw lastErr || new Error(`Failed to download chunk ${chunk.chunk_index} after 3 attempts`);
         };
 
         let currentIndex = 0;
