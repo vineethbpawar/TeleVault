@@ -538,8 +538,8 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
               { scale: scaleAnim }
             ],
             borderRadius: scaleAnim.interpolate({
-              inputRange: [0.65, 1],
-              outputRange: [32, 0],
+              inputRange: [0.6, 1],
+              outputRange: [48, 0],
               extrapolate: 'clamp',
             }),
             overflow: 'hidden',
