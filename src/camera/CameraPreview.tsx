@@ -127,9 +127,12 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
               const tracks = stream.getVideoTracks();
               for (const track of tracks) {
                 try {
-                  await track.applyConstraints({
-                    advanced: [{ torch: flash === 'on' }] as any,
-                  });
+                  const capabilities = (track.getCapabilities ? track.getCapabilities() : {}) as any;
+                  if ('torch' in capabilities || true) {
+                    await track.applyConstraints({
+                      advanced: [{ torch: flash === 'on' }] as any,
+                    });
+                  }
                 } catch (_) {}
               }
             }
@@ -142,21 +145,39 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
       toggleWebTorch();
     }, [flash]);
 
-    // Attach native Web window double click / dblclick listener for Web PWA
+    // Attach high-reliability Web touchstart double-tap listener for Web PWA
     useEffect(() => {
       if (Platform.OS !== 'web') return;
 
-      const handleWebDblClick = (e: MouseEvent | TouchEvent) => {
-        const target = e.target as HTMLElement;
-        // Trigger flip if double click occurs on camera container or video preview
-        if (target && (target.tagName === 'VIDEO' || target.closest('[data-camera-preview="true"]'))) {
-          if (onDoubleTap) onDoubleTap();
+      let lastWebTouch = 0;
+      const handleWebTouchStart = (e: TouchEvent | MouseEvent) => {
+        const now = Date.now();
+        const diff = now - lastWebTouch;
+
+        if (diff < 400 && diff > 0) {
+          if (onDoubleTap) {
+            onDoubleTap();
+          }
+          lastWebTouch = 0;
+        } else {
+          lastWebTouch = now;
         }
       };
 
-      window.addEventListener('dblclick', handleWebDblClick);
+      const containerEl = document.querySelector('[data-camera-preview="true"]');
+      if (containerEl) {
+        containerEl.addEventListener('touchstart', handleWebTouchStart as any, { passive: true });
+        containerEl.addEventListener('click', handleWebTouchStart as any);
+      }
+
+      window.addEventListener('dblclick', handleWebTouchStart as any);
+
       return () => {
-        window.removeEventListener('dblclick', handleWebDblClick);
+        if (containerEl) {
+          containerEl.removeEventListener('touchstart', handleWebTouchStart as any);
+          containerEl.removeEventListener('click', handleWebTouchStart as any);
+        }
+        window.removeEventListener('dblclick', handleWebTouchStart as any);
       };
     }, [onDoubleTap]);
 
@@ -355,6 +376,7 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
             style={StyleSheet.absoluteFill}
             facing={facing}
             mode={cameraMode}
+            flash={flash === 'on' ? 'on' : 'off'}
             enableTorch={flash === 'on'}
             onCameraReady={onReady}
             zoom={zoomScale}
