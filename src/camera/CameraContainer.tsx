@@ -10,6 +10,7 @@ import { CameraPreview, CameraPreviewRef } from './CameraPreview';
 import { LENSES, CameraLensType, UploadDestination } from './types';
 import CameraControls from '../components/CameraControls';
 import UserAvatar from '../components/UserAvatar';
+import * as ImagePicker from 'expo-image-picker';
 import { showToast } from '../components/ToastBanner';
 import { supabase } from '../lib/supabase';
 
@@ -246,8 +247,36 @@ export const CameraContainer: React.FC<CameraContainerProps> = ({ navigation, ro
     showToast(`Timer set to: ${timerList[nextIdx].toUpperCase()}`);
   };
 
-  const handleGalleryPress = () => {
-    navigation.navigate('MemoriesTab');
+  const handleGalleryPress = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images', 'videos'],
+        quality: 1,
+        allowsEditing: false,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const isVideo = asset.type === 'video';
+        navigation.navigate('Preview', {
+          uri: asset.uri,
+          type: isVideo ? 'video' : 'photo',
+          fromGallery: true,
+          file_type: isVideo ? 'video' : 'image',
+          mime_type: asset.mimeType || (isVideo ? 'video/mp4' : 'image/jpeg'),
+          defaultLens: selectedLens,
+          locationText: (selectedLens === 'location' || selectedLens === 'date_location') ? locationText : undefined,
+          defaultDestination: route.name === 'ChatCamera' ? 'snap' : defaultDestination,
+          sendToUserId,
+          sendToUsername,
+          conversationId,
+          fromChatCamera: route.name === 'ChatCamera',
+        });
+      }
+    } catch (err: any) {
+      console.warn('[CameraContainer] Image picker error:', err);
+      showToast('Could not access photo gallery.');
+    }
   };
 
   if (isCameraPermissionLoading) {
