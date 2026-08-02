@@ -259,20 +259,26 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
         <Pressable
           onPress={(e: any) => {
             const now = Date.now();
-            if (lastTapRef.current && now - lastTapRef.current < 300) {
-              if (onDoubleTap) onDoubleTap();
-              lastTapRef.current = 0;
-              return;
-            }
+            const timeDiff = now - lastTapRef.current;
             lastTapRef.current = now;
-            const { pageX, pageY } = e.nativeEvent;
-            setFocusTarget({ x: pageX, y: pageY });
-            setAutoFocusMode('on');
-            if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
-            focusTimeoutRef.current = setTimeout(() => {
-              setFocusTarget(null);
-              setAutoFocusMode('off');
-            }, 1000);
+
+            if (timeDiff < 400 && timeDiff > 0) {
+              // Double tap detected!
+              if (onDoubleTap) {
+                onDoubleTap();
+              }
+              lastTapRef.current = 0;
+            } else {
+              // Single tap focus
+              const { pageX, pageY } = e.nativeEvent;
+              setFocusTarget({ x: pageX, y: pageY });
+              setAutoFocusMode('on');
+              if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
+              focusTimeoutRef.current = setTimeout(() => {
+                setFocusTarget(null);
+                setAutoFocusMode('off');
+              }, 1000);
+            }
           }}
           style={styles.container}
         >
