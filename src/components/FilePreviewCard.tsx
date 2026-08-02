@@ -53,6 +53,8 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
         mime_type: file.mime_type,
         local_thumbnail_uri: file.local_thumbnail_uri,
         telegram_file_id: file.telegram_file_id,
+        is_chunked: file.is_chunked,
+        large_file_id: file.large_file_id,
         is_private: file.is_private,
         overlay_metadata: file.overlay_metadata,
       }, false).then(result => {

@@ -129,7 +129,7 @@ const ViewerItem = React.memo<{
         EXPA_NATIVE_HTML_ONLY: Replace ONLY ImageViewer / VideoPlayer with raw <img> / <video>
         while preserving all Pressable gestures, overlays, captions, animations, and FlatList logic.
       */}
-      {SINGLE_SUBSYSTEM_EXPERIMENT === 'EXPA_NATIVE_HTML_ONLY' && Platform.OS === 'web' ? (
+      {(SINGLE_SUBSYSTEM_EXPERIMENT as string) === 'EXPA_NATIVE_HTML_ONLY' && Platform.OS === 'web' ? (
         isVideo ? (
           <video
             src={resolvedUri || undefined}

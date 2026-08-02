@@ -830,7 +830,7 @@ export const previewCacheService = {
 
       // Fallback: If no dedicated thumbnail was found, use playableUri or media_url directly as preview
       if (!previewUri) {
-        previewUri = playableUri || file.media_url;
+        previewUri = playableUri || file.media_url || undefined;
       }
 
       return {
@@ -956,6 +956,8 @@ export const previewCacheService = {
       media_url?: string | null;
       telegram_file_id?: string | null;
       is_private?: boolean | null;
+      is_chunked?: boolean | null;
+      large_file_id?: string | null;
       overlay_metadata?: any;
     },
     forceRefresh = false,

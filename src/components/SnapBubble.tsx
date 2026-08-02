@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { Play, Camera, Film, Eye, Flame } from 'lucide-react-native';
+import { previewCacheService } from '../services/previewCacheService';
 import { snapService } from '../services/snapService';
 import { supabase } from '../lib/supabase';
 import VideoPlayer from './VideoPlayer';
@@ -15,6 +16,8 @@ interface SnapBubbleProps {
     view_once?: boolean;
     telegram_file_id?: string | null;
     caption?: string | null;
+    local_uri?: string | null;
+    overlay_metadata?: any;
   };
   isMe: boolean;
   onOpen: () => void;
@@ -43,20 +46,42 @@ export const SnapBubble: React.FC<SnapBubbleProps> = ({
       const resolve = async () => {
         let fileId = snap.telegram_file_id;
         let senderId = snap.sender_id;
+        let localUri = snap.local_uri || (snap.overlay_metadata as any)?.local_uri;
+
+        if (localUri) {
+          if (active) {
+            setMediaUrl(localUri);
+            setLoading(false);
+          }
+          return;
+        }
+
         if ((!fileId || !senderId) && snap.id) {
           const { data } = await supabase
             .from('snaps')
-            .select('telegram_file_id, sender_id')
+            .select('telegram_file_id, sender_id, local_uri')
             .eq('id', snap.id)
             .single();
           if (data) {
             fileId = fileId || data.telegram_file_id;
             senderId = senderId || data.sender_id;
+            localUri = localUri || data.local_uri;
           }
         }
 
+        if (localUri && active) {
+          setMediaUrl(localUri);
+          setLoading(false);
+          return;
+        }
+
         if (fileId && active) {
-          const url = await snapService.resolveTelegramUrl(fileId, senderId);
+          const res = await previewCacheService.resolveFilePreview({
+            id: snap.id || fileId,
+            telegram_file_id: fileId,
+            file_type: isVideo ? 'video' : 'image',
+          });
+          const url = res.playableUri || res.previewUri || await snapService.resolveTelegramUrl(fileId, senderId);
           if (active) {
             setMediaUrl(url);
             setLoading(false);

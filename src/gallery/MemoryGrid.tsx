@@ -156,7 +156,7 @@ export const MemoryGrid: React.FC<MemoryGridProps> = ({
           initialNumToRender={10}
           maxToRenderPerBatch={10}
           windowSize={5}
-          removeClippedSubviews={Platform.OS !== 'web'}
+          removeClippedSubviews={(Platform.OS as string) !== 'web'}
           renderSectionHeader={({ section: { title } }) => (
             <View style={styles.sectionHeaderContainer}>
               <Text style={styles.sectionHeaderTitle}>{title}</Text>

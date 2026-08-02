@@ -84,7 +84,9 @@ export const snapService = {
         telegram_file_id: tgUpload.telegramFileId,
         telegram_message_id: tgUpload.telegramMessageId,
         caption,
-        overlay_metadata: overlayMetadata || [],
+        overlay_metadata: Array.isArray(overlayMetadata)
+          ? { items: overlayMetadata, local_uri: mediaUri }
+          : { ...(overlayMetadata || {}), local_uri: mediaUri },
         view_once: true,
         is_viewed: false,
       })
@@ -176,7 +178,9 @@ export const snapService = {
         telegram_file_id: tgUpload.telegramFileId,
         telegram_message_id: tgUpload.telegramMessageId,
         caption,
-        overlay_metadata: overlayMetadata || [],
+        overlay_metadata: Array.isArray(overlayMetadata)
+          ? { items: overlayMetadata, local_uri: mediaUri }
+          : { ...(overlayMetadata || {}), local_uri: mediaUri },
         view_once: false,
         is_viewed: false,
         expires_at: expiresAt,
