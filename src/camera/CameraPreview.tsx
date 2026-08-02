@@ -114,6 +114,36 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
       };
     }, []);
 
+    // Web PWA Torch / Flashlight track control
+    useEffect(() => {
+      if (Platform.OS !== 'web') return;
+
+      const toggleWebTorch = async () => {
+        try {
+          // Find active video elements in DOM
+          const videoEls = Array.from(document.querySelectorAll('video')) as HTMLVideoElement[];
+          for (const video of videoEls) {
+            if (video.srcObject && 'getVideoTracks' in (video.srcObject as any)) {
+              const stream = video.srcObject as MediaStream;
+              const tracks = stream.getVideoTracks();
+              for (const track of tracks) {
+                const capabilities = (track.getCapabilities ? track.getCapabilities() : {}) as any;
+                if ('torch' in capabilities) {
+                  await track.applyConstraints({
+                    advanced: [{ torch: flash === 'on' }] as any,
+                  });
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[WebFlash] Web Torch API not supported by device hardware:', err);
+        }
+      };
+
+      toggleWebTorch();
+    }, [flash]);
+
     useAnimatedReaction(
       () => zoomShared.value,
       (val) => {
@@ -317,6 +347,16 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
           />
 
           {focusTarget && <FocusRing x={focusTarget.x} y={focusTarget.y} />}
+
+          {/* Front Selfie Screen Flash Overlay */}
+          {flash === 'on' && facing === 'front' && (
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: '#FFFFFF', opacity: 0.85, zIndex: 10, pointerEvents: 'none' }
+              ]}
+            />
+          )}
 
           {/* Date/Time/Location Overlays */}
           {lens === 'time' && (
