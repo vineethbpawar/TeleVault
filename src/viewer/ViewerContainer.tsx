@@ -323,9 +323,9 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
         if (gestureState.dy > 0) {
           translateX.setValue(gestureState.dx);
           translateY.setValue(gestureState.dy);
-          const nextScale = Math.max(0.65, 1 - (gestureState.dy / height) * 0.55);
+          const nextScale = Math.max(0.4, 1 - (gestureState.dy / (height * 0.45)) * 0.6);
           scaleAnim.setValue(nextScale);
-          overlayOpacity.setValue(Math.max(0.1, 1 - gestureState.dy / (height * 0.5)));
+          overlayOpacity.setValue(Math.max(0.05, 1 - gestureState.dy / (height * 0.4)));
         }
       },
       onPanResponderRelease: (evt, gestureState) => {
@@ -538,8 +538,8 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
               { scale: scaleAnim }
             ],
             borderRadius: scaleAnim.interpolate({
-              inputRange: [0.6, 1],
-              outputRange: [48, 0],
+              inputRange: [0.4, 1],
+              outputRange: [56, 0],
               extrapolate: 'clamp',
             }),
             overflow: 'hidden',
@@ -556,8 +556,8 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
               overflow: 'hidden',
               position: 'relative',
               borderRadius: scaleAnim.interpolate({
-                inputRange: [0.6, 1],
-                outputRange: [48, 0],
+                inputRange: [0.4, 1],
+                outputRange: [56, 0],
                 extrapolate: 'clamp',
               }),
             },
