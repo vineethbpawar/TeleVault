@@ -324,7 +324,36 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
         }
       },
       onPanResponderRelease: (evt, gestureState) => {
-        if (gestureState.dy > 80 || gestureState.vy > 0.5) {
+        if (gestureState.dy > 40 || gestureState.vy > 0.2) {
+          Animated.parallel([
+            Animated.timing(translateY, {
+              toValue: height,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(overlayOpacity, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            })
+          ]).start(() => {
+            navigation.goBack();
+          });
+        } else {
+          Animated.parallel([
+            Animated.spring(translateY, {
+              toValue: 0,
+              useNativeDriver: true,
+            }),
+            Animated.spring(overlayOpacity, {
+              toValue: 1,
+              useNativeDriver: true,
+            })
+          ]).start();
+        }
+      },
+      onPanResponderTerminate: (evt, gestureState) => {
+        if (gestureState.dy > 40 || gestureState.vy > 0.2) {
           Animated.parallel([
             Animated.timing(translateY, {
               toValue: height,
