@@ -257,19 +257,40 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     return (
       <GestureDetector gesture={combinedGesture}>
         <Pressable
+          {...(Platform.OS === 'web' ? ({
+            onTouchEnd: (e: any) => {
+              const now = Date.now();
+              const timeDiff = now - lastTapRef.current;
+              if (timeDiff < 450 && timeDiff > 0) {
+                if (onDoubleTap) onDoubleTap();
+                lastTapRef.current = 0;
+              } else {
+                lastTapRef.current = now;
+              }
+            },
+            onClick: (e: any) => {
+              const now = Date.now();
+              const timeDiff = now - lastTapRef.current;
+              if (timeDiff < 450 && timeDiff > 0) {
+                if (onDoubleTap) onDoubleTap();
+                lastTapRef.current = 0;
+              } else {
+                lastTapRef.current = now;
+              }
+            }
+          } as any) : {})}
           onPress={(e: any) => {
+            if (Platform.OS === 'web') return; // Handled by web touch/click listeners
             const now = Date.now();
             const timeDiff = now - lastTapRef.current;
             lastTapRef.current = now;
 
             if (timeDiff < 400 && timeDiff > 0) {
-              // Double tap detected!
               if (onDoubleTap) {
                 onDoubleTap();
               }
               lastTapRef.current = 0;
             } else {
-              // Single tap focus
               const { pageX, pageY } = e.nativeEvent;
               setFocusTarget({ x: pageX, y: pageY });
               setAutoFocusMode('on');
