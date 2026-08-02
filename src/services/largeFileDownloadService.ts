@@ -92,7 +92,7 @@ export const largeFileDownloadService = {
 
         const chunkBlobs: Blob[] = new Array(completedChunks.length);
         let downloadedCount = 0;
-        const CONCURRENCY = 4;
+        const CONCURRENCY = 8;
 
         const downloadSingleChunk = async (chunk: LargeFileChunk, index: number) => {
           let chunkUrl = '';

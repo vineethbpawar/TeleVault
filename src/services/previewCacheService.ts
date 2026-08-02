@@ -134,7 +134,7 @@ export const previewCacheService = {
    * Call this early (on app start / tab focus) so MemoryItem gets instant
    * thumbnails without waiting for resolveFilePreview to run.
    */
-  async prewarmFromIndexedDB(files: { id: string; telegram_file_id?: string | null }[]): Promise<void> {
+  async prewarmFromIndexedDB(files: { id: string; telegram_file_id?: string | null; large_file_id?: string | null }[]): Promise<void> {
     if (Platform.OS !== 'web') return;
     const { getWebBlob } = require('./webBlobStore');
     const tasks = files.map(async (file) => {
@@ -153,6 +153,11 @@ export const previewCacheService = {
       // Fallback: thumbnail stored under thumb_ prefix
       if (!blob) {
         blob = await getWebBlob('thumb_' + cacheKey).catch(() => null);
+      }
+
+      // Fallback: assembled chunked file stored under large_file_ prefix
+      if (!blob && file.large_file_id) {
+        blob = await getWebBlob('large_file_' + file.large_file_id).catch(() => null);
       }
 
       if (blob) {
