@@ -518,26 +518,35 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   };
 
   return (
-    <Animated.View
-      style={[
-        styles.mainContainer,
-        {
-          opacity: overlayOpacity,
-          transform: [
-            { translateX: translateX },
-            { translateY: translateY },
-            { scale: scaleAnim }
-          ],
-          borderRadius: scaleAnim.interpolate({
-            inputRange: [0.8, 1],
-            outputRange: [24, 0],
-            extrapolate: 'clamp',
-          }),
-          overflow: 'hidden',
-        }
-      ]}
-      {...panResponder.panHandlers}
-    >
+    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: '#000000',
+            opacity: overlayOpacity,
+          }
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.mainContainer,
+          {
+            transform: [
+              { translateX: translateX },
+              { translateY: translateY },
+              { scale: scaleAnim }
+            ],
+            borderRadius: scaleAnim.interpolate({
+              inputRange: [0.65, 1],
+              outputRange: [32, 0],
+              extrapolate: 'clamp',
+            }),
+            overflow: 'hidden',
+          }
+        ]}
+        {...panResponder.panHandlers}
+      >
       {Platform.OS === 'web' ? (
         <View style={{ width, height, overflow: 'hidden', position: 'relative' }}>
           <ViewerItem
@@ -755,6 +764,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
         </TouchableOpacity>
       </Modal>
     </Animated.View>
+    </View>
   );
 };
 
