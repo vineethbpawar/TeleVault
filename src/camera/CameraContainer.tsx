@@ -313,6 +313,7 @@ export const CameraContainer: React.FC<CameraContainerProps> = ({ navigation, ro
           lens={selectedLens}
           zoomShared={zoomShared}
           onReady={() => setCameraReady(true)}
+          onDoubleTap={toggleFacing}
           locationText={locationText}
         />
       )}

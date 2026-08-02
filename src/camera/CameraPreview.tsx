@@ -12,6 +12,7 @@ interface CameraPreviewProps {
   lens: CameraLensType;
   zoomShared: SharedValue<number>;
   onReady?: () => void;
+  onDoubleTap?: () => void;
   locationText?: string;
 }
 
@@ -63,7 +64,7 @@ const FocusRing: React.FC<{ x: number; y: number }> = ({ x, y }) => {
 };
 
 export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
-  ({ facing, flash, lens, zoomShared, onReady, locationText }, ref) => {
+  ({ facing, flash, lens, zoomShared, onReady, onDoubleTap, locationText }, ref) => {
     const cameraRef = useRef<CameraView | null>(null);
 
     const [zoomScale, setZoomScale] = useState(0);
@@ -73,6 +74,7 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     const [focusTarget, setFocusTarget] = useState<{ x: number; y: number } | null>(null);
     const [autoFocusMode, setAutoFocusMode] = useState<'on' | 'off'>('off');
     const focusTimeoutRef = useRef<any>(null);
+    const lastTapRef = useRef<number>(0);
 
     useEffect(() => {
       const prevent = (e: Event) => {
@@ -133,8 +135,18 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
         zoomShared.value = Math.max(0, Math.min(1, newZoom));
       });
 
-    // Focus on Tap Gesture
-    const tapGesture = Gesture.Tap()
+    // Double Tap Gesture to Flip Camera
+    const doubleTapGesture = Gesture.Tap()
+      .numberOfTaps(2)
+      .onEnd(() => {
+        if (onDoubleTap) {
+          runOnJS(onDoubleTap)();
+        }
+      });
+
+    // Single Tap Focus Gesture
+    const singleTapGesture = Gesture.Tap()
+      .numberOfTaps(1)
       .onEnd((event) => {
         runOnJS((x: number, y: number) => {
           setFocusTarget({ x, y });
@@ -147,7 +159,8 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
         })(event.x, event.y);
       });
 
-    const combinedGesture = Gesture.Simultaneous(pinchGesture, tapGesture);
+    const tapGestures = Gesture.Exclusive(doubleTapGesture, singleTapGesture);
+    const combinedGesture = Gesture.Simultaneous(pinchGesture, tapGestures);
 
     useImperativeHandle(ref, () => ({
       takePicture: async (): Promise<CaptureResult> => {
@@ -242,9 +255,16 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     }));
 
     return (
-      <GestureDetector gesture={pinchGesture}>
+      <GestureDetector gesture={combinedGesture}>
         <Pressable
           onPress={(e: any) => {
+            const now = Date.now();
+            if (lastTapRef.current && now - lastTapRef.current < 300) {
+              if (onDoubleTap) onDoubleTap();
+              lastTapRef.current = 0;
+              return;
+            }
+            lastTapRef.current = now;
             const { pageX, pageY } = e.nativeEvent;
             setFocusTarget({ x: pageX, y: pageY });
             setAutoFocusMode('on');
