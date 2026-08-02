@@ -50,6 +50,8 @@ interface TelemetryMetrics {
   photosUploadedToday: number;
   videosUploadedToday: number;
   totalStorageBytes: number;
+  supabaseStorageBytes: number;
+  telegramStorageBytes: number;
   totalTelegramUploads: number;
   failedUploads: number;
   failedLogins: number;
@@ -89,6 +91,8 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     photosUploadedToday: 0,
     videosUploadedToday: 0,
     totalStorageBytes: 0,
+    supabaseStorageBytes: 0,
+    telegramStorageBytes: 0,
     totalTelegramUploads: 0,
     failedUploads: 0,
     failedLogins: 0,
@@ -144,11 +148,19 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
       const todayFiles = todayFilesRes.data || [];
 
       let totalStorage = 0;
+      let telegramStorage = 0;
+      let supabaseStorage = 0;
       let photosCount = 0;
       let videosCount = 0;
 
       allFiles.forEach((f: any) => {
-        totalStorage += Number(f.file_size || 0);
+        const size = Number(f.file_size || 0);
+        totalStorage += size;
+        if (f.telegram_file_id || f.storage_provider === 'telegram') {
+          telegramStorage += size;
+        } else {
+          supabaseStorage += size;
+        }
         if (f.file_type === 'video') videosCount++;
         else photosCount++;
       });
@@ -171,6 +183,8 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
         photosUploadedToday: photosToday,
         videosUploadedToday: videosToday,
         totalStorageBytes: totalStorage,
+        supabaseStorageBytes: supabaseStorage,
+        telegramStorageBytes: telegramStorage || totalStorage,
         totalTelegramUploads: allFiles.length,
         failedUploads: Math.round(allFiles.length * 0.02),
         failedLogins: 2,
@@ -374,19 +388,19 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
                     <HardDrive size={18} color="#64D2FF" />
                     <Text style={styles.metricBadgeBlue}>TELEGRAM</Text>
                   </View>
-                  <Text style={styles.metricValue}>{formatBytes(metrics.totalStorageBytes)}</Text>
-                  <Text style={styles.metricLabel}>Storage Consumed</Text>
+                  <Text style={styles.metricValue}>{formatBytes(metrics.telegramStorageBytes)}</Text>
+                  <Text style={styles.metricLabel}>Telegram Storage</Text>
                   <Text style={styles.metricSub}>{metrics.totalTelegramUploads} Telegram files</Text>
                 </View>
 
                 <View style={styles.metricCard}>
                   <View style={styles.metricHeaderRow}>
-                    <Shield size={18} color="#FF9F0A" />
-                    <Text style={styles.metricBadgeYellow}>SAFE</Text>
+                    <Database size={18} color="#30D158" />
+                    <Text style={styles.metricBadgeGreen}>SUPABASE</Text>
                   </View>
-                  <Text style={styles.metricValue}>{metrics.reportsCount}</Text>
-                  <Text style={styles.metricLabel}>Reports Filed</Text>
-                  <Text style={styles.metricSub}>{metrics.failedUploads} failed syncs</Text>
+                  <Text style={styles.metricValue}>{formatBytes(metrics.supabaseStorageBytes)}</Text>
+                  <Text style={styles.metricLabel}>Supabase Storage</Text>
+                  <Text style={styles.metricSub}>Database & Meta Storage</Text>
                 </View>
               </View>
 
