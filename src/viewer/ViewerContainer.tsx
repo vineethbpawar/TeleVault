@@ -548,7 +548,22 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
         {...panResponder.panHandlers}
       >
       {Platform.OS === 'web' ? (
-        <View style={{ width, height, overflow: 'hidden', position: 'relative' }}>
+        <Animated.View
+          style={[
+            {
+              width,
+              height,
+              overflow: 'hidden',
+              position: 'relative',
+              borderRadius: scaleAnim.interpolate({
+                inputRange: [0.6, 1],
+                outputRange: [48, 0],
+                extrapolate: 'clamp',
+              }),
+            },
+            Platform.OS === 'web' && ({ webkitMaskImage: '-webkit-radial-gradient(white, black)' } as any)
+          ]}
+        >
           <ViewerItem
             file={activeFile}
             isActive={true}
@@ -559,7 +574,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
             onHoldStart={() => setIsHoldActive(true)}
             onHoldEnd={() => setIsHoldActive(false)}
           />
-        </View>
+        </Animated.View>
       ) : (
         <FlatList
           ref={flatListRef}
