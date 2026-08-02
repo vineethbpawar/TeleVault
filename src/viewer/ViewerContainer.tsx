@@ -12,9 +12,7 @@ import { supabase } from '../lib/supabase';
 
 const { width, height } = Dimensions.get('window');
 
-// Single-Subsystem Isolation Experiment Toggle
-// 'OFF' | 'EXPA_NATIVE_HTML_ONLY' | 'EXPB_FLATLIST_ONLY'
-const SINGLE_SUBSYSTEM_EXPERIMENT: 'OFF' | 'EXPA_NATIVE_HTML_ONLY' | 'EXPB_FLATLIST_ONLY' = 'EXPB_FLATLIST_ONLY';
+
 
 // Individual Slide Item wrapper
 const ViewerItem = React.memo<{
@@ -31,13 +29,7 @@ const ViewerItem = React.memo<{
   const [loading, setLoading] = useState(true);
   const [mediaError, setMediaError] = useState<string | null>(null);
 
-  // Single-Subsystem Experiment Logging
-  useEffect(() => {
-    console.log(`[SINGLE_SUBSYSTEM_LOG] MOUNT | file_id=${file.id} isActive=${isActive} mode=${SINGLE_SUBSYSTEM_EXPERIMENT}`);
-    return () => {
-      console.log(`[SINGLE_SUBSYSTEM_LOG] UNMOUNT | file_id=${file.id} isActive=${isActive}`);
-    };
-  }, [file.id, isActive]);
+
 
   useEffect(() => {
     let active = true;
@@ -125,31 +117,7 @@ const ViewerItem = React.memo<{
       onPressOut={onHoldEnd}
       delayLongPress={250}
     >
-      {/* 
-        EXPA_NATIVE_HTML_ONLY: Replace ONLY ImageViewer / VideoPlayer with raw <img> / <video>
-        while preserving all Pressable gestures, overlays, captions, animations, and FlatList logic.
-      */}
-      {(SINGLE_SUBSYSTEM_EXPERIMENT as string) === 'EXPA_NATIVE_HTML_ONLY' && Platform.OS === 'web' ? (
-        isVideo ? (
-          <video
-            src={resolvedUri || undefined}
-            controls
-            autoPlay
-            playsInline
-            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-            onLoadedMetadata={() => console.log(`[SINGLE_SUBSYSTEM_LOG] EXPA_VIDEO LOADED_METADATA | file_id=${file.id}`)}
-            onError={(e) => console.error(`[SINGLE_SUBSYSTEM_LOG] EXPA_VIDEO ERROR | file_id=${file.id}`, e)}
-          />
-        ) : (
-          <img
-            src={resolvedUri || undefined}
-            alt="expA"
-            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-            onLoad={() => console.log(`[SINGLE_SUBSYSTEM_LOG] EXPA_IMG LOADED | file_id=${file.id}`)}
-            onError={(e) => console.error(`[SINGLE_SUBSYSTEM_LOG] EXPA_IMG ERROR | file_id=${file.id}`, e)}
-          />
-        )
-      ) : isVideo ? (
+      {isVideo ? (
         isActive ? (
           resolvedUri ? (
             <VideoPlayer
@@ -475,8 +443,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
       ]}
       {...panResponder.panHandlers}
     >
-      {/* Single-Subsystem Experiment B: Replace ONLY FlatList with a direct CSS flex container */}
-      {SINGLE_SUBSYSTEM_EXPERIMENT === 'EXPB_FLATLIST_ONLY' && Platform.OS === 'web' ? (
+      {Platform.OS === 'web' ? (
         <View style={{ width, height, overflow: 'hidden', position: 'relative' }}>
           <ViewerItem
             file={activeFile}
@@ -544,7 +511,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
           maxToRenderPerBatch={1}
           updateCellsBatchingPeriod={100}
           initialNumToRender={1}
-          removeClippedSubviews={Platform.OS !== 'web'}
+          removeClippedSubviews={(Platform.OS as string) !== 'web'}
         />
       )}
 
