@@ -391,6 +391,32 @@ export const uploadQueueService = {
           itemId
         );
 
+        // Upload video thumbnail to Telegram for cross-device rendering
+        if (pendingItem.file_type === 'video' && pendingItem.local_thumbnail_uri && !pendingItem.local_thumbnail_uri.startsWith('tgthumb:')) {
+          try {
+            let thumbPath = pendingItem.local_thumbnail_uri;
+            if (thumbPath.startsWith('webblob:')) {
+              const { getWebBlob } = require('../services/webBlobStore');
+              const key = thumbPath.split(':')[1];
+              const blob = await getWebBlob(key);
+              if (blob) thumbPath = URL.createObjectURL(blob);
+            }
+            const thumbRes = await telegramService.uploadToTelegram(
+              thumbPath,
+              'image',
+              `thumb_${pendingItem.file_name.replace(/\.[^.]+$/, '')}.jpg`,
+              'image/jpeg',
+              undefined,
+              controller.signal,
+              undefined
+            );
+            const tgThumbUri = `tgthumb:${thumbRes.telegramFileId}`;
+            await supabase.from('files').update({ local_thumbnail_uri: tgThumbUri }).eq('large_file_id', largeFileId);
+          } catch (tErr) {
+            console.warn('[QueueService] Chunked video thumbnail upload error:', tErr);
+          }
+        }
+
         await this.updateUploadQueueItem(itemId, {
           status: 'completed',
           stage: 'Completed',
@@ -446,35 +472,33 @@ export const uploadQueueService = {
 
       await this.updateUploadQueueItem(itemId, { stage: 'Uploading...', progress: 85 });
 
-      // 5b. Upload video thumbnail to Telegram (native only) so web can display it
-      // On native, local_thumbnail_uri is a file:// path that only exists on this device.
-      // Upload it as a small photo to Telegram and store its file_id prefixed with "tgthumb:".
+      // 5b. Upload video thumbnail to Telegram so cross-device web & native can display it
       let resolvedThumbnailUri: string | null = null;
       if (
-        Platform.OS !== 'web' &&
         pendingItem.file_type === 'video' &&
         pendingItem.local_thumbnail_uri &&
-        !pendingItem.local_thumbnail_uri.startsWith('tgthumb:') &&
-        !pendingItem.local_thumbnail_uri.startsWith('webblob:')
+        !pendingItem.local_thumbnail_uri.startsWith('tgthumb:')
       ) {
         try {
-          const thumbLocalPath = pendingItem.local_thumbnail_uri;
-          const thumbInfo = await FileSystem.getInfoAsync(thumbLocalPath);
-          if (thumbInfo.exists) {
-            const thumbResult = await telegramService.uploadToTelegram(
-              thumbLocalPath,
-              'image',
-              `thumb_${pendingItem.file_name.replace(/\.[^.]+$/, '')}.jpg`,
-              'image/jpeg',
-              undefined,
-              controller.signal,
-              undefined
-            );
-            resolvedThumbnailUri = `tgthumb:${thumbResult.telegramFileId}`;
+          let thumbLocalPath = pendingItem.local_thumbnail_uri;
+          if (thumbLocalPath.startsWith('webblob:')) {
+            const { getWebBlob } = require('../services/webBlobStore');
+            const key = thumbLocalPath.split(':')[1];
+            const blob = await getWebBlob(key);
+            if (blob) thumbLocalPath = URL.createObjectURL(blob);
           }
+          const thumbResult = await telegramService.uploadToTelegram(
+            thumbLocalPath,
+            'image',
+            `thumb_${pendingItem.file_name.replace(/\.[^.]+$/, '')}.jpg`,
+            'image/jpeg',
+            undefined,
+            controller.signal,
+            undefined
+          );
+          resolvedThumbnailUri = `tgthumb:${thumbResult.telegramFileId}`;
         } catch (thumbErr) {
           console.warn('[QueueService] Failed to upload video thumbnail to Telegram:', thumbErr);
-          // Non-fatal: fall back to null so web will generate from video
         }
       } else if (pendingItem.file_type === 'video') {
         resolvedThumbnailUri = pendingItem.local_thumbnail_uri || null;

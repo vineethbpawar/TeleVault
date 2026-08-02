@@ -617,7 +617,8 @@ export const previewCacheService = {
       }
 
       // ── Chunked video: rebuild from chunks (no getFile limit) ──────────
-      if (!playableUri && (file as any).is_chunked && (file as any).large_file_id) {
+      const isChunkedFile = (file as any).is_chunked || !!(file as any).large_file_id;
+      if (!playableUri && isChunkedFile && (file as any).large_file_id) {
         try {
           const { largeFileDownloadService } = require('./largeFileDownloadService');
           const rebuildResult = await largeFileDownloadService.downloadAndRebuildLargeFile(
