@@ -151,11 +151,17 @@ const ViewerItem = React.memo<{
         )
       ) : isVideo ? (
         isActive ? (
-          <VideoPlayer
-            source={resolvedUri}
-            style={styles.fullMedia}
-            paused={paused}
-          />
+          resolvedUri ? (
+            <VideoPlayer
+              source={resolvedUri}
+              style={styles.fullMedia}
+              paused={paused}
+            />
+          ) : (
+            <View style={styles.itemCenter}>
+              <ActivityIndicator size="large" color="#FFFC00" />
+            </View>
+          )
         ) : (
           <View style={styles.itemCenter}>
             <ActivityIndicator size="small" color="#8E8E93" />
