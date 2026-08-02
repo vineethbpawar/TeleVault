@@ -35,6 +35,9 @@ import SendToScreen from '../screens/SendToScreen';
 import ChatCameraScreen from '../screens/ChatCameraScreen';
 import CallHistoryScreen from '../screens/CallHistoryScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
+import TrustedDevicesScreen from '../screens/TrustedDevicesScreen';
+import { DeviceVerificationModal } from '../components/DeviceVerificationModal';
+import { deviceService } from '../services/deviceService';
 import CallOverlay from '../components/CallOverlay';
 import { Session } from '@supabase/supabase-js';
 import { authEvents } from '../utils/authEvent';
@@ -56,8 +59,32 @@ export const AppNavigator: React.FC = () => {
   const [restoringConfig, setRestoringConfig] = useState(false);
   const [appLocked, setAppLocked] = useState(false);
   const [twoFactorLocked, setTwoFactorLocked] = useState(false);
+  const [deviceVerificationLocked, setDeviceVerificationLocked] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const insets = useSafeAreaInsets();
+
+  const checkDeviceTrust = async (userId: string) => {
+    try {
+      const deviceId = await deviceService.getOrCreateDeviceId();
+      const isTrusted = await deviceService.isDeviceTrusted(userId, deviceId);
+      if (!isTrusted) {
+        setDeviceVerificationLocked(true);
+      } else {
+        setDeviceVerificationLocked(false);
+        // Refresh last_login_at timestamp
+        const meta = await deviceService.getDeviceMetadata();
+        await deviceService.markDeviceTrusted(userId, meta);
+      }
+    } catch (err) {
+      console.warn('[AppNavigator] Device trust check failed:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (session?.user) {
+      checkDeviceTrust(session.user.id);
+    }
+  }, [session]);
 
   // Safety net: always hide the native splash max 5s (Native only)
   useEffect(() => {
@@ -333,6 +360,7 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="ChatCamera" component={ChatCameraScreen} />
               <Stack.Screen name="CallHistory" component={CallHistoryScreen} />
               <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+              <Stack.Screen name="TrustedDevices" component={TrustedDevicesScreen} />
               <Stack.Screen
                 name="MemoriesViewer"
                 component={MemoriesViewerScreen}
@@ -349,6 +377,19 @@ export const AppNavigator: React.FC = () => {
           <Stack.Screen name="Auth" component={AuthNavigator} />
         )}
       </Stack.Navigator>
+
+      {session?.user && deviceVerificationLocked && (
+        <DeviceVerificationModal
+          visible={deviceVerificationLocked}
+          userId={session.user.id}
+          onSuccess={() => setDeviceVerificationLocked(false)}
+          onCancel={() => {
+            // Sign out if user cancels new device verification
+            supabase.auth.signOut();
+            setDeviceVerificationLocked(false);
+          }}
+        />
+      )}
 
       {appLocked && (
         <PinLockModal

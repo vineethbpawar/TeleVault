@@ -1077,6 +1077,20 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
               />
             </View>
 
+            <TouchableOpacity
+              style={styles.itemRow}
+              onPress={() => navigation.navigate('TrustedDevices')}
+            >
+              <View style={styles.itemLeft}>
+                <Shield size={20} color="#64D2FF" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Trusted Devices</Text>
+                  <Text style={styles.itemSubtitle}>Manage authorized devices and active sessions</Text>
+                </View>
+              </View>
+              <ChevronRight size={18} color="#8E8E93" />
+            </TouchableOpacity>
+
             {hasPin && deviceSupportsBiometrics && (
               <View style={styles.itemRowNoPress}>
                 <View style={styles.itemLeft}>
