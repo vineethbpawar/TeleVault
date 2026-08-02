@@ -85,8 +85,8 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
 
     // Instant-load: show cached data immediately so grid paints in <100ms
     if (showSpinner && itemsRef.current.length === 0) {
-      if (sessionMemoriesCache && sessionMemoriesCache.length > 0) {
-        setItems(sessionMemoriesCache);
+      if (activeMemoriesStore && activeMemoriesStore.length > 0) {
+        setItems(activeMemoriesStore);
         setLoading(false); // show stale data, spinner off — real fetch still runs
       } else {
         setLoading(true);
@@ -95,7 +95,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
 
     try {
       const data = await fileService.fetchMemories();
-      sessionMemoriesCache = data; // persist for next navigation
+      activeMemoriesStore = data; // persist for next navigation
 
       // Pre-warm IndexedDB → in-memory blob cache BEFORE setState so MemoryItem
       // gets instant thumbnails on first render (locally-saved snaps only, no network)
