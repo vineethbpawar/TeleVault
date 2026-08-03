@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, FlatList, TouchableOpacity, Dimensions, PanResponder, Animated, Platform, ActivityIndicator, Alert, Pressable } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Dimensions, PanResponder, Animated, Platform, ActivityIndicator, Alert, Pressable } from 'react-native';
 import { X, Trash2, Lock, Star, Send, Calendar, Info } from 'lucide-react-native';
 import { Modal } from 'react-native';
 
@@ -243,7 +243,6 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   const translateY = useRef(new Animated.Value(0)).current;
   const overlayOpacity = useRef(new Animated.Value(1)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const flatListRef = useRef<FlatList>(null);
 
   // Snapchat-style animated progress bar timing
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -443,9 +442,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
 
   const goToNext = () => {
     if (currentIndex < localFiles.length - 1) {
-      const nextIndex = currentIndex + 1;
-      setCurrentIndex(nextIndex);
-      flatListRef.current?.scrollToIndex({ index: nextIndex, animated: false });
+      setCurrentIndex(currentIndex + 1);
     } else {
       navigation.goBack();
     }
@@ -453,18 +450,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
 
   const goToPrevious = () => {
     if (currentIndex > 0) {
-      const prevIndex = currentIndex - 1;
-      setCurrentIndex(prevIndex);
-      flatListRef.current?.scrollToIndex({ index: prevIndex, animated: false });
-    }
-  };
-
-  const handleScrollEnd = (e: any) => {
-    setIsDragging(false);
-    const contentOffsetX = e.nativeEvent.contentOffset.x;
-    const index = Math.round(contentOffsetX / width);
-    if (index !== currentIndex && index >= 0 && index < localFiles.length) {
-      setCurrentIndex(index);
+      setCurrentIndex(currentIndex - 1);
     }
   };
 
@@ -547,92 +533,34 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
         ]}
         {...panResponder.panHandlers}
       >
-      {Platform.OS === 'web' ? (
-        <Animated.View
-          style={[
-            {
-              width,
-              height,
-              overflow: 'hidden',
-              position: 'relative',
-              borderRadius: scaleAnim.interpolate({
-                inputRange: [0.4, 1],
-                outputRange: [56, 0],
-                extrapolate: 'clamp',
-              }),
-            },
-            Platform.OS === 'web' && ({ webkitMaskImage: '-webkit-radial-gradient(white, black)' } as any)
-          ]}
-        >
-          <ViewerItem
-            file={activeFile}
-            isActive={true}
-            isPreload={false}
-            paused={isHoldActive || isDragging || isMenuOpen}
-            onTapLeft={goToPrevious}
-            onTapRight={goToNext}
-            onHoldStart={() => setIsHoldActive(true)}
-            onHoldEnd={() => setIsHoldActive(false)}
-          />
-        </Animated.View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          data={localFiles}
-          keyExtractor={(item) => item.id}
-          initialScrollIndex={initialIndex}
-          getItemLayout={(_, index) => ({
-            length: width,
-            offset: width * index,
-            index,
-          })}
-          onScrollBeginDrag={() => setIsDragging(true)}
-          onMomentumScrollEnd={handleScrollEnd}
-          renderItem={({ item, index }) => {
-            const isCurrent = index === currentIndex;
-            const isPrev = index === currentIndex - 1;
-            const isNext = index === currentIndex + 1;
-            const isNearby = isCurrent || isPrev || isNext;
-
-            if (!isNearby) {
-              return (
-                <Pressable
-                  style={{ width, height, backgroundColor: '#000000' }}
-                  onPress={(e) => {
-                    const x = e.nativeEvent.pageX;
-                    if (x < width * 0.3) {
-                      goToPrevious();
-                    } else {
-                      goToNext();
-                    }
-                  }}
-                />
-              );
-            }
-
-            return (
-              <ViewerItem
-                file={item}
-                isActive={isCurrent}
-                isPreload={isPrev || isNext}
-                paused={!isCurrent || isHoldActive || isDragging || isMenuOpen}
-                onTapLeft={goToPrevious}
-                onTapRight={goToNext}
-                onHoldStart={() => setIsHoldActive(true)}
-                onHoldEnd={() => setIsHoldActive(false)}
-              />
-            );
-          }}
-          windowSize={5}
-          maxToRenderPerBatch={1}
-          updateCellsBatchingPeriod={100}
-          initialNumToRender={1}
-          removeClippedSubviews={(Platform.OS as string) !== 'web'}
+      {/* Single-item viewer for both Web and Android — no horizontal swipe, tap to navigate */}
+      <Animated.View
+        style={[
+          {
+            width,
+            height,
+            overflow: 'hidden',
+            position: 'relative',
+            borderRadius: scaleAnim.interpolate({
+              inputRange: [0.4, 1],
+              outputRange: [56, 0],
+              extrapolate: 'clamp',
+            }),
+          },
+          Platform.OS === 'web' && ({ webkitMaskImage: '-webkit-radial-gradient(white, black)' } as any)
+        ]}
+      >
+        <ViewerItem
+          file={activeFile}
+          isActive={true}
+          isPreload={false}
+          paused={isHoldActive || isDragging || isMenuOpen}
+          onTapLeft={goToPrevious}
+          onTapRight={goToNext}
+          onHoldStart={() => setIsHoldActive(true)}
+          onHoldEnd={() => setIsHoldActive(false)}
         />
-      )}
+      </Animated.View>
 
       {/* Top HUD (Details and close button) */}
       {!isHoldActive && !isMenuOpen && (
