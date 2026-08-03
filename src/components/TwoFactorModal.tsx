@@ -36,25 +36,25 @@ export const TwoFactorModal: React.FC<TwoFactorModalProps> = ({ visible, onSucce
 
       const messageText = `🔐 *TeleVault 2FA Verification Code*\n\nYour login code is: ${newCode}\n\nValid for 5 minutes. Do not share this code with anyone.`;
       
-      const success = await telegramService.testTelegramConnection(config.botToken, config.channelId);
-      if (success) {
-        // Send actual code text via Telegram API
-        const url = telegramService.getTelegramApiUrl('sendMessage', config.botToken);
-        const { fetchWithRetry } = require('../services/telegramService');
-        await fetchWithRetry(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: config.channelId,
-            text: messageText,
-            parse_mode: 'Markdown',
-          }),
-        });
+      const url = telegramService.getTelegramApiUrl('sendMessage', config.botToken);
+      const { fetchWithRetry } = require('../services/telegramService');
+      const res = await fetchWithRetry(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: config.channelId,
+          text: messageText,
+          parse_mode: 'Markdown',
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.ok) {
         showToast('2FA code sent to Telegram!');
         setTimeLeft(60);
         setCanResend(false);
       } else {
-        setErrorMsg('Failed to send code via Telegram bot.');
+        setErrorMsg(data.description || 'Failed to send code via Telegram bot.');
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Error sending 2FA code.');
