@@ -3,8 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { ArrowLeft, Camera, Info } from 'lucide-react-native';
 import UserAvatar from './UserAvatar';
 import OnlineIndicator from './OnlineIndicator';
-import CallButton from './CallButton';
-import { UserCallProfile } from '../types/call';
+
 
 interface ConversationHeaderProps {
   otherFullName: string | null;
@@ -29,12 +28,6 @@ export const ConversationHeader: React.FC<ConversationHeaderProps> = ({
 }) => {
   const initials = (otherFullName || otherUsername).substring(0, 1).toUpperCase();
 
-  const targetProfile: UserCallProfile = {
-    id: otherUserId,
-    username: otherUsername,
-    full_name: otherFullName,
-    avatar_url: avatarUrl,
-  };
 
   return (
     <View style={styles.container}>
@@ -67,22 +60,6 @@ export const ConversationHeader: React.FC<ConversationHeaderProps> = ({
       </TouchableOpacity>
 
       <View style={styles.actions}>
-        {/* Voice call */}
-        <CallButton
-          targetUserId={otherUserId}
-          targetProfile={targetProfile}
-          callType="voice"
-          size={36}
-          style={styles.callBtn}
-        />
-        {/* Video call */}
-        <CallButton
-          targetUserId={otherUserId}
-          targetProfile={targetProfile}
-          callType="video"
-          size={36}
-          style={styles.callBtn}
-        />
         <TouchableOpacity style={styles.actionBtn} onPress={onSnapPress} activeOpacity={0.7}>
           <Camera size={20} color="#FFFC00" />
         </TouchableOpacity>
@@ -142,9 +119,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  callBtn: {
-    marginLeft: 0,
-  },
+
   actionBtn: {
     padding: 8,
     marginLeft: 0,

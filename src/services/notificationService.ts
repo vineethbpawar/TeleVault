@@ -57,19 +57,6 @@ export const notificationService = {
         }
       }
 
-      // Register notification category for incoming calls
-      await Notifications.setNotificationCategoryAsync('incoming_call', [
-        {
-          identifier: 'answer',
-          buttonTitle: 'Answer',
-          options: { opensAppToForeground: true },
-        },
-        {
-          identifier: 'decline',
-          buttonTitle: 'Decline',
-          options: { opensAppToForeground: false },
-        },
-      ]);
 
       // Setup Android channel if needed
       if (Platform.OS === 'android') {
@@ -80,13 +67,6 @@ export const notificationService = {
           lightColor: '#FFD700', // Yellow accent
         });
 
-        await Notifications.setNotificationChannelAsync('incoming-calls', {
-          name: 'Incoming Calls',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 500, 500, 500, 500, 500, 500],
-          lightColor: '#FFFC00',
-          sound: 'default',
-        });
       }
 
       return token;
@@ -168,16 +148,13 @@ export const notificationService = {
       }
 
       // 2. If target user is the current user, trigger local notification instantly
-      const isCall = dataPayload?.type === 'incoming_call';
-
       if (user && targetUserId === user.id) {
         await Notifications.scheduleNotificationAsync({
           content: {
             title,
             body,
             data: dataPayload,
-            categoryIdentifier: isCall ? 'incoming_call' : undefined,
-            channelId: isCall ? 'incoming-calls' : 'default',
+            channelId: 'default',
           } as any,
           trigger: null, // instant
         });
@@ -205,9 +182,8 @@ export const notificationService = {
                   title: title,
                   body: body,
                   data: dataPayload,
-                  categoryIdentifier: isCall ? 'incoming_call' : undefined,
-                  channelId: isCall ? 'incoming-calls' : 'default',
-                  priority: isCall ? 'high' : 'normal',
+                  channelId: 'default',
+                  priority: 'normal',
                 }),
               });
             } catch (err) {

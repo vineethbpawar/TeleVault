@@ -1,5 +1,6 @@
 {
   "expo": {
+    "newArchEnabled": true,
     "name": "TeleVault",
     "slug": "TeleVault",
     "scheme": "televault",
@@ -24,6 +25,7 @@
       }
     },
     "android": {
+      "jsEngine": "hermes",
       "adaptiveIcon": {
         "backgroundColor": "#0B0E1B",
         "foregroundImage": "./assets/android-icon-foreground.png"
@@ -36,15 +38,8 @@
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
-        "MODIFY_AUDIO_SETTINGS",
-        "BLUETOOTH",
-        "BLUETOOTH_CONNECT",
         "WAKE_LOCK",
-        "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_MEDIA_PROJECTION",
-        "FOREGROUND_SERVICE_MICROPHONE",
-        "FOREGROUND_SERVICE_CAMERA",
-        "MANAGE_OWN_CALLS"
+        "FOREGROUND_SERVICE"
       ]
     },
     "web": {
@@ -57,7 +52,6 @@
       "expo-background-task",
       "expo-sharing",
       "expo-video",
-      "@config-plugins/react-native-webrtc",
       [
         "expo-splash-screen",
         {

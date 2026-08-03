@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, Text, Image, ViewStyle, TextStyle, StyleProp } from 'react-native';
+import { StyleSheet, View, Text, Image, StyleProp } from 'react-native';
 
 interface UserAvatarProps {
   name?: string | null;
@@ -8,35 +8,23 @@ interface UserAvatarProps {
   style?: StyleProp<any>;
 }
 
-export const UserAvatar: React.FC<UserAvatarProps> = ({ name, avatarUrl, size = 48, style }) => {
+const UserAvatar: React.FC<UserAvatarProps> = ({ name, avatarUrl, size = 48, style }) => {
   const initial = (name || '?').substring(0, 1).toUpperCase();
   const fontSize = size * 0.4;
-
-  const containerStyle = StyleSheet.flatten([
-    {
-      width: size,
-      height: size,
-      borderRadius: size / 2,
-    },
-    style
-  ]);
-
-  const textStyle: TextStyle = {
-    fontSize,
-  };
+  const sizeStyle = { width: size, height: size, borderRadius: size / 2 };
 
   if (avatarUrl) {
     return (
       <Image
         source={{ uri: avatarUrl }}
-        style={[styles.avatarImage, containerStyle]}
+        style={[styles.avatarImage, sizeStyle, style]}
       />
     );
   }
 
   return (
-    <View style={[styles.placeholderContainer, containerStyle]}>
-      <Text style={[styles.placeholderText, textStyle]}>{initial}</Text>
+    <View style={[styles.placeholderContainer, sizeStyle, style]}>
+      <Text style={[styles.placeholderText, { fontSize }]}>{initial}</Text>
     </View>
   );
 };
@@ -53,9 +41,10 @@ const styles = StyleSheet.create({
     borderColor: '#242745',
   },
   placeholderText: {
-    color: '#FFFC00', // yellow accent
+    color: '#FFFC00',
     fontWeight: '700',
   },
 });
 
-export default UserAvatar;
+export { UserAvatar };
+export default React.memo(UserAvatar);

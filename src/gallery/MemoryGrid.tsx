@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { StyleSheet, SectionList, View, Text, Dimensions, RefreshControl, Platform } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { useSharedValue, runOnJS } from 'react-native-reanimated';
@@ -109,6 +109,33 @@ export const MemoryGrid: React.FC<MemoryGridProps> = ({
     return result;
   }, [items, columns]);
 
+  const renderSectionHeader = useCallback(({ section: { title } }: any) => (
+    <View style={styles.sectionHeaderContainer}>
+      <Text style={styles.sectionHeaderTitle}>{title}</Text>
+    </View>
+  ), []);
+
+  const renderItem = useCallback(({ item: row }: any) => (
+    <View style={styles.rowContainer}>
+      {row.map((item: any) => (
+        <MemoryItem
+          key={item.id}
+          item={item}
+          size={itemSize}
+          onPress={() => onPressItem(item)}
+          onLongPress={() => onLongPressItem(item)}
+          isSelected={selectedIds.has(item.id)}
+          isSelectionMode={isSelectionMode}
+        />
+      ))}
+      {row.length < columns && 
+        Array.from({ length: columns - row.length }).map((_, i) => (
+          <View key={`pad-${i}`} style={{ width: itemSize, margin: 2 }} />
+        ))
+      }
+    </View>
+  ), [itemSize, selectedIds, isSelectionMode, onPressItem, onLongPressItem, columns]);
+
   // On Web PWA, render a fast scrollable grid with native web scrolling
   if (Platform.OS === 'web') {
     return (
@@ -154,34 +181,12 @@ export const MemoryGrid: React.FC<MemoryGridProps> = ({
           keyExtractor={(row, index) => `row-${row[0]?.id}-${index}`}
           stickySectionHeadersEnabled={true}
           initialNumToRender={10}
-          maxToRenderPerBatch={10}
+          maxToRenderPerBatch={5}
+          updateCellsBatchingPeriod={50}
           windowSize={5}
           removeClippedSubviews={(Platform.OS as string) !== 'web'}
-          renderSectionHeader={({ section: { title } }) => (
-            <View style={styles.sectionHeaderContainer}>
-              <Text style={styles.sectionHeaderTitle}>{title}</Text>
-            </View>
-          )}
-          renderItem={({ item: row }) => (
-            <View style={styles.rowContainer}>
-              {row.map((item) => (
-                <MemoryItem
-                  key={item.id}
-                  item={item}
-                  size={itemSize}
-                  onPress={() => onPressItem(item)}
-                  onLongPress={() => onLongPressItem(item)}
-                  isSelected={selectedIds.has(item.id)}
-                  isSelectionMode={isSelectionMode}
-                />
-              ))}
-              {row.length < columns && 
-                Array.from({ length: columns - row.length }).map((_, i) => (
-                  <View key={`pad-${i}`} style={{ width: itemSize, margin: 2 }} />
-                ))
-              }
-            </View>
-          )}
+          renderSectionHeader={renderSectionHeader}
+          renderItem={renderItem}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.gridContent}
           refreshControl={

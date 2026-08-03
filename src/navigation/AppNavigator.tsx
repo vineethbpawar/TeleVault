@@ -1,54 +1,63 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { supabase } from '../lib/supabase';
 import { AppStackParamList } from '../types/navigation';
 import * as ExpoSplash from 'expo-splash-screen';
 import AuthNavigator from './AuthNavigator';
 import MainTabs from './MainTabs';
-import TelegramConnectScreen from '../screens/TelegramConnectScreen';
-import PreviewScreen from '../screens/PreviewScreen';
-import FileDetailsScreen from '../screens/FileDetailsScreen';
-import MemoriesViewerScreen from '../screens/MemoriesViewerScreen';
 import SplashScreen from '../screens/SplashScreen';
 import UsernameSetupScreen from '../screens/UsernameSetupScreen';
-import { StorageAnalyticsScreen } from '../screens/StorageAnalyticsScreen';
-import UserSearchScreen from '../screens/UserSearchScreen';
-import ChatListScreen from '../screens/ChatListScreen';
-import ChatRoomScreen from '../screens/ChatRoomScreen';
-import SnapInboxScreen from '../screens/SnapInboxScreen';
-import StoriesScreen from '../screens/StoriesScreen';
-import SnapViewerScreen from '../screens/SnapViewerScreen';
-import FriendsScreen from '../screens/FriendsScreen';
-import FriendRequestsScreen from '../screens/FriendRequestsScreen';
-import BlockedUsersScreen from '../screens/BlockedUsersScreen';
-import ReportUserScreen from '../screens/ReportUserScreen';
-import NotificationsScreen from '../screens/NotificationsScreen';
-import GroupsScreen from '../screens/GroupsScreen';
-import GroupChatScreen from '../screens/GroupChatScreen';
-import CreateGroupScreen from '../screens/CreateGroupScreen';
-import AdminDashboardScreen from '../screens/AdminDashboardScreen';
-import ChunkManagerScreen from '../screens/ChunkManagerScreen';
-import PrivateDriveScreen from '../screens/PrivateDriveScreen';
-import UserProfileScreen from '../screens/UserProfileScreen';
-import MyProfileScreen from '../screens/MyProfileScreen';
-import SendToScreen from '../screens/SendToScreen';
-import ChatCameraScreen from '../screens/ChatCameraScreen';
-import CallHistoryScreen from '../screens/CallHistoryScreen';
-import ResetPasswordScreen from '../screens/ResetPasswordScreen';
-import TrustedDevicesScreen from '../screens/TrustedDevicesScreen';
+
+// Lazy-load all secondary screens — only parsed when first navigated to
+const TelegramConnectScreen = lazy(() => import('../screens/TelegramConnectScreen'));
+const PreviewScreen = lazy(() => import('../screens/PreviewScreen'));
+const FileDetailsScreen = lazy(() => import('../screens/FileDetailsScreen'));
+const MemoriesViewerScreen = lazy(() => import('../screens/MemoriesViewerScreen'));
+const StorageAnalyticsScreen = lazy(() => import('../screens/StorageAnalyticsScreen').then(m => ({ default: m.StorageAnalyticsScreen })));
+const UserSearchScreen = lazy(() => import('../screens/UserSearchScreen'));
+const ChatListScreen = lazy(() => import('../screens/ChatListScreen'));
+const ChatRoomScreen = lazy(() => import('../screens/ChatRoomScreen'));
+const SnapInboxScreen = lazy(() => import('../screens/SnapInboxScreen'));
+const StoriesScreen = lazy(() => import('../screens/StoriesScreen'));
+const SnapViewerScreen = lazy(() => import('../screens/SnapViewerScreen'));
+const FriendsScreen = lazy(() => import('../screens/FriendsScreen'));
+const FriendRequestsScreen = lazy(() => import('../screens/FriendRequestsScreen'));
+const BlockedUsersScreen = lazy(() => import('../screens/BlockedUsersScreen'));
+const ReportUserScreen = lazy(() => import('../screens/ReportUserScreen'));
+const NotificationsScreen = lazy(() => import('../screens/NotificationsScreen'));
+const GroupsScreen = lazy(() => import('../screens/GroupsScreen'));
+const GroupChatScreen = lazy(() => import('../screens/GroupChatScreen'));
+const CreateGroupScreen = lazy(() => import('../screens/CreateGroupScreen'));
+const AdminDashboardScreen = lazy(() => import('../screens/AdminDashboardScreen'));
+const ChunkManagerScreen = lazy(() => import('../screens/ChunkManagerScreen'));
+const PrivateDriveScreen = lazy(() => import('../screens/PrivateDriveScreen'));
+const UserProfileScreen = lazy(() => import('../screens/UserProfileScreen'));
+const MyProfileScreen = lazy(() => import('../screens/MyProfileScreen'));
+const SendToScreen = lazy(() => import('../screens/SendToScreen'));
+const ChatCameraScreen = lazy(() => import('../screens/ChatCameraScreen'));
+const ResetPasswordScreen = lazy(() => import('../screens/ResetPasswordScreen'));
+const TrustedDevicesScreen = lazy(() => import('../screens/TrustedDevicesScreen'));
+
 import { DeviceVerificationModal } from '../components/DeviceVerificationModal';
 import { deviceService } from '../services/deviceService';
-import CallOverlay from '../components/CallOverlay';
+
 import { Session } from '@supabase/supabase-js';
 import { authEvents } from '../utils/authEvent';
 import { telegramService } from '../services/telegramService';
-import { Alert, AppState, AppStateStatus, Platform, View, Text, StyleSheet } from 'react-native';
+import { Alert, AppState, AppStateStatus, Platform, View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { securityService } from '../services/securityService';
 import { PinLockModal } from '../components/PinLockModal';
 import { TwoFactorModal } from '../components/TwoFactorModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { networkService } from '../services/networkService';
+
+// Minimal fallback shown while a lazy screen chunk loads (only on first visit)
+const LazyFallback = () => (
+  <View style={{ flex: 1, backgroundColor: '#000000', justifyContent: 'center', alignItems: 'center' }}>
+    <ActivityIndicator color="#FFFC00" size="small" />
+  </View>
+);
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
@@ -336,6 +345,7 @@ export const AppNavigator: React.FC = () => {
           </Text>
         </View>
       )}
+      <Suspense fallback={<LazyFallback />}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {session ? (
           hasUsername === false ? (
@@ -367,7 +377,7 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="MyProfile" component={MyProfileScreen} />
               <Stack.Screen name="SendTo" component={SendToScreen} />
               <Stack.Screen name="ChatCamera" component={ChatCameraScreen} />
-              <Stack.Screen name="CallHistory" component={CallHistoryScreen} />
+
               <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
               <Stack.Screen name="TrustedDevices" component={TrustedDevicesScreen} />
               <Stack.Screen
@@ -386,6 +396,7 @@ export const AppNavigator: React.FC = () => {
           <Stack.Screen name="Auth" component={AuthNavigator} />
         )}
       </Stack.Navigator>
+      </Suspense>
 
       {session?.user && deviceVerificationLocked && (
         <DeviceVerificationModal
@@ -418,8 +429,7 @@ export const AppNavigator: React.FC = () => {
         />
       )}
 
-      {/* Global call overlay - handles incoming calls and active call UI */}
-      {session && hasUsername && <CallOverlay />}
+
     </View>
   );
 };

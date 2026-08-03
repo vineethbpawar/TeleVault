@@ -180,11 +180,12 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
       });
 
     // ─── RNGH: Single tap (focus) ─────────────────────────────────────────
-    // NOTE: do NOT use requireExternalGestureToFail — it introduces a delay
-    // that causes phantom triggers and unexpected navigation on Android.
-    // Exclusive() already handles priority: double-tap wins if 2 taps detected.
+    // requireExternalGestureToFail ensures the single-tap waits for the
+    // double-tap window to expire before firing — prevents phantom triggers
+    // that caused the camera to close the app on a single tap on Android.
     const singleTapGesture = Gesture.Tap()
       .numberOfTaps(1)
+      .requireExternalGestureToFail(doubleTapGesture)
       .onEnd((event) => {
         runOnJS((x: number, y: number) => {
           setFocusTarget({ x, y });
@@ -197,7 +198,7 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
         })(event.x, event.y);
       });
 
-    const tapGestures = Gesture.Exclusive(doubleTapGesture, singleTapGesture);
+    const tapGestures = Gesture.Race(doubleTapGesture, singleTapGesture);
     const combinedGesture = Gesture.Simultaneous(pinchGesture, tapGestures);
 
     // ─── Capture / recording methods ──────────────────────────────────────

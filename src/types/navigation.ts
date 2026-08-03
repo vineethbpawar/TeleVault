@@ -95,7 +95,7 @@ export type AppStackParamList = {
     files?: TeleVaultFile[];
     initialIndex: number;
   };
-  CallHistory: undefined;
+
   ResetPassword: undefined;
   TrustedDevices: undefined;
 };

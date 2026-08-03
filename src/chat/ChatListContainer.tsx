@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Alert, ScrollView, RefreshControl, Image } from 'react-native';
-import { Search, Plus, MessageSquare, Camera, Users, UserCheck, Star, Clock, User, Bell, ChevronRight, Check, Square, Play, Phone } from 'lucide-react-native';
+import { Search, Plus, MessageSquare, Camera, Users, UserCheck, Star, Clock, User, Bell, ChevronRight, Check, Square, Play } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChatListContainerProps, ChatConversation, ChatGroup, ChatStory, ChatRequest, ChatTabType } from './types';
@@ -21,11 +21,6 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
   const [searchQuery, setSearchQuery] = useState('');
 
   const handleTabPress = (tab: ChatTabType) => {
-    if (tab === 'calls') {
-      // Navigate directly to Call History screen
-      navigation.navigate('CallHistory');
-      return;
-    }
     setActiveTab(tab);
   };
 
@@ -136,7 +131,6 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
       const reqList = await friendService.getPendingRequests();
       setRequests(reqList);
     } catch (err) {
-      console.error('[ChatListContainer] Failed to load data:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -250,6 +244,105 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
     }
   };
 
+  const renderListItem = useCallback(({ item }: { item: any }) => {
+    // 1. Direct Messages tab
+    if (activeTab === 'unread') {
+      const hasUnread = item.unread_count > 0;
+      const avatarBg = getRandomColor(item.other_user?.username || '');
+      return (
+        <TouchableOpacity style={styles.feedRow} onPress={() => handleOpenDM(item)}>
+          <View style={styles.rowLeft}>
+            <View style={[styles.avatarWrapper, { backgroundColor: avatarBg }]}>
+              <Text style={styles.avatarLetter}>
+                {(item.other_user?.username || '?').substring(0, 1).toUpperCase()}
+              </Text>
+            </View>
+            <View style={styles.detailsWrapper}>
+              <Text style={styles.titleText}>{item.other_user?.username}</Text>
+              <View style={styles.statusRow}>
+                {renderStatusIcon(item)}
+                <Text style={[styles.subtitleText, hasUnread && styles.subtitleTextUnread]} numberOfLines={1}>
+                  {item.last_message_preview || 'Tap to chat'}
+                </Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.rowRight}>
+            {item.last_message_at && (
+              <Text style={styles.timeText}>{formatTime(item.last_message_at)}</Text>
+            )}
+            {hasUnread && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>{item.unread_count}</Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      );
+    }
+
+    // 2. Groups tab
+    if (activeTab === 'groups') {
+      return (
+        <TouchableOpacity style={styles.feedRow} onPress={() => handleOpenGroup(item)}>
+          <View style={styles.rowLeft}>
+            <View style={[styles.avatarWrapper, { backgroundColor: '#102A45' }]}>
+              <Users size={20} color="#3897F1" />
+            </View>
+            <View style={styles.detailsWrapper}>
+              <Text style={styles.titleText}>{item.name}</Text>
+              <Text style={styles.subtitleText} numberOfLines={1}>
+                {item.description || 'Group Chat'}
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={18} color="#2C2C2E" />
+        </TouchableOpacity>
+      );
+    }
+
+    // 3. Friends List tab
+    if (activeTab === 'friends') {
+      return (
+        <View style={styles.feedRow}>
+          <View style={styles.rowLeft}>
+            <View style={styles.avatarWrapper}>
+              <User size={20} color="#8E8E93" />
+            </View>
+            <View style={styles.detailsWrapper}>
+              <Text style={styles.titleText}>{item.username}</Text>
+              <Text style={styles.subtitleText}>{item.full_name || 'TeleVault User'}</Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.chatActionBtn}
+            onPress={() => navigation.navigate('ChatRoom', { friendId: item.id, friendUsername: item.username })}
+          >
+            <MessageSquare size={16} color="#000000" />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // 4. Friend Requests tab
+    return (
+      <View style={styles.feedRow}>
+        <View style={styles.rowLeft}>
+          <View style={styles.avatarWrapper}>
+            <User size={20} color="#8E8E93" />
+          </View>
+          <View style={styles.detailsWrapper}>
+            <Text style={styles.titleText}>{item.sender_profile.username}</Text>
+            <Text style={styles.subtitleText}>Wants to be friends</Text>
+          </View>
+        </View>
+        <TouchableOpacity style={styles.acceptRequestBtn} onPress={() => handleAcceptRequest(item.id, item.sender_id)}>
+          <Check size={16} color="#000000" />
+        </TouchableOpacity>
+      </View>
+    );
+  }, [activeTab, currentUserId, handleOpenDM, handleOpenGroup, handleAcceptRequest, navigation, renderStatusIcon, formatTime]);
+
   return (
     <View style={styles.container}>
       {/* Search Header row */}
@@ -297,7 +390,7 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
 
       {/* Navigation tabs row */}
       <View style={styles.tabContainer}>
-        {(['unread', 'groups', 'calls', 'friends', 'requests'] as const).map((tab) => {
+        {(['unread', 'groups', 'friends', 'requests'] as const).map((tab) => {
           const isActive = activeTab === tab;
           let label = '';
           let count = 0;
@@ -306,8 +399,6 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
             count = unreadCount;
           } else if (tab === 'groups') {
             label = 'GROUPS';
-          } else if (tab === 'calls') {
-            label = 'CALLS';
           } else if (tab === 'friends') {
             label = 'FRIENDS';
           } else if (tab === 'requests') {
@@ -321,9 +412,6 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
               style={[styles.tabItem, isActive && styles.tabItemActive]}
               onPress={() => handleTabPress(tab)}
             >
-              {tab === 'calls' ? (
-                <Phone size={13} color={isActive ? '#000000' : '#8E8E93'} />
-              ) : null}
               <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
                 {label}{count > 0 ? ` (${count})` : ''}
               </Text>
@@ -344,11 +432,9 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
               ? filteredConversations 
               : activeTab === 'groups'
                 ? filteredGroups
-                : activeTab === 'calls'
-                  ? []
-                  : activeTab === 'friends'
-                    ? filteredFriends
-                    : requests
+                : activeTab === 'friends'
+                  ? filteredFriends
+                  : requests
           }
           keyExtractor={(item: any) => item.id}
           refreshControl={
@@ -360,104 +446,12 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
             />
           }
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }: { item: any }) => {
-            // 1. Direct Messages tab
-            if (activeTab === 'unread') {
-              const hasUnread = item.unread_count > 0;
-              const avatarBg = getRandomColor(item.other_user?.username || '');
-              return (
-                <TouchableOpacity style={styles.feedRow} onPress={() => handleOpenDM(item)}>
-                  <View style={styles.rowLeft}>
-                    <View style={[styles.avatarWrapper, { backgroundColor: avatarBg }]}>
-                      <Text style={styles.avatarLetter}>
-                        {(item.other_user?.username || '?').substring(0, 1).toUpperCase()}
-                      </Text>
-                    </View>
-                    <View style={styles.detailsWrapper}>
-                      <Text style={styles.titleText}>{item.other_user?.username}</Text>
-                      <View style={styles.statusRow}>
-                        {renderStatusIcon(item)}
-                        <Text style={[styles.subtitleText, hasUnread && styles.subtitleTextUnread]} numberOfLines={1}>
-                          {item.last_message_preview || 'Tap to chat'}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                  <View style={styles.rowRight}>
-                    {item.last_message_at && (
-                      <Text style={styles.timeText}>{formatTime(item.last_message_at)}</Text>
-                    )}
-                    {hasUnread && (
-                      <View style={styles.unreadBadge}>
-                        <Text style={styles.unreadBadgeText}>{item.unread_count}</Text>
-                      </View>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              );
-            }
-
-            // 2. Groups tab
-            if (activeTab === 'groups') {
-              return (
-                <TouchableOpacity style={styles.feedRow} onPress={() => handleOpenGroup(item)}>
-                  <View style={styles.rowLeft}>
-                    <View style={[styles.avatarWrapper, { backgroundColor: '#102A45' }]}>
-                      <Users size={20} color="#3897F1" />
-                    </View>
-                    <View style={styles.detailsWrapper}>
-                      <Text style={styles.titleText}>{item.name}</Text>
-                      <Text style={styles.subtitleText} numberOfLines={1}>
-                        {item.description || 'Group Chat'}
-                      </Text>
-                    </View>
-                  </View>
-                  <ChevronRight size={18} color="#2C2C2E" />
-                </TouchableOpacity>
-              );
-            }
-
-            // 3. Friends List tab
-            if (activeTab === 'friends') {
-              return (
-                <View style={styles.feedRow}>
-                  <View style={styles.rowLeft}>
-                    <View style={styles.avatarWrapper}>
-                      <User size={20} color="#8E8E93" />
-                    </View>
-                    <View style={styles.detailsWrapper}>
-                      <Text style={styles.titleText}>{item.username}</Text>
-                      <Text style={styles.subtitleText}>{item.full_name || 'TeleVault User'}</Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.chatActionBtn}
-                    onPress={() => navigation.navigate('ChatRoom', { friendId: item.id, friendUsername: item.username })}
-                  >
-                    <MessageSquare size={16} color="#000000" />
-                  </TouchableOpacity>
-                </View>
-              );
-            }
-
-            // 4. Friend Requests tab
-            return (
-              <View style={styles.feedRow}>
-                <View style={styles.rowLeft}>
-                  <View style={styles.avatarWrapper}>
-                    <User size={20} color="#8E8E93" />
-                  </View>
-                  <View style={styles.detailsWrapper}>
-                    <Text style={styles.titleText}>{item.sender_profile.username}</Text>
-                    <Text style={styles.subtitleText}>Wants to be friends</Text>
-                  </View>
-                </View>
-                <TouchableOpacity style={styles.acceptRequestBtn} onPress={() => handleAcceptRequest(item.id, item.sender_id)}>
-                  <Check size={16} color="#000000" />
-                </TouchableOpacity>
-              </View>
-            );
-          }}
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={50}
+          windowSize={7}
+          removeClippedSubviews={true}
+          renderItem={renderListItem}
           ListEmptyComponent={
             activeTab === 'groups' ? (
               <View style={styles.emptyState}>
@@ -720,9 +714,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 12,
   },
-  tabPhoneIcon: {
-    marginRight: 4,
-  },
+
   emptyState: {
     alignItems: 'center',
     paddingTop: 60,

@@ -183,12 +183,6 @@ export const ChatListScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Chats</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <TouchableOpacity
-            style={styles.addBtn}
-            onPress={() => navigation.navigate('CallHistory')}
-          >
-            <Text style={{ fontSize: 18 }}>📞</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('UserSearch')}>
             <MessageSquarePlus size={22} color="#FFFC00" />
           </TouchableOpacity>

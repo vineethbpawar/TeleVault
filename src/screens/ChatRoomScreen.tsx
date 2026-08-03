@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -240,7 +240,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         return prev;
       });
 
-      console.log(`[Realtime] Syncing missed messages since ${lastTimestamp}`);
+
       const { data: msgsData, error } = await supabase
         .from('chat_messages')
         .select('*')
@@ -254,7 +254,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
       }
 
       if (msgsData && msgsData.length > 0) {
-        console.log(`[Realtime] Found ${msgsData.length} missed messages. Merging...`);
+        
         
         const snapIds = msgsData.map((m: any) => m.snap_id).filter(Boolean);
         const snapsMap: Record<string, any> = {};
@@ -315,7 +315,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
       reconnectTimeoutRef.current = null;
     }
 
-    console.log(`[Realtime] Subscribing to chat:${convId}`);
+
 
     const channel = supabase.channel(`chat:${convId}`, {
       config: {
@@ -492,7 +492,6 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     });
 
     channel.subscribe((status: string, err?: any) => {
-      console.log(`[Realtime] Subscription status for chat:${convId} is: ${status}`, err || '');
       if (status === 'SUBSCRIBED') {
         stopPolling();
         channel.track({ online: true });
@@ -520,7 +519,6 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
 
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
-        console.log('[AppState] App returned to foreground, reconnecting chat subscription...');
         if (activeId && active) {
           subscribeToChat(activeId).catch((e) => console.warn('[Realtime] Foreground reconnect failed:', e));
         }
@@ -540,19 +538,15 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
 
         // 2. Resolve conversation ID if not present
         if (!activeId) {
-          console.log('[DEBUG_CHAT] No active conversation ID, fetching/creating for otherUserId:', otherUserId);
           const conv = await chatService.getOrCreateConversation(otherUserId);
           if (!active) return;
           activeId = conv.id;
-          console.log('[DEBUG_CHAT] Resolved conversation ID:', activeId);
           setConversationId(conv.id);
         }
 
         // 3. Fetch messages
-        console.log('[DEBUG_CHAT] Fetching messages from database for conversation:', activeId);
         const data = await chatService.getMessages(activeId);
         if (!active) return;
-        console.log('[DEBUG_CHAT] Fetched messages count:', data.length);
         setMessages(data);
         
         // 4. Load offline queue and mark as read
@@ -561,7 +555,6 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         await chatService.markMessagesRead(activeId);
 
         // 5. Subscribe to realtime Postgres updates
-        console.log('[DEBUG_CHAT] Subscribing to realtime channel for conversation:', activeId);
         subscribeToChat(activeId).catch((e) => console.warn('[Realtime] Init subscribe failed:', e));
       } catch (error) {
         console.error('[DEBUG_CHAT] Chat room initialization failed:', error);
@@ -952,48 +945,32 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   // Pre-process messages to insert date headers and calculate grouping
-  const getProcessedMessagesList = () => {
+  const processedMessages = useMemo(() => {
     const list: any[] = [];
     let lastDateStr = '';
-
     messages.forEach((msg, idx) => {
       const msgDate = new Date(msg.created_at);
       const dateStr = msgDate.toDateString();
-
-      // Date Group Header
       if (dateStr !== lastDateStr) {
         let label = dateStr;
         const today = new Date().toDateString();
         const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toDateString();
-        if (dateStr === today) {
-          label = 'Today';
-        } else if (dateStr === yesterday) {
-          label = 'Yesterday';
-        } else {
-          label = msgDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-        }
+        if (dateStr === today) label = 'Today';
+        else if (dateStr === yesterday) label = 'Yesterday';
+        else label = msgDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
         list.push({ id: `date-${dateStr}`, type: 'date-header', label });
         lastDateStr = dateStr;
       }
-
-      // Grouping: hide avatar if next message is within 2 minutes by the same sender
       const nextMsg = messages[idx + 1];
       const isSameSender = nextMsg && nextMsg.sender_id === msg.sender_id;
       const timeDiff = nextMsg ? new Date(nextMsg.created_at).getTime() - msgDate.getTime() : Infinity;
       const isGrouped = isSameSender && timeDiff < 2 * 60 * 1000;
-
-      list.push({
-        ...msg,
-        type: 'message',
-        showAvatar: !isGrouped,
-        reactions: reactionsMap[msg.id] || [],
-      });
+      list.push({ ...msg, type: 'message', showAvatar: !isGrouped, reactions: reactionsMap[msg.id] || [] });
     });
-
     return list;
-  };
+  }, [messages, reactionsMap]);
 
-  const renderItem = ({ item }: { item: any }) => {
+  const renderItem = useCallback(({ item }: { item: any }) => {
     if (item.type === 'date-header') {
       return (
         <View style={styles.dateHeaderContainer}>
@@ -1039,7 +1016,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
         replyToMessage={(item as any).reply_to}
       />
     );
-  };
+  }, [currentUserId, otherUsername, reactionsMap, handleOpenSnap, setLongPressedMessage, setReplyToMessage]);
 
   const handleSnapPress = () => {
     navigation.navigate('ChatCamera', {
@@ -1076,9 +1053,15 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
           ) : (
             <FlatList
               ref={flatListRef}
-              data={getProcessedMessagesList()}
+              data={processedMessages}
               keyExtractor={(item) => item.id}
               renderItem={renderItem}
+              initialNumToRender={15}
+              maxToRenderPerBatch={10}
+              updateCellsBatchingPeriod={50}
+              windowSize={10}
+              removeClippedSubviews={true}
+              legacyImplementation={false}
               contentContainerStyle={styles.listContent}
               onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
               onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
