@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 56 : 24,
+    top: 16,
     left: 20,
     zIndex: 10,
     padding: 8,

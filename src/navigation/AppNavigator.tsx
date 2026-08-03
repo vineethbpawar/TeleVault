@@ -154,7 +154,7 @@ export const AppNavigator: React.FC = () => {
       }
     };
     checkInitialLock();
-  }, [session]);
+  }, [session?.user?.id]);
 
   useEffect(() => {
     let backgroundTime = 0;
@@ -269,7 +269,16 @@ export const AppNavigator: React.FC = () => {
       }
     };
 
-    // Get initial session with resilient safety timeout
+    let isInitialized = false;
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      isInitialized = true;
+      setSession(currentSession);
+      checkUserAndSession(currentSession);
+    });
+
+    // Fallback: if onAuthStateChange hasn't triggered within timeout, get initial session
     const sessionPromise = supabase.auth.getSession();
     const sessionTimeout = new Promise<any>((resolve) =>
       setTimeout(() => resolve({ data: { session: null } }), 4000)
@@ -277,19 +286,19 @@ export const AppNavigator: React.FC = () => {
 
     Promise.race([sessionPromise, sessionTimeout])
       .then(({ data: { session: initialSession } }) => {
-        setSession(initialSession);
-        checkUserAndSession(initialSession);
+        if (!isInitialized) {
+          isInitialized = true;
+          setSession(initialSession);
+          checkUserAndSession(initialSession);
+        }
       })
       .catch(() => {
-        setLoading(false);
-        setHasUsername(false);
+        if (!isInitialized) {
+          isInitialized = true;
+          setLoading(false);
+          setHasUsername(false);
+        }
       });
-
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-      setSession(currentSession);
-      checkUserAndSession(currentSession);
-    });
 
     // Listen to profile setup completes
     const unsubscribeAuth = authEvents.subscribe(() => {

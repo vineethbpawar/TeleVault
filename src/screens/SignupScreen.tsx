@@ -7,7 +7,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
@@ -26,9 +25,26 @@ export const SignupScreen: React.FC<Props> = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const showAlert = (title: string, message: string, onOk?: () => void) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}\n\n${message}`);
+      onOk?.();
+    } else {
+      const { Alert: RNAlert } = require('react-native');
+      RNAlert.alert(title, message, [{ text: 'OK', onPress: onOk }]);
+    }
+  };
+
   const handleSignup = async () => {
     if (!email || !password || !confirmPassword) {
       setError('Please fill in all fields.');
+      return;
+    }
+
+    // Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      setError('Please enter a valid email address.');
       return;
     }
 
@@ -54,10 +70,10 @@ export const SignupScreen: React.FC<Props> = ({ navigation }) => {
       if (signUpError) {
         setError(signUpError.message);
       } else if (data?.user) {
-        Alert.alert(
+        showAlert(
           'Signup Success',
           'Your account has been created! Please log in.',
-          [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+          () => navigation.navigate('Login')
         );
       }
     } catch (e: any) {
