@@ -1,4 +1,4 @@
-import React, { useRef, useImperativeHandle, forwardRef, useState, useEffect } from 'react';
+import React, { useRef, useImperativeHandle, forwardRef, useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, Text, Platform, Animated as RNAnimated, Pressable } from 'react-native';
 import { CameraView } from 'expo-camera';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -30,17 +30,8 @@ const FocusRing: React.FC<{ x: number; y: number }> = ({ x, y }) => {
     scale.setValue(1.5);
     opacity.setValue(1);
     RNAnimated.parallel([
-      RNAnimated.timing(scale, {
-        toValue: 1.0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      RNAnimated.timing(opacity, {
-        toValue: 0,
-        duration: 800,
-        delay: 200,
-        useNativeDriver: true,
-      }),
+      RNAnimated.timing(scale, { toValue: 1.0, duration: 200, useNativeDriver: true }),
+      RNAnimated.timing(opacity, { toValue: 0, duration: 800, delay: 200, useNativeDriver: true }),
     ]).start();
   }, [x, y]);
 
@@ -66,6 +57,7 @@ const FocusRing: React.FC<{ x: number; y: number }> = ({ x, y }) => {
 export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
   ({ facing, flash, lens, zoomShared, onReady, onDoubleTap, locationText }, ref) => {
     const cameraRef = useRef<CameraView | null>(null);
+    const containerRef = useRef<any>(null);
 
     const [zoomScale, setZoomScale] = useState(0);
     const [cameraMode, setCameraMode] = useState<'picture' | 'video'>('picture');
@@ -74,146 +66,123 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     const [focusTarget, setFocusTarget] = useState<{ x: number; y: number } | null>(null);
     const [autoFocusMode, setAutoFocusMode] = useState<'on' | 'off'>('off');
     const focusTimeoutRef = useRef<any>(null);
-    const lastTapRef = useRef<number>(0);
 
+    // Flash overlay state - briefly shown during photo capture on PWA/front camera
+    const [showFlashOverlay, setShowFlashOverlay] = useState(false);
+
+    // ─── Web: Prevent browser pinch/scroll zoom ───────────────────────────
     useEffect(() => {
-      const prevent = (e: Event) => {
-        e.preventDefault();
-      };
+      if (Platform.OS !== 'web') return;
+      const prevent = (e: Event) => e.preventDefault();
+      const preventZoom = (e: TouchEvent) => { if (e.touches.length > 1) e.preventDefault(); };
+      const wheel = (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); };
 
-      // Prevent multi-touch browser zoom on Web
-      const preventZoom = (e: TouchEvent) => {
-        if (e.touches.length > 1) {
-          e.preventDefault();
-        }
-      };
-
-      const wheel = (e: WheelEvent) => {
-        if (e.ctrlKey) {
-          e.preventDefault();
-        }
-      };
-
-      if (Platform.OS === 'web') {
-        document.addEventListener('touchstart', preventZoom, { passive: false });
-        document.addEventListener('gesturestart', prevent, { passive: false });
-        document.addEventListener('gesturechange', prevent, { passive: false });
-        document.addEventListener('gestureend', prevent, { passive: false });
-        window.addEventListener('wheel', wheel, { passive: false });
-      }
+      document.addEventListener('touchstart', preventZoom, { passive: false });
+      document.addEventListener('gesturestart', prevent, { passive: false });
+      document.addEventListener('gesturechange', prevent, { passive: false });
+      document.addEventListener('gestureend', prevent, { passive: false });
+      window.addEventListener('wheel', wheel, { passive: false });
 
       return () => {
         if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
-        if (Platform.OS === 'web') {
-          document.removeEventListener('touchstart', preventZoom);
-          document.removeEventListener('gesturestart', prevent);
-          document.removeEventListener('gesturechange', prevent);
-          document.removeEventListener('gestureend', prevent);
-          window.removeEventListener('wheel', wheel);
-        }
+        document.removeEventListener('touchstart', preventZoom);
+        document.removeEventListener('gesturestart', prevent);
+        document.removeEventListener('gesturechange', prevent);
+        document.removeEventListener('gestureend', prevent);
+        window.removeEventListener('wheel', wheel);
       };
     }, []);
 
-    // Web PWA Torch & Double Tap Event Listener Setup
+    // ─── Web: Hardware torch via MediaStream API ──────────────────────────
     useEffect(() => {
       if (Platform.OS !== 'web') return;
-
-      const toggleWebTorch = async () => {
+      const applyTorch = async () => {
         try {
-          const videoEls = Array.from(document.querySelectorAll('video')) as HTMLVideoElement[];
-          for (const video of videoEls) {
-            if (video.srcObject && 'getVideoTracks' in (video.srcObject as any)) {
-              const stream = video.srcObject as MediaStream;
-              const tracks = stream.getVideoTracks();
-              for (const track of tracks) {
-                try {
-                  const capabilities = (track.getCapabilities ? track.getCapabilities() : {}) as any;
-                  if ('torch' in capabilities || true) {
-                    await track.applyConstraints({
-                      advanced: [{ torch: flash === 'on' }] as any,
-                    });
-                  }
-                } catch (_) {}
-              }
+          const videos = Array.from(document.querySelectorAll('video')) as HTMLVideoElement[];
+          for (const video of videos) {
+            if (!video.srcObject) continue;
+            const stream = video.srcObject as MediaStream;
+            for (const track of stream.getVideoTracks()) {
+              try {
+                await track.applyConstraints({ advanced: [{ torch: flash === 'on' }] as any });
+              } catch (_) {}
             }
           }
-        } catch (err) {
-          console.warn('[WebFlash] Torch toggle error:', err);
-        }
+        } catch (_) {}
       };
-
-      toggleWebTorch();
+      applyTorch();
     }, [flash]);
 
-    // Attach high-reliability Web touchstart double-tap listener for Web PWA
+    // ─── Web: Double-tap listener attached directly to DOM container ──────
+    // We store onDoubleTap in a ref so we don't re-attach on every render
+    const onDoubleTapRef = useRef(onDoubleTap);
+    useEffect(() => { onDoubleTapRef.current = onDoubleTap; }, [onDoubleTap]);
+
     useEffect(() => {
       if (Platform.OS !== 'web') return;
 
-      let lastWebTouch = 0;
-      const handleWebTouchStart = (e: TouchEvent | MouseEvent) => {
-        const now = Date.now();
-        const diff = now - lastWebTouch;
+      let lastTouch = 0;
 
-        if (diff < 400 && diff > 0) {
-          if (onDoubleTap) {
-            onDoubleTap();
-          }
-          lastWebTouch = 0;
+      const handleTap = () => {
+        const now = Date.now();
+        const diff = now - lastTouch;
+        if (diff > 0 && diff < 400) {
+          lastTouch = 0;
+          onDoubleTapRef.current?.();
         } else {
-          lastWebTouch = now;
+          lastTouch = now;
         }
       };
 
-      const containerEl = document.querySelector('[data-camera-preview="true"]');
-      if (containerEl) {
-        containerEl.addEventListener('touchstart', handleWebTouchStart as any, { passive: true });
-        containerEl.addEventListener('click', handleWebTouchStart as any);
-      }
-
-      window.addEventListener('dblclick', handleWebTouchStart as any);
+      // Attach after a short delay so the DOM container element exists
+      const tid = setTimeout(() => {
+        const el = containerRef.current;
+        if (el) {
+          // React Native Web exposes the underlying DOM node on ._nativeRef or via findDOMNode equivalent
+          // Use the data attribute to find it in the DOM
+          const domEl = document.querySelector('[data-camera-preview="true"]');
+          const target = domEl || document;
+          target.addEventListener('touchstart', handleTap as any, { passive: true });
+          target.addEventListener('click', handleTap as any, { passive: true });
+        }
+      }, 300);
 
       return () => {
-        if (containerEl) {
-          containerEl.removeEventListener('touchstart', handleWebTouchStart as any);
-          containerEl.removeEventListener('click', handleWebTouchStart as any);
-        }
-        window.removeEventListener('dblclick', handleWebTouchStart as any);
+        clearTimeout(tid);
+        const domEl = document.querySelector('[data-camera-preview="true"]') || document;
+        domEl.removeEventListener('touchstart', handleTap as any);
+        domEl.removeEventListener('click', handleTap as any);
       };
-    }, [onDoubleTap]);
+    }, []);
 
+    // ─── Reanimated: sync zoom ────────────────────────────────────────────
     useAnimatedReaction(
       () => zoomShared.value,
-      (val) => {
-        runOnJS(setZoomScale)(val);
-      }
+      (val) => { runOnJS(setZoomScale)(val); }
     );
 
-    // Native Gesture Handler Setup (Pinch-to-zoom)
+    // ─── RNGH: Pinch to zoom ──────────────────────────────────────────────
     const baseZoom = useSharedValue(0);
     const pinchGesture = Gesture.Pinch()
-      .onStart(() => {
-        'worklet';
-        baseZoom.value = zoomShared.value;
-      })
+      .onStart(() => { 'worklet'; baseZoom.value = zoomShared.value; })
       .onUpdate((event) => {
         'worklet';
-        // Multiplier to control sensitivity
         const newZoom = baseZoom.value + (event.scale - 1) * 0.45;
         zoomShared.value = Math.max(0, Math.min(1, newZoom));
       });
 
-    // Double Tap Gesture to Flip Camera
+    // ─── RNGH: Double tap (Android native — most reliable) ────────────────
     const doubleTapGesture = Gesture.Tap()
       .numberOfTaps(2)
+      .maxDuration(300)
       .onEnd(() => {
-        if (onDoubleTap) {
-          runOnJS(onDoubleTap)();
-        }
+        if (onDoubleTap) runOnJS(onDoubleTap)();
       });
 
-    // Single Tap Focus Gesture
+    // ─── RNGH: Single tap (focus) ─────────────────────────────────────────
     const singleTapGesture = Gesture.Tap()
       .numberOfTaps(1)
+      .requireExternalGestureToFail(doubleTapGesture)
       .onEnd((event) => {
         runOnJS((x: number, y: number) => {
           setFocusTarget({ x, y });
@@ -229,10 +198,11 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     const tapGestures = Gesture.Exclusive(doubleTapGesture, singleTapGesture);
     const combinedGesture = Gesture.Simultaneous(pinchGesture, tapGestures);
 
+    // ─── Capture / recording methods ──────────────────────────────────────
     useImperativeHandle(ref, () => ({
       takePicture: async (): Promise<CaptureResult> => {
         if (!cameraRef.current) throw new Error('Camera is not initialized');
-        
+
         if (cameraMode !== 'picture') {
           setCameraMode('picture');
           await new Promise((resolve) => setTimeout(resolve, 250));
@@ -242,29 +212,24 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
           try {
             const dir = FileSystem.cacheDirectory + 'Camera/';
             const dirInfo = await FileSystem.getInfoAsync(dir);
-            if (!dirInfo.exists) {
-              await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-              console.log('[CameraPreview] Created Camera cache directory on Android.');
-            }
-          } catch (err) {
-            console.warn('[CameraPreview] Failed to verify/create Camera cache directory:', err);
-          }
+            if (!dirInfo.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+          } catch (_) {}
         }
-        const photo = await cameraRef.current.takePictureAsync({
-          quality: 1.0,
-          skipProcessing: false
-        });
+
+        // Flash overlay for front camera or web during capture
+        if (flash === 'on' && (facing === 'front' || Platform.OS === 'web')) {
+          setShowFlashOverlay(true);
+          setTimeout(() => setShowFlashOverlay(false), 300);
+        }
+
+        const photo = await cameraRef.current.takePictureAsync({ quality: 1.0, skipProcessing: false });
         if (!photo || !photo.uri) throw new Error('Capture failed');
-        return {
-          uri: photo.uri,
-          type: 'image',
-          mime_type: 'image/jpeg'
-        };
+        return { uri: photo.uri, type: 'image', mime_type: 'image/jpeg' };
       },
 
       startRecording: async () => {
         if (!cameraRef.current) throw new Error('Camera is not initialized');
-        
+
         if (cameraMode !== 'video') {
           setCameraMode('video');
           await new Promise((resolve) => setTimeout(resolve, 250));
@@ -274,100 +239,42 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
           try {
             const dir = FileSystem.cacheDirectory + 'Camera/';
             const dirInfo = await FileSystem.getInfoAsync(dir);
-            if (!dirInfo.exists) {
-              await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-              console.log('[CameraPreview] Created Camera cache directory for video on Android.');
-            }
-          } catch (err) {
-            console.warn('[CameraPreview] Failed to verify/create Camera cache directory for video:', err);
-          }
+            if (!dirInfo.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+          } catch (_) {}
         }
-        
-        recordingPromiseRef.current = cameraRef.current.recordAsync({
-          maxDuration: 60,
-        });
+
+        recordingPromiseRef.current = cameraRef.current.recordAsync({ maxDuration: 60 });
       },
 
       stopRecording: async (): Promise<CaptureResult> => {
         if (!cameraRef.current) throw new Error('Camera is not initialized');
-        
-        try {
-          cameraRef.current.stopRecording();
-        } catch (e) {
-          console.warn('[CameraPreview] stopRecording failed:', e);
-        }
+        try { cameraRef.current.stopRecording(); } catch (_) {}
 
         let videoUri = '';
         if (recordingPromiseRef.current) {
           try {
             const video = await recordingPromiseRef.current;
-            if (video && video.uri) {
-              videoUri = video.uri;
-            }
-          } catch (err) {
-            console.warn('[CameraPreview] Failed to resolve video recording promise:', err);
-          } finally {
+            if (video?.uri) videoUri = video.uri;
+          } catch (_) {} finally {
             recordingPromiseRef.current = null;
           }
         }
 
         setCameraMode('picture');
-
-        return {
-          uri: videoUri,
-          type: 'video',
-          mime_type: 'video/mp4'
-        };
-      }
+        return { uri: videoUri, type: 'video', mime_type: 'video/mp4' };
+      },
     }));
 
     return (
       <GestureDetector gesture={combinedGesture}>
         <Pressable
-          {...(Platform.OS === 'web' ? ({
-            'data-camera-preview': 'true',
-            onTouchEnd: (e: any) => {
-              const now = Date.now();
-              const timeDiff = now - lastTapRef.current;
-              if (timeDiff < 450 && timeDiff > 0) {
-                if (onDoubleTap) onDoubleTap();
-                lastTapRef.current = 0;
-              } else {
-                lastTapRef.current = now;
-              }
-            },
-            onClick: (e: any) => {
-              const now = Date.now();
-              const timeDiff = now - lastTapRef.current;
-              if (timeDiff < 450 && timeDiff > 0) {
-                if (onDoubleTap) onDoubleTap();
-                lastTapRef.current = 0;
-              } else {
-                lastTapRef.current = now;
-              }
-            }
-          } as any) : {})}
+          ref={containerRef}
+          {...(Platform.OS === 'web' ? ({ 'data-camera-preview': 'true' } as any) : {})}
           onPress={(e: any) => {
-            if (Platform.OS === 'web') return; // Handled by web touch/click listeners
-            const now = Date.now();
-            const timeDiff = now - lastTapRef.current;
-            lastTapRef.current = now;
-
-            if (timeDiff < 400 && timeDiff > 0) {
-              if (onDoubleTap) {
-                onDoubleTap();
-              }
-              lastTapRef.current = 0;
-            } else {
-              const { pageX, pageY } = e.nativeEvent;
-              setFocusTarget({ x: pageX, y: pageY });
-              setAutoFocusMode('on');
-              if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
-              focusTimeoutRef.current = setTimeout(() => {
-                setFocusTarget(null);
-                setAutoFocusMode('off');
-              }, 1000);
-            }
+            // On Android: onPress is NOT used for double-tap (RNGH handles it above).
+            // On Web: handled by DOM touchstart/click listeners in useEffect.
+            if (Platform.OS !== 'android') return;
+            // Focus on single tap (RNGH single tap handles this, but fallback here)
           }}
           style={styles.container}
         >
@@ -387,13 +294,14 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
 
           {focusTarget && <FocusRing x={focusTarget.x} y={focusTarget.y} />}
 
-          {/* Flash Overlay for Front Camera OR Web PWA Camera */}
-          {flash === 'on' && (facing === 'front' || Platform.OS === 'web') && (
+          {/* Flash overlay — only shown briefly during photo capture */}
+          {showFlashOverlay && (
             <View
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: '#FFFFFF', opacity: facing === 'front' ? 0.85 : 0.45, zIndex: 10, pointerEvents: 'none' }
+                { backgroundColor: '#FFFFFF', opacity: 0.9, zIndex: 10 }
               ]}
+              pointerEvents="none"
             />
           )}
 
@@ -457,6 +365,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'right',
     lineHeight: 20,
-  }
+  },
 });
+
 export default CameraPreview;
