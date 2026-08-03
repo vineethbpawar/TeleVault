@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Audio } from 'expo-av';
 import {
   StyleSheet,
   View,
@@ -15,7 +16,7 @@ interface MessageComposerProps {
   onSend: (text: string) => void;
   onCameraPress: () => void;
   onGalleryPress: () => void;
-  onVoicePress?: () => void;
+  onVoiceSend?: (uri: string, durationMs: number) => void;
   onFilePress?: () => void;
   onLocationPress?: () => void;
   replyToMessage?: ChatMessage | null;
@@ -27,7 +28,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   onSend,
   onCameraPress,
   onGalleryPress,
-  onVoicePress,
+  onVoiceSend,
   onFilePress,
   onLocationPress,
   replyToMessage,
@@ -36,6 +37,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 }) => {
   const [text, setText] = useState('');
   const [showTools, setShowTools] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recordDuration, setRecordDuration] = useState(0);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const sendScale = useRef(new Animated.Value(0)).current;
   const toolsAnim = useRef(new Animated.Value(0)).current;
   const isTypingRef = useRef(false);
@@ -92,6 +97,55 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     }).start();
   };
 
+  const startRecording = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status === 'granted') {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+        });
+        const { recording: newRecording } = await Audio.Recording.createAsync(
+          Audio.RecordingOptionsPresets.HIGH_QUALITY
+        );
+        setRecording(newRecording);
+        setIsRecording(true);
+        setRecordDuration(0);
+        
+        recordingTimerRef.current = setInterval(() => {
+          setRecordDuration((prev) => prev + 1);
+        }, 1000);
+      } else {
+        // Handle permission denied
+      }
+    } catch (err) {
+      console.error('Failed to start recording', err);
+    }
+  };
+
+  const stopRecording = async (send: boolean) => {
+    try {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+      setIsRecording(false);
+      
+      if (recording) {
+        await recording.stopAndUnloadAsync();
+        const uri = recording.getURI();
+        
+        if (send && uri && onVoiceSend) {
+          // Pass the duration in ms
+          onVoiceSend(uri, recordDuration * 1000);
+        }
+        setRecording(null);
+        setRecordDuration(0);
+      }
+    } catch (err) {
+      console.error('Failed to stop recording', err);
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Reply Context Header */}
@@ -135,8 +189,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             <Text style={styles.drawerLabel}>Gallery</Text>
           </TouchableOpacity>
 
-          {onVoicePress && (
-            <TouchableOpacity style={styles.drawerItem} onPress={onVoicePress} activeOpacity={0.8}>
+          {onVoiceSend && (
+            <TouchableOpacity style={styles.drawerItem} onPress={startRecording} activeOpacity={0.8}>
               <View style={[styles.drawerIcon, { backgroundColor: '#34C759' }]}>
                 <Mic size={18} color="#FFFFFF" />
               </View>
@@ -166,37 +220,58 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
       {/* Composer Row */}
       <View style={styles.composerRow}>
-        <TouchableOpacity style={styles.actionBtn} onPress={onCameraPress} activeOpacity={0.7}>
-          <Camera size={22} color="#FFFFFF" />
-        </TouchableOpacity>
-
-        <View style={styles.inputWrapper}>
-          <TextInput
-            style={styles.input}
-            placeholder="Send a chat..."
-            placeholderTextColor="#8E8E93"
-            value={text}
-            onChangeText={handleTextChange}
-            multiline
-            maxLength={1000}
-          />
-          <TouchableOpacity style={styles.attachmentBtn} onPress={toggleTools} activeOpacity={0.7}>
-            <Paperclip size={18} color={showTools ? '#FFFC00' : '#8E8E93'} />
-          </TouchableOpacity>
-        </View>
-
-        {text.trim() ? (
-          <TouchableOpacity
-            style={styles.sendBtn}
-            onPress={handleSendPress}
-            activeOpacity={0.8}
-          >
-            <Send size={16} color="#000000" />
-          </TouchableOpacity>
+        {isRecording ? (
+          <View style={styles.recordingContainer}>
+            <View style={styles.recordingIndicator}>
+              <View style={styles.redDot} />
+              <Text style={styles.recordingText}>
+                Recording: {Math.floor(recordDuration / 60)}:{(recordDuration % 60).toString().padStart(2, '0')}
+              </Text>
+            </View>
+            <View style={styles.recordingActions}>
+              <TouchableOpacity onPress={() => stopRecording(false)} style={styles.cancelBtn}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => stopRecording(true)} style={styles.sendRecordingBtn}>
+                <Send size={16} color="#000000" />
+              </TouchableOpacity>
+            </View>
+          </View>
         ) : (
-          <TouchableOpacity style={styles.actionBtn} onPress={onVoicePress} activeOpacity={0.7}>
-            <Mic size={22} color="#FFFFFF" />
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity style={styles.actionBtn} onPress={onCameraPress} activeOpacity={0.7}>
+              <Camera size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.input}
+                placeholder="Send a chat..."
+                placeholderTextColor="#8E8E93"
+                value={text}
+                onChangeText={handleTextChange}
+                multiline
+                maxLength={1000}
+              />
+              <TouchableOpacity style={styles.attachmentBtn} onPress={toggleTools} activeOpacity={0.7}>
+                <Paperclip size={18} color={showTools ? '#FFFC00' : '#8E8E93'} />
+              </TouchableOpacity>
+            </View>
+
+            {text.trim() ? (
+              <TouchableOpacity
+                style={styles.sendBtn}
+                onPress={handleSendPress}
+                activeOpacity={0.8}
+              >
+                <Send size={16} color="#000000" />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.actionBtn} onPress={startRecording} activeOpacity={0.7}>
+                <Mic size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+          </>
         )}
       </View>
     </View>
@@ -313,6 +388,54 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     fontSize: 10.5,
     fontWeight: '500',
+  },
+  recordingContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 20,
+    marginHorizontal: 6,
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 6,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+  },
+  recordingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  redDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF3B30',
+    marginRight: 8,
+  },
+  recordingText: {
+    color: '#FFFFFF',
+    fontSize: 14.5,
+  },
+  recordingActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cancelBtn: {
+    marginRight: 16,
+  },
+  cancelBtnText: {
+    color: '#FF3B30',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  sendRecordingBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFFC00',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

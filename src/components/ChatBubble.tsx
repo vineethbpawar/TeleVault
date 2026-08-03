@@ -10,6 +10,7 @@ import {
 import { Reply, Smile } from 'lucide-react-native';
 import MessageStatus from './MessageStatus';
 import UserAvatar from './UserAvatar';
+import VoicePlayer from './VoicePlayer';
 import { ChatMessage } from '../types/chat';
 
 interface ChatBubbleProps {
@@ -82,10 +83,20 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     }
   };
 
-  // Extract reactions if present in message (e.g. from JSON field or in-memory)
   const messageReactions = (message as any).reactions || [];
   const savedUsers = message.is_saved_by_users || [];
   const isSaved = savedUsers.length > 0;
+
+  const isVoice = message.message_type === 'voice' || message.message_text.startsWith('voice|');
+  let voiceFileId = '';
+  let voiceDuration = 0;
+  if (isVoice) {
+    const parts = message.message_text.split('|');
+    if (parts.length >= 3) {
+      voiceFileId = parts[1];
+      voiceDuration = parseInt(parts[2], 10) || 0;
+    }
+  }
 
   if (message.deleted_at) {
     return (
@@ -169,13 +180,17 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             </View>
           )}
 
-          {/* Actual message text */}
-          <Text style={[
-            styles.text,
-            isSaved ? styles.savedText : (isMe ? styles.myRawText : styles.otherRawText)
-          ]}>
-            {message.message_text}
-          </Text>
+          {/* Actual message content */}
+          {isVoice ? (
+            <VoicePlayer fileId={voiceFileId} durationMs={voiceDuration} isMe={isMe} />
+          ) : (
+            <Text style={[
+              styles.text,
+              isSaved ? styles.savedText : (isMe ? styles.myRawText : styles.otherRawText)
+            ]}>
+              {message.message_text}
+            </Text>
+          )}
 
           {/* Footer with time and seen status indicator */}
           <View style={styles.footer}>

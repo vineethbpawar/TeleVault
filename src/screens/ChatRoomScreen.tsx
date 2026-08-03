@@ -689,6 +689,43 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const handleSendVoice = async (uri: string, durationMs: number) => {
+    if (!conversationId || !currentUserId) return;
+
+    const tempId = `temp-voice-${Date.now()}`;
+    const messageText = `voice|temp|${durationMs}`;
+
+    const optimisticMsg: ChatMessage = {
+      id: tempId,
+      conversation_id: conversationId,
+      sender_id: currentUserId,
+      receiver_id: otherUserId,
+      message_type: 'voice',
+      message_text: messageText,
+      status: 'sending',
+      created_at: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, optimisticMsg]);
+
+    try {
+      const fileId = await telegramService.uploadToTelegram(uri, 'document', 'voice_note.m4a', 'audio/m4a');
+      if (!fileId) throw new Error('Failed to upload voice note');
+      
+      const finalMessageText = `voice|${fileId}|${durationMs}`;
+      const realMsg = await chatService.sendMessage(conversationId, otherUserId, finalMessageText, 'voice');
+      
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...realMsg, status: 'sent' } : m))
+      );
+    } catch (err: any) {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, status: 'failed' as any } : m))
+      );
+      showToast('Failed to send voice note');
+    }
+  };
+
   const broadcastTyping = (isTyping: boolean) => {
     if (activeChannelRef.current) {
       activeChannelRef.current.send({
@@ -1108,6 +1145,7 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
             onTyping={broadcastTyping}
             replyToMessage={replyToMessage}
             onClearReply={() => setReplyToMessage(null)}
+            onVoiceSend={handleSendVoice}
           />
         </View>
       </View>

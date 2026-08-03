@@ -218,7 +218,7 @@ export const chatService = {
   /**
    * Send a text message to a conversation and copy to Telegram.
    */
-  async sendMessage(conversationId: string, receiverId: string, text: string): Promise<ChatMessage> {
+  async sendMessage(conversationId: string, receiverId: string, text: string, messageType: string = 'text'): Promise<ChatMessage> {
     // 1. Validate text is not empty
     const cleanText = text.trim();
     if (!cleanText) {
@@ -256,7 +256,7 @@ export const chatService = {
         conversation_id: conversationId,
         sender_id: user.id,
         receiver_id: receiverId,
-        message_type: 'text',
+        message_type: messageType,
         message_text: cleanText,
         status: 'sent',
       })
