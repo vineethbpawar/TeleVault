@@ -1,5 +1,5 @@
-import React, { useRef, useImperativeHandle, forwardRef, useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Text, Platform, Animated as RNAnimated, Pressable } from 'react-native';
+import React, { useRef, useImperativeHandle, forwardRef, useState, useEffect } from 'react';
+import { View, StyleSheet, Text, Platform, Animated as RNAnimated } from 'react-native';
 import { CameraView } from 'expo-camera';
 import * as FileSystem from 'expo-file-system/legacy';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
@@ -180,9 +180,11 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
       });
 
     // ─── RNGH: Single tap (focus) ─────────────────────────────────────────
+    // NOTE: do NOT use requireExternalGestureToFail — it introduces a delay
+    // that causes phantom triggers and unexpected navigation on Android.
+    // Exclusive() already handles priority: double-tap wins if 2 taps detected.
     const singleTapGesture = Gesture.Tap()
       .numberOfTaps(1)
-      .requireExternalGestureToFail(doubleTapGesture)
       .onEnd((event) => {
         runOnJS((x: number, y: number) => {
           setFocusTarget({ x, y });
@@ -267,15 +269,9 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
 
     return (
       <GestureDetector gesture={combinedGesture}>
-        <Pressable
-          ref={containerRef}
+        <View
+          ref={containerRef as any}
           {...(Platform.OS === 'web' ? ({ 'data-camera-preview': 'true' } as any) : {})}
-          onPress={(e: any) => {
-            // On Android: onPress is NOT used for double-tap (RNGH handles it above).
-            // On Web: handled by DOM touchstart/click listeners in useEffect.
-            if (Platform.OS !== 'android') return;
-            // Focus on single tap (RNGH single tap handles this, but fallback here)
-          }}
           style={styles.container}
         >
           <CameraView
@@ -335,7 +331,7 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
               </Text>
             </View>
           )}
-        </Pressable>
+        </View>
       </GestureDetector>
     );
   }
