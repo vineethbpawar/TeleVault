@@ -13,6 +13,7 @@ interface VoicePlayerProps {
 
 export const VoicePlayer: React.FC<VoicePlayerProps> = ({ fileId, durationMs, isMe, localUri }) => {
   const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [position, setPosition] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -23,12 +24,12 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({ fileId, durationMs, is
   const progressColor = isMe ? '#000000' : '#FFFFFF';
 
   useEffect(() => {
-    return sound
-      ? () => {
-          sound.unloadAsync();
-        }
-      : undefined;
-  }, [sound]);
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => {});
+      }
+    };
+  }, []);
 
   const onPlaybackStatusUpdate = (status: any) => {
     if (status.isLoaded) {
@@ -37,7 +38,7 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({ fileId, durationMs, is
       if (status.didJustFinish) {
         setPosition(0);
         setIsPlaying(false);
-        sound?.setPositionAsync(0);
+        soundRef.current?.setPositionAsync(0).catch(() => {});
       }
     }
   };
@@ -67,11 +68,20 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({ fileId, durationMs, is
           url = await snapService.resolveTelegramUrl(fileId);
         }
 
+        // Request correct audio output settings for playback
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldRouteThroughEarpieceIOS: false,
+        });
+
         const { sound: newSound } = await Audio.Sound.createAsync(
           { uri: url },
           { shouldPlay: true },
           onPlaybackStatusUpdate
         );
+        soundRef.current = newSound;
         setSound(newSound);
         setIsPlaying(true);
         setIsLoading(false);
