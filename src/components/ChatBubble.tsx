@@ -90,11 +90,15 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const isVoice = message.message_type === 'voice' || message.message_text.startsWith('voice|');
   let voiceFileId = '';
   let voiceDuration = 0;
+  let localVoiceUri = '';
   if (isVoice) {
     const parts = message.message_text.split('|');
     if (parts.length >= 3) {
       voiceFileId = parts[1];
       voiceDuration = parseInt(parts[2], 10) || 0;
+      if (parts.length >= 4) {
+        localVoiceUri = parts[3];
+      }
     }
   }
 
@@ -182,7 +186,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 
           {/* Actual message content */}
           {isVoice ? (
-            <VoicePlayer fileId={voiceFileId} durationMs={voiceDuration} isMe={isMe} />
+            <VoicePlayer fileId={voiceFileId} durationMs={voiceDuration} isMe={isMe} localUri={localVoiceUri} />
           ) : (
             <Text style={[
               styles.text,

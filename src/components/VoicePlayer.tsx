@@ -8,9 +8,10 @@ interface VoicePlayerProps {
   fileId: string;
   durationMs: number;
   isMe: boolean;
+  localUri?: string;
 }
 
-export const VoicePlayer: React.FC<VoicePlayerProps> = ({ fileId, durationMs, isMe }) => {
+export const VoicePlayer: React.FC<VoicePlayerProps> = ({ fileId, durationMs, isMe, localUri }) => {
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [position, setPosition] = useState(0);
@@ -56,9 +57,12 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({ fileId, durationMs, is
         // Load the audio file
         let url = '';
         if (fileId === 'temp') {
-          // If it's a temporary local file, we might not be able to play it until uploaded
-          setIsLoading(false);
-          return;
+          if (localUri) {
+            url = localUri;
+          } else {
+            setIsLoading(false);
+            return;
+          }
         } else {
           url = await snapService.resolveTelegramUrl(fileId);
         }

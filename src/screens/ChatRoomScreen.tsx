@@ -693,7 +693,8 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     if (!conversationId || !currentUserId) return;
 
     const tempId = `temp-voice-${Date.now()}`;
-    const messageText = `voice|temp|${durationMs}`;
+    // Store the local URI inside the temp message text so VoicePlayer can play it immediately
+    const messageText = `voice|temp|${durationMs}|${uri}`;
 
     const optimisticMsg: ChatMessage = {
       id: tempId,
@@ -709,10 +710,10 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
     setMessages((prev) => [...prev, optimisticMsg]);
 
     try {
-      const fileId = await telegramService.uploadToTelegram(uri, 'document', 'voice_note.m4a', 'audio/m4a');
-      if (!fileId) throw new Error('Failed to upload voice note');
+      const uploadRes = await telegramService.uploadToTelegram(uri, 'document', 'voice_note.m4a', 'audio/m4a');
+      if (!uploadRes || !uploadRes.telegramFileId) throw new Error('Failed to upload voice note');
       
-      const finalMessageText = `voice|${fileId}|${durationMs}`;
+      const finalMessageText = `voice|${uploadRes.telegramFileId}|${durationMs}`;
       const realMsg = await chatService.sendMessage(conversationId, otherUserId, finalMessageText, 'voice');
       
       setMessages((prev) =>
