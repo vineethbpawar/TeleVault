@@ -87,11 +87,11 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const savedUsers = message.is_saved_by_users || [];
   const isSaved = savedUsers.length > 0;
 
-  const isVoice = message.message_type === 'voice' || message.message_text.startsWith('voice|');
+  const isVoice = message.message_type === 'voice' || (message.message_text ? message.message_text.startsWith('voice|') : false);
   let voiceFileId = '';
   let voiceDuration = 0;
   let localVoiceUri = '';
-  if (isVoice) {
+  if (isVoice && message.message_text) {
     const parts = message.message_text.split('|');
     if (parts.length >= 3) {
       voiceFileId = parts[1];

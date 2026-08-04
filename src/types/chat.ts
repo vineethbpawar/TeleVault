@@ -33,7 +33,7 @@ export interface ChatMessage {
   conversation_id: string;
   sender_id: string;
   receiver_id: string;
-  message_type: 'text' | 'snap';
+  message_type: 'text' | 'snap' | 'voice';
   message_text?: string | null;
   telegram_message_id?: string | null;
   snap_id?: string | null;

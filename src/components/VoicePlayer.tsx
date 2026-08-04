@@ -73,7 +73,6 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({ fileId, durationMs, is
           allowsRecordingIOS: false,
           playsInSilentModeIOS: true,
           staysActiveInBackground: false,
-          shouldRouteThroughEarpieceIOS: false,
         });
 
         const { sound: newSound } = await Audio.Sound.createAsync(

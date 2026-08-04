@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Modal, Platform, AppState, ScrollView, RefreshControl, Dimensions, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Plus, FolderPlus, Upload, ArrowLeft, Folder, ChevronRight, ChevronLeft, MoreVertical, Search, ArrowUpDown, Lock, FileText, HardDrive, Star, Image as ImageIcon, Video, Trash2, Edit, CheckSquare, X, Share2, CloudUpload, AlertTriangle, Info } from 'lucide-react-native';
+import { Plus, FolderPlus, Upload, ArrowLeft, Folder, ChevronRight, ChevronLeft, MoreVertical, Search, ArrowUpDown, Lock, FileText, HardDrive, Star, Image as ImageIcon, Video, Trash2, Edit, CheckSquare, X, Share2, CloudUpload, AlertTriangle, Info, LayoutGrid, List, Clock } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -299,6 +299,84 @@ export const DriveFileGridItem: React.FC<{
 // Session-level in-memory cache for instant first-paint (root folder only)
 let sessionDriveCache: { folders: DriveFolder[]; files: DriveFile[] } | null = null;
 
+export const DriveFileListRow: React.FC<{
+  file: any;
+  onPress: () => void;
+  onMorePress: () => void;
+  isSelected: boolean;
+  isSelectionMode: boolean;
+  onSelectToggle: () => void;
+}> = React.memo(({ file, onPress, onMorePress, isSelected, isSelectionMode, onSelectToggle }) => {
+  const isVideo = file.file_type === 'video';
+  const isImage = file.file_type === 'image' ||
+    (file.mime_type && file.mime_type.startsWith('image/')) ||
+    (file.file_name && /\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i.test(file.file_name));
+
+  const [imgUri, setImgUri] = useState<string | null>(() => {
+    if (!isImage && !isVideo) return null;
+    return previewCacheService.getInMemoryPreview(file.telegram_file_id || file.id);
+  });
+
+  useEffect(() => {
+    let active = true;
+    if (isImage || isVideo) {
+      previewCacheService.resolveFilePreview(file, false, undefined, (generatedUri) => {
+        if (active) setImgUri(generatedUri);
+      }, 'low').then(res => {
+        if (active && res.previewUri) setImgUri(res.previewUri);
+      }).catch(() => {});
+    }
+    return () => { active = false; };
+  }, [file.id, file.local_thumbnail_uri, file.telegram_file_id]);
+
+  const formattedSize = file.file_size ? (file.file_size / (1024 * 1024)).toFixed(1) + ' MB' : '0 MB';
+  const formattedDate = file.created_at ? new Date(file.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.7}
+      onPress={isSelectionMode ? onSelectToggle : onPress}
+      onLongPress={onMorePress}
+      style={styles.listRowContainer}
+    >
+      <View style={styles.listRowIconBox}>
+        {imgUri ? (
+          <Image source={{ uri: imgUri }} style={styles.listRowThumbnail} />
+        ) : isVideo ? (
+          <Video size={22} color="#FFFC00" />
+        ) : isImage ? (
+          <ImageIcon size={22} color="#FFFC00" />
+        ) : (
+          <FileText size={22} color="#007AFF" />
+        )}
+      </View>
+
+      <View style={styles.listRowTextContainer}>
+        <Text style={styles.listRowTitle} numberOfLines={1}>
+          {file.file_name}
+        </Text>
+        <Text style={styles.listRowSubtitle}>
+          {formattedDate} • {formattedSize}
+        </Text>
+      </View>
+
+      {file.is_favorite && (
+        <Star size={14} color="#FFFC00" fill="#FFFC00" style={{ marginRight: 8 }} />
+      )}
+
+      {isSelectionMode ? (
+        <View style={[styles.gridCheckbox, isSelected && styles.gridCheckboxSelected]}>
+          {isSelected && <Text style={styles.gridCheckboxCheck}>✓</Text>}
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.listRowMoreBtn} onPress={onMorePress}>
+          <MoreVertical size={16} color="#8E8E93" />
+        </TouchableOpacity>
+      )}
+    </TouchableOpacity>
+  );
+});
+
 export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFocused, isPrivateMode }) => {
   const insets = useSafeAreaInsets();
 
@@ -311,6 +389,10 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
   // Sort states
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+
+  // Google Drive Tabs & View Layout State
+  const [activeTab, setActiveTab] = useState<'my_drive' | 'recent' | 'starred' | 'offline'>('my_drive');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Directory navigation states
   const [currentFolder, setCurrentFolder] = useState<DriveFolder | null>(null);
@@ -943,31 +1025,41 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
     let list = [...files];
     const query = searchQuery.toLowerCase().trim();
 
-    // 1. Search Query filter
+    // 1. Google Drive Tab Filters
+    if (activeTab === 'starred') {
+      list = list.filter(f => f.is_favorite);
+    } else if (activeTab === 'offline') {
+      list = list.filter(f => !!f.local_thumbnail_uri || !!previewCacheService.getInMemoryPreview(f.telegram_file_id || f.id));
+    } else if (activeTab === 'recent') {
+      list.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    }
+
+    // 2. Search Query filter
     if (query) {
       list = list.filter(f => f.file_name?.toLowerCase().includes(query));
     }
 
-    // 2. Sorting execution
-    list.sort((a, b) => {
-      if (sortField === 'name') {
-        const nameA = a.file_name?.toLowerCase() || '';
-        const nameB = b.file_name?.toLowerCase() || '';
-        return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
-      }
-      if (sortField === 'size') {
-        const sizeA = a.file_size || 0;
-        const sizeB = b.file_size || 0;
-        return sortOrder === 'asc' ? sizeA - sizeB : sizeB - sizeA;
-      }
-      // Fallback: Date
-      const dateA = new Date(a.created_at || 0).getTime();
-      const dateB = new Date(b.created_at || 0).getTime();
-      return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-    });
+    // 3. Sorting execution (if not recent tab)
+    if (activeTab !== 'recent') {
+      list.sort((a, b) => {
+        if (sortField === 'name') {
+          const nameA = a.file_name?.toLowerCase() || '';
+          const nameB = b.file_name?.toLowerCase() || '';
+          return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+        }
+        if (sortField === 'size') {
+          const sizeA = a.file_size || 0;
+          const sizeB = b.file_size || 0;
+          return sortOrder === 'asc' ? sizeA - sizeB : sizeB - sizeA;
+        }
+        const dateA = new Date(a.created_at || 0).getTime();
+        const dateB = new Date(b.created_at || 0).getTime();
+        return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+      });
+    }
 
     return list;
-  }, [files, searchQuery, sortField, sortOrder]);
+  }, [files, searchQuery, sortField, sortOrder, activeTab]);
 
   const processedFolders = React.useMemo(() => {
     let list = [...folders];
@@ -1030,7 +1122,7 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
         <View style={styles.searchFieldWrapper}>
           <Search size={18} color="#8E8E93" style={{ marginRight: 8 }} />
           <TextInput
-            placeholder="Search folders or files..."
+            placeholder="Search in Drive..."
             placeholderTextColor="#8E8E93"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -1038,11 +1130,48 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
           />
         </View>
         <TouchableOpacity
+          style={styles.actionSquareBtn}
+          onPress={() => setViewMode(prev => (prev === 'grid' ? 'list' : 'grid'))}
+        >
+          {viewMode === 'grid' ? (
+            <List size={18} color="#FFFFFF" />
+          ) : (
+            <LayoutGrid size={18} color="#FFFFFF" />
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.actionSquareBtn, isSelectionMode && styles.actionSquareBtnActive]}
           onPress={toggleSelectionMode}
         >
           <CheckSquare size={18} color={isSelectionMode ? '#000000' : '#FFFFFF'} />
         </TouchableOpacity>
+      </View>
+
+      {/* Google Drive Tab Chips Row */}
+      <View style={styles.driveTabChipsRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabChipsScroll}>
+          {[
+            { id: 'my_drive', label: 'My Drive', icon: HardDrive },
+            { id: 'recent', label: 'Recent', icon: Clock },
+            { id: 'starred', label: 'Starred', icon: Star },
+            { id: 'offline', label: 'Offline', icon: CloudUpload },
+          ].map(tab => {
+            const IconComp = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.driveChip, isActive && styles.driveChipActive]}
+                onPress={() => setActiveTab(tab.id as any)}
+              >
+                <IconComp size={13} color={isActive ? '#000000' : '#8E8E93'} style={{ marginRight: 6 }} />
+                <Text style={[styles.driveChipText, isActive && styles.driveChipTextActive]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* Directory Breadcrumbs / Sorting row */}
@@ -1078,9 +1207,9 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
         </View>
       ) : (
         <FlatList
-          key="grid-3-columns"
+          key={viewMode === 'grid' ? 'grid-3-columns' : 'list-1-column'}
           data={processedFiles}
-          numColumns={3}
+          numColumns={viewMode === 'grid' ? 3 : 1}
           keyExtractor={(item) => `file-${item.id}`}
           ListHeaderComponent={renderHeader}
           refreshControl={
@@ -1094,6 +1223,18 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
           renderItem={({ item }) => {
             const isSelected = selectedIds.has(item.id);
             const size = (screenWidth - 32) / 3;
+            if (viewMode === 'list') {
+              return (
+                <DriveFileListRow
+                  file={item}
+                  onPress={() => handleFilePress(item)}
+                  onMorePress={() => handleSelectItemOption('file', item.id, item.file_name)}
+                  isSelected={isSelected}
+                  isSelectionMode={isSelectionMode}
+                  onSelectToggle={() => toggleSelectId(item.id)}
+                />
+              );
+            }
             return (
               <View style={{ padding: 2 }}>
                 <DriveFileGridItem
@@ -2006,6 +2147,80 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+  },
+  driveTabChipsRow: {
+    paddingBottom: 8,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#2C2C2E',
+  },
+  tabChipsScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  driveChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+  },
+  driveChipActive: {
+    backgroundColor: '#FFFC00',
+    borderColor: '#FFFC00',
+  },
+  driveChipText: {
+    color: '#8E8E93',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  driveChipTextActive: {
+    color: '#000000',
+    fontWeight: '800',
+  },
+  listRowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 16,
+    padding: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+  },
+  listRowIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#121212',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    marginRight: 12,
+  },
+  listRowThumbnail: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  listRowTextContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  listRowTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  listRowSubtitle: {
+    color: '#8E8E93',
+    fontSize: 12,
+  },
+  listRowMoreBtn: {
+    padding: 8,
   },
 });
 export default DriveContainer;
