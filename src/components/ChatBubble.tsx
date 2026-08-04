@@ -164,7 +164,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           activeOpacity={0.95}
           onLongPress={() => onLongPress && onLongPress(message)}
           style={[
-            isSaved ? styles.savedBubbleBlock : styles.rawBubbleBlock,
+            styles.bubble,
+            isMe ? styles.myBubble : styles.otherBubble,
+            isSaved ? styles.savedBubbleBlock : null,
             isMe ? styles.myRowAlign : styles.otherRowAlign,
             replyToMessage ? styles.bubbleWithReply : null,
           ]}

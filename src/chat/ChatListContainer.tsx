@@ -262,7 +262,9 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
               <View style={styles.statusRow}>
                 {renderStatusIcon(item)}
                 <Text style={[styles.subtitleText, hasUnread && styles.subtitleTextUnread]} numberOfLines={1}>
-                  {item.last_message_preview || 'Tap to chat'}
+                  {item.last_message_preview?.startsWith('voice|')
+                    ? '🎤 Voice message'
+                    : item.last_message_preview || 'Tap to chat'}
                 </Text>
               </View>
             </View>
