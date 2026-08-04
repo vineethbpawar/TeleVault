@@ -254,7 +254,6 @@ export const AppNavigator: React.FC = () => {
         setLoading(false);
         // Hide the native splash screen now that auth is resolved
         ExpoSplash.hideAsync().catch(() => {});
-
         // Defer Telegram initialization to the background to speed up startup
         telegramService.initConfig().then(async () => {
           const config = await telegramService.getTelegramConfig();
@@ -265,6 +264,10 @@ export const AppNavigator: React.FC = () => {
             try {
               const { backgroundUploadService } = require('../services/backgroundUploadTask');
               await backgroundUploadService.registerBackgroundUploadTask();
+              
+              // Register push notifications & prompt permission dialog
+              const { notificationService } = require('../services/notificationService');
+              await notificationService.registerForPushNotifications();
             } catch (_) {}
           }
         }).catch(err => {
