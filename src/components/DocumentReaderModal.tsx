@@ -689,7 +689,7 @@ export const DocumentReaderModal: React.FC<DocumentReaderProps> = ({
     >
       <View style={styles.modalContainer}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top > 0 ? insets.top + 6 : 16 }]}>
           <TouchableOpacity style={styles.headerBtn} onPress={onClose}>
             <X size={20} color="#FFFFFF" />
           </TouchableOpacity>
