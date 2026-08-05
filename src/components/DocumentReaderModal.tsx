@@ -677,7 +677,7 @@ export const DocumentReaderModal: React.FC<DocumentReaderProps> = ({
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
+      presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
       <View style={styles.modalContainer}>
