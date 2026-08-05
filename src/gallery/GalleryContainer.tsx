@@ -13,6 +13,8 @@ import { fileOpenService } from '../services/fileOpenService';
 import { uploadQueueService } from '../services/uploadQueueService';
 import { UploadQueueBadge } from '../components/UploadQueueBadge';
 import { previewCacheService } from '../services/previewCacheService';
+import AdBanner from '../components/AdBanner';
+
 
 // Export activeMemoriesStore so ViewerContainer can read files without passing 15,000-char URL query strings
 export let activeMemoriesStore: GalleryItem[] = [];
@@ -435,6 +437,11 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
         >
           <CheckSquare size={18} color={isSelectionMode ? '#000000' : '#FFFFFF'} />
         </TouchableOpacity>
+      </View>
+
+      {/* Ad Banner placement */}
+      <View style={{ paddingHorizontal: 16, marginBottom: 4 }}>
+        <AdBanner />
       </View>
 
       {/* Tabs Filter Row */}

@@ -24,8 +24,6 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
           navigation={navigation}
           isFocused={isFocused}
         />
-        {/* AdMob Non-Intrusive Banner Placement */}
-        <AdBanner style={{ marginHorizontal: 16, marginBottom: 70 }} />
       </View>
     </Screen>
   );
