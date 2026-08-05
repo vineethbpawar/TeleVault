@@ -1,4 +1,5 @@
 import React from 'react';
+import { View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -6,6 +7,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MainTabParamList, AppStackParamList } from '../types/navigation';
 import { GalleryContainer } from '../gallery/GalleryContainer';
 import Screen from '../components/Screen';
+import AdBanner from '../components/AdBanner';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'MemoriesTab'>,
@@ -17,10 +19,14 @@ export const MemoriesScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <Screen>
-      <GalleryContainer
-        navigation={navigation}
-        isFocused={isFocused}
-      />
+      <View style={{ flex: 1 }}>
+        <GalleryContainer
+          navigation={navigation}
+          isFocused={isFocused}
+        />
+        {/* AdMob Non-Intrusive Banner Placement */}
+        <AdBanner style={{ marginHorizontal: 16, marginBottom: 70 }} />
+      </View>
     </Screen>
   );
 };

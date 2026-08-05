@@ -441,6 +441,11 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   ).current;
 
   const goToNext = () => {
+    try {
+      const { adService } = require('../services/adService');
+      adService.registerMemoryOpen();
+    } catch (_) {}
+
     if (currentIndex < localFiles.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
@@ -449,6 +454,11 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   };
 
   const goToPrevious = () => {
+    try {
+      const { adService } = require('../services/adService');
+      adService.registerMemoryOpen();
+    } catch (_) {}
+
     if (currentIndex > 0) {
       setCurrentIndex(currentIndex - 1);
     }

@@ -70,6 +70,9 @@ export const SignupScreen: React.FC<Props> = ({ navigation }) => {
       if (signUpError) {
         setError(signUpError.message);
       } else if (data?.user) {
+        const { analyticsService } = require('../services/analyticsService');
+        analyticsService.trackEvent('sign_up', { email: email.trim() });
+
         showAlert(
           'Signup Success',
           'Your account has been created! Please log in.',

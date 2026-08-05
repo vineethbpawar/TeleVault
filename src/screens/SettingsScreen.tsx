@@ -1349,6 +1349,54 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Legal & Support Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionHeader}>Legal & Support</Text>
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.itemRow}
+              onPress={() => navigation.navigate('LegalAndSupport', { initialTab: 'privacy' })}
+            >
+              <View style={styles.itemLeft}>
+                <Shield size={20} color="#FFFC00" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Privacy Policy</Text>
+                  <Text style={styles.itemSubtitle}>Data collection, encryption & privacy terms</Text>
+                </View>
+              </View>
+              <ChevronRight size={18} color="#8E8E93" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.itemRow}
+              onPress={() => navigation.navigate('LegalAndSupport', { initialTab: 'terms' })}
+            >
+              <View style={styles.itemLeft}>
+                <FileText size={20} color="#FFFC00" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Terms of Service</Text>
+                  <Text style={styles.itemSubtitle}>User agreement & acceptable use policy</Text>
+                </View>
+              </View>
+              <ChevronRight size={18} color="#8E8E93" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.itemRow}
+              onPress={() => navigation.navigate('LegalAndSupport', { initialTab: 'support' })}
+            >
+              <View style={styles.itemLeft}>
+                <Mail size={20} color="#FFFC00" />
+                <View style={styles.itemMeta}>
+                  <Text style={styles.itemTitle}>Contact & Support</Text>
+                  <Text style={styles.itemSubtitle}>Get help, report bugs or ask questions</Text>
+                </View>
+              </View>
+              <ChevronRight size={18} color="#8E8E93" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* About Section */}
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>About</Text>
@@ -1358,7 +1406,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 <TeleVaultLogo size={24} style={{ marginRight: 4 }} />
                 <View style={styles.itemMeta}>
                   <Text style={styles.itemTitle}>TeleVault</Text>
-                  <Text style={styles.itemSubtitle}>Version 2.0.0 (Secure Social Upgrade)</Text>
+                  <Text style={styles.itemSubtitle}>Version 1.0.0 (Production Release)</Text>
                   <Text style={styles.aboutText}>
                     TeleVault is a Snapchat-inspired camera, memories, and drive vault app powered by your own private Telegram cloud storage bot. Built with React Native & Expo.
                   </Text>
@@ -1414,7 +1462,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 }
               }}
             >
-              <Text style={styles.appInfoSubtitle}>Version: v2.0 Beta</Text>
+              <Text style={styles.appInfoSubtitle}>Version: v1.0.0</Text>
             </TouchableOpacity>
             <Text style={styles.copyright}>© 2026 Vineeth. All rights reserved.</Text>
           </View>

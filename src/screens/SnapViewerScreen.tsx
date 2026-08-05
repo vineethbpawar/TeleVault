@@ -43,6 +43,17 @@ export const SnapViewerScreen: React.FC<Props> = ({ navigation, route }) => {
     };
 
     markViewed();
+    
+    // Analytics tracking for snap/story viewing
+    try {
+      const { analyticsService } = require('../services/analyticsService');
+      analyticsService.trackEvent('snap_viewed', {
+        snap_id: snapId,
+        media_type: mediaType,
+        is_story: isStory || false,
+        sender_username: senderUsername,
+      });
+    } catch (_) {}
   }, [snapId, isStory]);
 
   const handlePlayVideo = () => {

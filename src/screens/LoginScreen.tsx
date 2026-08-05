@@ -47,6 +47,9 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
       if (signInError) {
         setError(signInError.message);
+      } else {
+        const { analyticsService } = require('../services/analyticsService');
+        analyticsService.trackEvent('login', { email: email.trim() });
       }
     } catch (e: any) {
       setError(e.message || 'An error occurred during login.');

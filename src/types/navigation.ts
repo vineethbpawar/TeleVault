@@ -98,6 +98,7 @@ export type AppStackParamList = {
 
   ResetPassword: undefined;
   TrustedDevices: undefined;
+  LegalAndSupport: { initialTab?: 'privacy' | 'terms' | 'support' } | undefined;
 };
 
 

@@ -543,6 +543,17 @@ export const uploadQueueService = {
 
       await this.updateUploadQueueItem(itemId, { status: 'completed', stage: 'Completed (Single File)', progress: 100 });
       
+      // Analytics event tracking
+      try {
+        const { analyticsService } = require('../services/analyticsService');
+        const eventName = pendingItem.file_type === 'video' ? 'video_uploaded' : 'photo_uploaded';
+        analyticsService.trackEvent(eventName, {
+          file_name: pendingItem.file_name,
+          file_size: finalSize,
+          is_private: pendingItem.is_private,
+        });
+      } catch (_) {}
+
       if (Platform.OS === 'web') {
         await deleteWebBlob(itemId);
         await deleteWebBlob(`thumb_${itemId}`);

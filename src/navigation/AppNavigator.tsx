@@ -37,6 +37,7 @@ const SendToScreen = lazy(() => import('../screens/SendToScreen'));
 const ChatCameraScreen = lazy(() => import('../screens/ChatCameraScreen'));
 const ResetPasswordScreen = lazy(() => import('../screens/ResetPasswordScreen'));
 const TrustedDevicesScreen = lazy(() => import('../screens/TrustedDevicesScreen'));
+const LegalAndSupportScreen = lazy(() => import('../screens/LegalAndSupportScreen'));
 
 import { DeviceVerificationModal } from '../components/DeviceVerificationModal';
 import { deviceService } from '../services/deviceService';
@@ -383,6 +384,7 @@ export const AppNavigator: React.FC = () => {
 
               <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
               <Stack.Screen name="TrustedDevices" component={TrustedDevicesScreen} />
+              <Stack.Screen name="LegalAndSupport" component={LegalAndSupportScreen} />
               <Stack.Screen
                 name="MemoriesViewer"
                 component={MemoriesViewerScreen}

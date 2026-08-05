@@ -26,6 +26,13 @@ export const searchService = {
    * Performs an instant search/filtering on a list of file metadata.
    */
   filterFiles(files: TeleVaultFile[], filters: SearchFilters, recentlyViewedIds: string[] = []): TeleVaultFile[] {
+    if (filters.query && filters.query.trim().length > 0) {
+      try {
+        const { analyticsService } = require('./analyticsService');
+        analyticsService.trackEvent('search_used', { query: filters.query.trim() });
+      } catch (_) {}
+    }
+
     return files.filter((file) => {
       const meta = file.overlay_metadata || {};
 
