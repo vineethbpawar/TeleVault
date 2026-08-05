@@ -173,15 +173,14 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
         else photosToday++;
       });
 
-      // Calculate real telemetry metrics from authoritative database records
       setMetrics({
         totalUsers,
         activeUsersToday: todaySignupsRes.count || (totalUsers > 0 ? 1 : 0),
         dau: totalUsers,
         mau: totalUsers,
         newSignupsToday: todaySignupsRes.count || 0,
-        photosUploadedToday: photosToday,
-        videosUploadedToday: videosToday,
+        photosUploadedToday: photosCount,
+        videosUploadedToday: videosCount,
         totalStorageBytes: totalStorage,
         supabaseStorageBytes: supabaseStorage,
         telegramStorageBytes: telegramStorage || totalStorage,
@@ -195,21 +194,36 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
       setUsersList((usersDataRes.data || []) as UserProfile[]);
 
-      const mockEvents: ActivityEvent[] = (usersDataRes.data || []).slice(0, 8).map((u: any, idx: number) => ({
-        id: `act_${idx}_${u.id}`,
-        type: idx % 2 === 0 ? 'signup' : 'upload',
-        title: idx % 2 === 0 ? `New Signup: @${u.username || 'user'}` : `Media Upload by @${u.username || 'user'}`,
-        subtitle: `Platform: ${Platform.OS.toUpperCase()} • Safe Session Verified`,
-        time: `${idx * 4 + 2}m ago`,
-        severity: idx % 2 === 0 ? 'info' : 'success',
-      }));
+      // Build real activity feed from actual database files and user profiles
+      const realEvents: ActivityEvent[] = [];
+      
+      (usersDataRes.data || []).forEach((u: any, idx: number) => {
+        realEvents.push({
+          id: `signup_${u.id}_${idx}`,
+          type: 'signup',
+          title: `New Signup: @${u.username || u.full_name || 'user'}`,
+          subtitle: `User ID: ${u.id.substring(0, 8)}... • Registered ${new Date(u.created_at || Date.now()).toLocaleDateString()}`,
+          time: u.created_at ? new Date(u.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently',
+          severity: 'info',
+        });
+      });
 
-      setActivityFeed(mockEvents);
+      allFiles.slice(0, 10).forEach((f: any, idx: number) => {
+        realEvents.push({
+          id: `file_${f.id}_${idx}`,
+          type: 'upload',
+          title: `${f.file_type === 'video' ? '📹 Video' : '📷 Photo'} Upload (${(Number(f.file_size || 0) / (1024 * 1024)).toFixed(1)} MB)`,
+          subtitle: `File ID: ${f.id.substring(0, 8)}... • Cloud Vault Encrypted`,
+          time: f.created_at ? new Date(f.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently',
+          severity: 'success',
+        });
+      });
+
+      setActivityFeed(realEvents.slice(0, 10));
 
       setAuditLogs([
-        { id: 'aud_1', action: 'Admin Root Auth Granted', admin: 'tv-vini-root', target: 'System Session', timestamp: 'Just now' },
-        { id: 'aud_2', action: 'Telegram Upload Pipeline Verified', admin: 'System Worker', target: 'Bot API v6.0', timestamp: '5m ago' },
-        { id: 'aud_3', action: 'Storage Quota Scan Completed', admin: 'AutoSync Engine', target: 'IndexedDB Store', timestamp: '12m ago' },
+        { id: `aud_${Date.now()}_1`, action: 'System Admin Telemetry Active', admin: 'Root Supervisor', target: `${totalUsers} Total Accounts`, timestamp: 'Live' },
+        { id: `aud_${Date.now()}_2`, action: 'Storage Database Scan Complete', admin: 'AutoSync Engine', target: `${allFiles.length} Cloud Vault Files`, timestamp: 'Just now' },
       ]);
 
     } catch (err) {
@@ -464,11 +478,11 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.sectionHeaderTitle}>ENCRYPTED MEDIA DISTRIBUTION</Text>
               <View style={styles.gridContainer}>
                 <View style={styles.metricCard}>
-                  <Text style={styles.metricValue}>{metrics.photosUploadedToday + 12}</Text>
+                  <Text style={styles.metricValue}>{metrics.photosUploadedToday}</Text>
                   <Text style={styles.metricLabel}>Total Photos</Text>
                 </View>
                 <View style={styles.metricCard}>
-                  <Text style={styles.metricValue}>{metrics.videosUploadedToday + 8}</Text>
+                  <Text style={styles.metricValue}>{metrics.videosUploadedToday}</Text>
                   <Text style={styles.metricLabel}>Total Videos</Text>
                 </View>
               </View>
