@@ -28,8 +28,8 @@ export function getProxiedUrl(targetUrl: string, shardKey: string = ''): string 
 
 class ConcurrencyQueue {
   private activeCount = 0;
-  // Increase maxConcurrency for faster parallel media downloads
-  private maxConcurrency = Platform.OS === 'web' ? 8 : 6;
+  // High concurrency queue for fast video streaming & parallel thumbnail prefetching
+  private maxConcurrency = Platform.OS === 'web' ? 16 : 12;
   private queue: (() => Promise<any>)[] = [];
 
   async run<T>(task: () => Promise<T>): Promise<T> {
