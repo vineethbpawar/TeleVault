@@ -123,35 +123,36 @@ export const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
 
       let lastTouch = 0;
 
-      const handleTap = () => {
+      const handleTap = (e: any) => {
         const now = Date.now();
         const diff = now - lastTouch;
         if (diff > 0 && diff < 400) {
           lastTouch = 0;
+          if (e && e.stopPropagation) e.stopPropagation();
           onDoubleTapRef.current?.();
         } else {
           lastTouch = now;
         }
       };
 
-      // Attach after a short delay so the DOM container element exists
-      const tid = setTimeout(() => {
-        const el = containerRef.current;
-        if (el) {
-          // React Native Web exposes the underlying DOM node on ._nativeRef or via findDOMNode equivalent
-          // Use the data attribute to find it in the DOM
-          const domEl = document.querySelector('[data-camera-preview="true"]');
-          const target = domEl || document;
-          target.addEventListener('touchstart', handleTap as any, { passive: true });
-          target.addEventListener('click', handleTap as any, { passive: true });
+      const bindWebDoubleTap = () => {
+        const domEl = document.querySelector('[data-camera-preview="true"]') || document.body;
+        if (domEl) {
+          domEl.addEventListener('touchend', handleTap as any, { passive: true });
+          domEl.addEventListener('dblclick', handleTap as any, { passive: true });
         }
-      }, 300);
+      };
+
+      bindWebDoubleTap();
+      const tid = setTimeout(bindWebDoubleTap, 300);
 
       return () => {
         clearTimeout(tid);
-        const domEl = document.querySelector('[data-camera-preview="true"]') || document;
-        domEl.removeEventListener('touchstart', handleTap as any);
-        domEl.removeEventListener('click', handleTap as any);
+        const domEl = document.querySelector('[data-camera-preview="true"]') || document.body;
+        if (domEl) {
+          domEl.removeEventListener('touchend', handleTap as any);
+          domEl.removeEventListener('dblclick', handleTap as any);
+        }
       };
     }, []);
 
