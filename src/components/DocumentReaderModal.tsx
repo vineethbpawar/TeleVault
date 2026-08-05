@@ -11,6 +11,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, FileText, Download } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -616,41 +617,25 @@ export const DocumentReaderModal: React.FC<DocumentReaderProps> = ({
   mimeType,
   onExport,
 }) => {
+  const insets = useSafeAreaInsets();
   const docType = detectDocType(fileName, mimeType);
-  const shortName = fileName.length > 40 ? fileName.substring(0, 38) + '…' : fileName;
+  const shortName = fileName.length > 25 ? fileName.substring(0, 22) + '...' : fileName;
 
   const renderReader = () => {
-    if (!fileUrl) return null;
-
-    if (Platform.OS !== 'web') {
-      if (docType === 'unknown') {
-        return (
-          <View style={styles.centered}>
-            <FileText size={64} color="#8E8E93" style={{ marginBottom: 16 }} />
-            <Text style={styles.unsupportedTitle}>{shortName}</Text>
-            <Text style={styles.unsupportedSub}>Preview not available for this file type.</Text>
-            <Text style={styles.unsupportedSub}>Use "Export" to open externally.</Text>
-          </View>
-        );
-      }
-      return <NativeDocReader fileUrl={fileUrl} docType={docType} />;
-    }
-
     switch (docType) {
       case 'pdf':
         return <PdfReader fileUrl={fileUrl} />;
       case 'docx':
         return <DocxReader fileUrl={fileUrl} />;
       case 'markdown':
-        return <TextReader fileUrl={fileUrl} isMarkdown={true} />;
+        return <MarkdownReader fileUrl={fileUrl} />;
       case 'text':
-        return <TextReader fileUrl={fileUrl} isMarkdown={false} />;
+        return <TextReader fileUrl={fileUrl} />;
       default:
         return (
           <View style={styles.centered}>
-            <FileText size={64} color="#8E8E93" style={{ marginBottom: 16 }} />
-            <Text style={styles.unsupportedTitle}>{shortName}</Text>
-            <Text style={styles.unsupportedSub}>Preview not available for this file type.</Text>
+            <FileText size={48} color="#FF9500" style={{ marginBottom: 12 }} />
+            <Text style={styles.unsupportedTitle}>Unsupported Format</Text>
             <Text style={styles.unsupportedSub}>Use "Export" to open externally.</Text>
           </View>
         );

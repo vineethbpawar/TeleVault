@@ -1737,6 +1737,17 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
           </View>
         </Modal>
       )}
+
+      {/* Native Document Reader Modal */}
+      {previewFile && (
+        <DocumentReaderModal
+          visible={docReaderVisible}
+          onClose={() => setDocReaderVisible(false)}
+          fileUrl={resolvedPreviewUri || ''}
+          fileName={previewFile.file_name}
+          mimeType={previewFile.mime_type}
+        />
+      )}
     </View>
   );
 };
