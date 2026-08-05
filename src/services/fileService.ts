@@ -73,7 +73,8 @@ export const fileService = {
   },
 
   async fetchDriveFiles(folderId: string | null): Promise<TeleVaultFile[]> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) throw new Error('Not logged in.');
 
     let query = supabase
@@ -99,7 +100,8 @@ export const fileService = {
   },
 
   async fetchDriveFolders(parentFolderId: string | null): Promise<TeleVaultFolder[]> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) throw new Error('Not logged in.');
 
     let query = supabase
@@ -124,7 +126,8 @@ export const fileService = {
   },
 
   async fetchPrivateDriveFiles(folderId: string | null): Promise<TeleVaultFile[]> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) throw new Error('Not logged in.');
 
     let query = supabase
