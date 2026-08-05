@@ -9,6 +9,8 @@ import { previewCacheService } from '../services/previewCacheService';
 import { fileService } from '../services/fileService';
 import { showToast } from '../components/ToastBanner';
 import { supabase } from '../lib/supabase';
+import AdBanner from '../components/AdBanner';
+
 
 const { width, height } = Dimensions.get('window');
 
@@ -277,7 +279,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
     return () => {
       progressAnim.stopAnimation();
     };
-  }, [currentIndex, isHoldActive, isMenuOpen, isDragging]);
+  }, [currentIndex, isHoldActive, isMenuOpen, showInterstitialModal]);
 
   // Postgres realtime changes listener to automatically update localFiles when database changes
   useEffect(() => {
@@ -574,7 +576,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
           file={activeFile}
           isActive={true}
           isPreload={false}
-          paused={isHoldActive || isDragging || isMenuOpen}
+          paused={isHoldActive || isMenuOpen || showInterstitialModal}
           onTapLeft={goToPrevious}
           onTapRight={goToNext}
           onHoldStart={() => setIsHoldActive(true)}
