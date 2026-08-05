@@ -72,6 +72,7 @@ const PdfReader: React.FC<{ fileUrl: string }> = ({ fileUrl }) => {
   const [error, setError] = useState<string | null>(null);
   const [pageRendering, setPageRendering] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pdfDocRef = useRef<any>(null);
   const renderTaskRef = useRef<any>(null);
 
   const renderPage = useCallback(async (pageNum: number, sc: number) => {
