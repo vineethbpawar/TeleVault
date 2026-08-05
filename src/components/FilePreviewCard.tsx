@@ -274,17 +274,29 @@ export const FilePreviewCard: React.FC<FilePreviewCardProps> = ({
       );
     }
 
-    // Document fallback
+    // Document & Media file type badges (Google Drive style)
+    const isPdf = file.mime_type?.includes('pdf') || /\.pdf$/i.test(file.file_name || '');
+    const isDoc = file.mime_type?.includes('word') || /\.(doc|docx)$/i.test(file.file_name || '');
+    const isSheet = file.mime_type?.includes('sheet') || /\.(xls|xlsx|csv)$/i.test(file.file_name || '');
+    const isPresentation = file.mime_type?.includes('presentation') || /\.(ppt|pptx)$/i.test(file.file_name || '');
+    const isAudio = file.mime_type?.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac)$/i.test(file.file_name || '');
+    const isCode = /\.(js|ts|py|cpp|c|java|html|css|json|xml|sh)$/i.test(file.file_name || '');
+
+    let badgeBg = '#1A73E8'; // Blue default
+    let badgeText = 'FILE';
+
+    if (isPdf) { badgeBg = '#EA4335'; badgeText = 'PDF'; }
+    else if (isDoc) { badgeBg = '#4285F4'; badgeText = 'W'; }
+    else if (isSheet) { badgeBg = '#34A853'; badgeText = 'X'; }
+    else if (isPresentation) { badgeBg = '#FA7B17'; badgeText = 'P'; }
+    else if (isAudio) { badgeBg = '#A142F4'; badgeText = '🎵'; }
+    else if (isCode) { badgeBg = '#0F9D58'; badgeText = '</>'; }
+
     return (
-      <View style={[styles.center, styles.docBg]}>
-        {file.mime_type && file.mime_type.includes('pdf') ? (
-          <FileText size={variant === 'row' ? 24 : 32} color="#FF9500" />
-        ) : (
-          <File size={variant === 'row' ? 24 : 32} color="#007AFF" />
-        )}
-        {variant !== 'grid' && (
-          <Text style={styles.fallbackText} numberOfLines={1}>{file.file_name}</Text>
-        )}
+      <View style={[styles.center, { backgroundColor: badgeBg, borderRadius: variant === 'row' ? 4 : 12 }]}>
+        <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: variant === 'row' ? 10 : 14 }}>
+          {badgeText}
+        </Text>
       </View>
     );
   };
