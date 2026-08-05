@@ -28,8 +28,8 @@ export function getProxiedUrl(targetUrl: string, shardKey: string = ''): string 
 
 class ConcurrencyQueue {
   private activeCount = 0;
-  // Cap maxConcurrency at 6 for Web browsers to match browser socket pool standards
-  private maxConcurrency = Platform.OS === 'web' ? 6 : 4;
+  // Increase maxConcurrency for faster parallel media downloads
+  private maxConcurrency = Platform.OS === 'web' ? 8 : 6;
   private queue: (() => Promise<any>)[] = [];
 
   async run<T>(task: () => Promise<T>): Promise<T> {

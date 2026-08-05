@@ -180,10 +180,10 @@ export const MemoryGrid: React.FC<MemoryGridProps> = ({
           sections={sections}
           keyExtractor={(row, index) => `row-${row[0]?.id}-${index}`}
           stickySectionHeadersEnabled={true}
-          initialNumToRender={10}
-          maxToRenderPerBatch={5}
-          updateCellsBatchingPeriod={50}
-          windowSize={5}
+          initialNumToRender={15}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={30}
+          windowSize={7}
           removeClippedSubviews={(Platform.OS as string) !== 'web'}
           renderSectionHeader={renderSectionHeader}
           renderItem={renderItem}
