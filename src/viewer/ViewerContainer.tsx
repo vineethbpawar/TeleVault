@@ -235,8 +235,18 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isHoldActive, setIsHoldActive] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showInterstitialModal, setShowInterstitialModal] = useState(false);
+
+  useEffect(() => {
+    const { adService } = require('../services/adService');
+    const unsubscribe = adService.subscribe((shouldShow: boolean) => {
+      if (shouldShow) {
+        setShowInterstitialModal(true);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Swipe-down-to-dismiss gesture setup
   const translateX = useRef(new Animated.Value(0)).current;
@@ -251,7 +261,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
 
   useEffect(() => {
     progressAnim.setValue(0);
-    if (isHoldActive || isMenuOpen || isDragging) {
+    if (isHoldActive || isMenuOpen || showInterstitialModal) {
       progressAnim.stopAnimation();
       return;
     }
@@ -716,6 +726,39 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* 15-Snap Interstitial Ad Modal */}
+      <Modal transparent visible={showInterstitialModal} animationType="fade">
+        <View style={styles.interstitialOverlay}>
+          <View style={styles.interstitialContent}>
+            <View style={styles.interstitialHeader}>
+              <View style={styles.adTag}>
+                <Text style={styles.adTagText}>SPONSORED</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.interstitialCloseBtn} 
+                onPress={() => setShowInterstitialModal(false)}
+              >
+                <X size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.interstitialTitle}>TeleVault Cloud Vault</Text>
+            <Text style={styles.interstitialSub}>Unlimited encrypted media cloud storage powered by Telegram</Text>
+
+            <View style={styles.interstitialBody}>
+              <AdBanner style={{ width: '100%' }} />
+            </View>
+
+            <TouchableOpacity 
+              style={styles.interstitialCtaBtn}
+              onPress={() => setShowInterstitialModal(false)}
+            >
+              <Text style={styles.interstitialCtaText}>Skip Ad & Continue Snaps</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </Animated.View>
     </View>
   );
@@ -933,6 +976,76 @@ const styles = StyleSheet.create({
   infoCloseBtnText: {
     color: '#000000',
     fontSize: 15,
+    fontWeight: '800',
+  },
+  interstitialOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  interstitialContent: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#0F1123',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1.5,
+    borderColor: '#FFFC00',
+    alignItems: 'center',
+  },
+  interstitialHeader: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  adTag: {
+    backgroundColor: 'rgba(255, 252, 0, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  adTagText: {
+    color: '#FFFC00',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  interstitialCloseBtn: {
+    padding: 4,
+  },
+  interstitialTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  interstitialSub: {
+    color: '#8E8E93',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  interstitialBody: {
+    width: '100%',
+    marginVertical: 8,
+  },
+  interstitialCtaBtn: {
+    backgroundColor: '#FFFC00',
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 20,
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  interstitialCtaText: {
+    color: '#000000',
+    fontSize: 14,
     fontWeight: '800',
   },
 });

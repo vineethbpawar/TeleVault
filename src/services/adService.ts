@@ -4,7 +4,17 @@ import { showToast } from '../components/ToastBanner';
 let memoryOpenCount = 0;
 const INTERSTITIAL_FREQUENCY_THRESHOLD = 15;
 
+type AdListener = (shouldShow: boolean) => void;
+const listeners: Set<AdListener> = new Set();
+
 export const adService = {
+  subscribe(listener: AdListener) {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  },
+
   /**
    * Tracks memory views and triggers Interstitial Ad on the 15th view
    */
@@ -24,6 +34,7 @@ export const adService = {
   async showInterstitialAd(): Promise<boolean> {
     console.log('[AD_SERVICE] Triggering Interstitial Ad (Frequency Capped)...');
     analyticsService.trackEvent('ad_impression', { ad_type: 'interstitial' });
+    listeners.forEach(l => l(true));
     return true;
   },
 

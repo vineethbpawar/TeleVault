@@ -392,6 +392,11 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
         </View>
       )}
 
+      {/* Permanent Snapchat-style Ad Banner placement */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+        <AdBanner />
+      </View>
+
       {/* Navigation tabs row */}
       <View style={styles.tabContainer}>
         {(['unread', 'groups', 'friends', 'requests'] as const).map((tab) => {
@@ -474,11 +479,6 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
                 <Text style={styles.emptyStateDesc}>Search for users to start a conversation</Text>
               </View>
             ) : null
-          }
-          ListFooterComponent={
-            <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 80 }}>
-              <AdBanner />
-            </View>
           }
         />
       )}
