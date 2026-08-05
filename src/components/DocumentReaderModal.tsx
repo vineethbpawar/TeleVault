@@ -78,7 +78,7 @@ const PdfReader: React.FC<{ fileUrl: string }> = ({ fileUrl }) => {
   const renderPage = useCallback(async (pageNum: number, sc: number) => {
     if (!pdfDocRef.current || !canvasRef.current) return;
     
-    // Cancel existing render task if active to avoid "Cannot use the same canvas during multiple render() operations"
+    // Cancel any active render task safely before starting a new one
     if (renderTaskRef.current) {
       try {
         await renderTaskRef.current.cancel();
@@ -92,16 +92,19 @@ const PdfReader: React.FC<{ fileUrl: string }> = ({ fileUrl }) => {
       const viewport = page.getViewport({ scale: sc });
       const canvas = canvasRef.current;
       if (!canvas) return;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
       canvas.height = viewport.height;
       canvas.width = viewport.width;
-      const ctx = canvas.getContext('2d')!;
-      
+
       const task = page.render({ canvasContext: ctx, viewport });
       renderTaskRef.current = task;
       await task.promise;
     } catch (e: any) {
       if (e?.name !== 'RenderingCancelledException') {
-        setError(e.message || 'Failed to render page');
+        console.warn('[PdfReader] Render error:', e);
       }
     } finally {
       setPageRendering(false);
@@ -116,11 +119,13 @@ const PdfReader: React.FC<{ fileUrl: string }> = ({ fileUrl }) => {
         setLoading(true);
         setError(null);
 
-        // Load PDF.js from CDN
+        // Load PDF.js from CDN cleanly
         await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
         const pdfjsLib = (window as any).pdfjsLib;
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        if (pdfjsLib) {
+          pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
 
         const loadingTask = pdfjsLib.getDocument(fileUrl);
         const pdf = await loadingTask.promise;
@@ -138,9 +143,12 @@ const PdfReader: React.FC<{ fileUrl: string }> = ({ fileUrl }) => {
 
   useEffect(() => {
     if (!loading && pdfDocRef.current) {
-      renderPage(currentPage, scale);
+      const tid = setTimeout(() => {
+        renderPage(currentPage, scale);
+      }, 10);
+      return () => clearTimeout(tid);
     }
-  }, [currentPage, scale, loading]);
+  }, [currentPage, scale, loading, renderPage]);
 
   if (loading) return (
     <View style={styles.centered}>
