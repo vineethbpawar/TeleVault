@@ -19,6 +19,8 @@ import { previewCacheService } from '../services/previewCacheService';
 import VideoPlayer from '../components/VideoPlayer';
 import { DocumentReaderModal } from '../components/DocumentReaderModal';
 import AdBanner from '../components/AdBanner';
+import { UploadQueueBadge } from '../components/UploadQueueBadge';
+
 
 
 const Alert = {
@@ -420,7 +422,17 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
   // Dialog Mode (Rename / Create Folder)
   const [dialogVisible, setDialogVisible] = useState(false);
   const [dialogMode, setDialogMode] = useState<'create_folder' | 'rename_folder' | 'rename_file'>('create_folder');
-  const [dialogInput, setDialogInput] = useState('');
+  // Auto-hiding preview top controls overlay
+  const [showHeaderOverlay, setShowHeaderOverlay] = useState(true);
+  const headerTimeoutRef = useRef<any>(null);
+
+  const resetHeaderTimer = () => {
+    setShowHeaderOverlay(true);
+    if (headerTimeoutRef.current) clearTimeout(headerTimeoutRef.current);
+    headerTimeoutRef.current = setTimeout(() => {
+      setShowHeaderOverlay(false);
+    }, 3000);
+  };
 
   // Custom Google Drive-like Preview states
   const [previewFile, setPreviewFile] = useState<any | null>(null);
@@ -559,6 +571,8 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
       setPreviewError(null);
       return;
     }
+
+    resetHeaderTimer();
 
     let active = true;
     setPreviewLoading(true);
@@ -1138,6 +1152,7 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
             style={styles.searchInput}
           />
         </View>
+        <UploadQueueBadge />
         <TouchableOpacity
           style={styles.actionSquareBtn}
           onPress={() => setViewMode(prev => (prev === 'grid' ? 'list' : 'grid'))}
@@ -1450,51 +1465,54 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
           onRequestClose={() => setPreviewFile(null)}
         >
           <View style={styles.previewBackdrop}>
-            {/* Top Toolbar */}
-            <View style={[styles.previewHeader, { paddingTop: insets.top > 0 ? insets.top + 6 : 16 }]}>
-              <TouchableOpacity onPress={() => setPreviewFile(null)} style={styles.previewBackBtn}>
-                <ArrowLeft size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-              
-              <Text style={styles.previewTitle} numberOfLines={1}>
-                {previewFile.file_name}
-              </Text>
-
-              <View style={styles.previewActions}>
-                <TouchableOpacity onPress={() => setShowDetails(!showDetails)} style={styles.previewActionBtn}>
-                  <Info size={20} color={showDetails ? '#FFFC00' : '#FFFFFF'} />
+            {/* Top Toolbar (Auto-fades after 3s, tap viewport to bring back) */}
+            {showHeaderOverlay && (
+              <View style={[styles.previewHeader, { paddingTop: insets.top > 0 ? insets.top + 6 : 16 }]}>
+                <TouchableOpacity onPress={() => setPreviewFile(null)} style={styles.previewBackBtn}>
+                  <ArrowLeft size={24} color="#FFFFFF" />
                 </TouchableOpacity>
+                
+                <Text style={styles.previewTitle} numberOfLines={1}>
+                  {previewFile.file_name}
+                </Text>
 
-                <TouchableOpacity onPress={handleToggleFavorite} style={styles.previewActionBtn}>
-                  <Star
-                    size={20}
-                    color={previewFile.is_favorite ? '#FFFC00' : '#FFFFFF'}
-                    fill={previewFile.is_favorite ? '#FFFC00' : 'none'}
-                  />
-                </TouchableOpacity>
+                <View style={styles.previewActions}>
+                  <TouchableOpacity onPress={() => setShowDetails(!showDetails)} style={styles.previewActionBtn}>
+                    <Info size={20} color={showDetails ? '#FFFC00' : '#FFFFFF'} />
+                  </TouchableOpacity>
 
-                <TouchableOpacity
-                  onPress={handleOpenFile}
-                  disabled={openingDoc}
-                  style={styles.previewActionBtn}
-                >
-                  {openingDoc ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Share2 size={20} color="#FFFFFF" />
-                  )}
-                </TouchableOpacity>
+                  <TouchableOpacity onPress={handleToggleFavorite} style={styles.previewActionBtn}>
+                    <Star
+                      size={20}
+                      color={previewFile.is_favorite ? '#FFFC00' : '#FFFFFF'}
+                      fill={previewFile.is_favorite ? '#FFFC00' : 'none'}
+                    />
+                  </TouchableOpacity>
 
-                <TouchableOpacity onPress={handleDeletePreviewFile} style={styles.previewActionBtn}>
-                  <Trash2 size={20} color="#FF3B30" />
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleOpenFile}
+                    disabled={openingDoc}
+                    style={styles.previewActionBtn}
+                  >
+                    {openingDoc ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Share2 size={20} color="#FFFFFF" />
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity onPress={handleDeletePreviewFile} style={styles.previewActionBtn}>
+                    <Trash2 size={20} color="#FF3B30" />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
+            )}
 
             {/* Viewport Center with Swipe Left / Right / Down Gesture support */}
             <View
               style={styles.previewViewport}
               onTouchStart={(e) => {
+                resetHeaderTimer();
                 (window as any).__touchStartX = e.nativeEvent.pageX;
                 (window as any).__touchStartY = e.nativeEvent.pageY;
               }}
