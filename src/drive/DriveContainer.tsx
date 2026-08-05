@@ -17,6 +17,7 @@ import UploadProgress from '../components/UploadProgress';
 import { fileOpenService } from '../services/fileOpenService';
 import { previewCacheService } from '../services/previewCacheService';
 import VideoPlayer from '../components/VideoPlayer';
+import { ImageViewer } from '../viewer/ImageViewer';
 import { DocumentReaderModal } from '../components/DocumentReaderModal';
 import AdBanner from '../components/AdBanner';
 import { UploadQueueBadge } from '../components/UploadQueueBadge';
@@ -1613,10 +1614,8 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
  
                   if (isImage) {
                     return (
-                      <Image
-                        source={{ uri: resolvedPreviewUri }}
-                        style={styles.previewImage}
-                        resizeMode="contain"
+                      <ImageViewer
+                        source={resolvedPreviewUri}
                       />
                     );
                   } else if (isVideo) {
