@@ -110,7 +110,9 @@ const PdfReader: React.FC<{ fileUrl: string }> = ({ fileUrl }) => {
         pdfDocRef.current = pdf;
         setNumPages(pdf.numPages);
         setLoading(false);
-        await renderPage(1, scale);
+        setTimeout(() => {
+          renderPage(1, scale);
+        }, 50);
       } catch (e: any) {
         if (!cancelled) setError(e.message || 'Failed to load PDF');
         setLoading(false);
@@ -120,8 +122,10 @@ const PdfReader: React.FC<{ fileUrl: string }> = ({ fileUrl }) => {
   }, [fileUrl]);
 
   useEffect(() => {
-    renderPage(currentPage, scale);
-  }, [currentPage, scale]);
+    if (!loading && pdfDocRef.current) {
+      renderPage(currentPage, scale);
+    }
+  }, [currentPage, scale, loading]);
 
   if (loading) return (
     <View style={styles.centered}>

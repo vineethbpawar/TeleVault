@@ -1491,16 +1491,26 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
               </View>
             </View>
 
-            {/* Viewport Center with Swipe Left / Right Gesture support */}
+            {/* Viewport Center with Swipe Left / Right / Down Gesture support */}
             <View
               style={styles.previewViewport}
               onTouchStart={(e) => {
                 (window as any).__touchStartX = e.nativeEvent.pageX;
+                (window as any).__touchStartY = e.nativeEvent.pageY;
               }}
               onTouchEnd={(e) => {
                 const startX = (window as any).__touchStartX;
-                if (startX === undefined) return;
+                const startY = (window as any).__touchStartY;
+                if (startX === undefined || startY === undefined) return;
                 const deltaX = e.nativeEvent.pageX - startX;
+                const deltaY = e.nativeEvent.pageY - startY;
+
+                // Swipe Down to Dismiss (Drag down to drop)
+                if (deltaY > 100 && Math.abs(deltaY) > Math.abs(deltaX)) {
+                  setPreviewFile(null);
+                  return;
+                }
+
                 if (deltaX < -50) {
                   // Swipe Left -> Next File
                   handleNextPreview();
