@@ -584,6 +584,36 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
         />
       </Animated.View>
 
+      {/* Instant Next/Previous Preloader (Hidden off-screen) */}
+      {currentIndex < localFiles.length - 1 && (
+        <View style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}>
+          <ViewerItem
+            file={localFiles[currentIndex + 1]}
+            isActive={false}
+            isPreload={true}
+            paused={true}
+            onTapLeft={() => {}}
+            onTapRight={() => {}}
+            onHoldStart={() => {}}
+            onHoldEnd={() => {}}
+          />
+        </View>
+      )}
+      {currentIndex > 0 && (
+        <View style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}>
+          <ViewerItem
+            file={localFiles[currentIndex - 1]}
+            isActive={false}
+            isPreload={true}
+            paused={true}
+            onTapLeft={() => {}}
+            onTapRight={() => {}}
+            onHoldStart={() => {}}
+            onHoldEnd={() => {}}
+          />
+        </View>
+      )}
+
       {/* Top HUD (Details and close button) */}
       {!isHoldActive && !isMenuOpen && (
         <View style={styles.topHudContainer}>
