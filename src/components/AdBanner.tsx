@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, Platform, TouchableOpacity } from 'react-native';
 import { Sparkles, ExternalLink } from 'lucide-react-native';
 import { analyticsService } from '../services/analyticsService';
@@ -25,24 +25,24 @@ if (Platform.OS === 'android' || Platform.OS === 'ios') {
 /**
  * AdBanner Component
  * Integrates Google AdMob Banner Ads on native Android devices,
- * Google AdSense Banner Ads on Web / PWA,
- * with an aesthetic fallback card if ad blockers or offline.
+ * Google AdSense Banner Ads on Web / PWA (when approved),
+ * with an aesthetic fallback card if pending approval or offline.
  */
 export const AdBanner: React.FC<AdBannerProps> = ({ unitId = ADMOB_CONFIG.adUnits.banner, style }) => {
-  const adRef = React.useRef<HTMLModElement | null>(null);
+  const [adLoaded, setAdLoaded] = useState(false);
 
   const handleBannerClick = () => {
     analyticsService.trackEvent('ad_click', { ad_type: 'banner' });
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     analyticsService.trackEvent('ad_impression', { ad_type: 'banner' });
 
-    // Initialize AdSense on Web
     if (Platform.OS === 'web') {
       try {
         // @ts-ignore
         (window.adsbygoogle = window.adsbygoogle || []).push({});
+        setAdLoaded(true);
       } catch (e) {
         console.log('AdSense push error: ', e);
       }
@@ -70,13 +70,12 @@ export const AdBanner: React.FC<AdBannerProps> = ({ unitId = ADMOB_CONFIG.adUnit
     );
   }
 
-  // 2. Web / PWA Google AdSense Banner Placement
-  if (Platform.OS === 'web') {
+  // 2. Web / PWA Google AdSense Banner
+  if (Platform.OS === 'web' && adLoaded) {
     return (
       <View style={[styles.adWrapper, style]}>
         {/* @ts-ignore */}
         <ins
-          ref={adRef}
           className="adsbygoogle"
           style={{ display: 'block', width: '100%', minHeight: 60 }}
           data-ad-client={ADMOB_CONFIG.adsense.client}
@@ -113,8 +112,9 @@ const styles = StyleSheet.create({
   adWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: 8,
+    marginVertical: 4,
     width: '100%',
+    minHeight: 60,
     overflow: 'hidden',
   },
   container: {
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginVertical: 8,
+    marginVertical: 4,
   },
   badge: {
     backgroundColor: 'rgba(255, 252, 0, 0.15)',
