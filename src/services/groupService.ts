@@ -8,7 +8,8 @@ export const groupService = {
    * Create a new group.
    */
   async createGroup(name: string, memberIds: string[]): Promise<Group> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) throw new Error('User not logged in.');
 
     // 1. Insert group row
@@ -71,7 +72,8 @@ export const groupService = {
    * Get all groups the current user is part of.
    */
   async getGroups(): Promise<Group[]> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) throw new Error('User not logged in.');
 
     // Find group ids user is member of
