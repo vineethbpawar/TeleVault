@@ -72,23 +72,39 @@ const PdfReader: React.FC<{ fileUrl: string }> = ({ fileUrl }) => {
   const [error, setError] = useState<string | null>(null);
   const [pageRendering, setPageRendering] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const pdfDocRef = useRef<any>(null);
+  const renderTaskRef = useRef<any>(null);
 
   const renderPage = useCallback(async (pageNum: number, sc: number) => {
     if (!pdfDocRef.current || !canvasRef.current) return;
+    
+    // Cancel existing render task if active to avoid "Cannot use the same canvas during multiple render() operations"
+    if (renderTaskRef.current) {
+      try {
+        await renderTaskRef.current.cancel();
+      } catch (_) {}
+      renderTaskRef.current = null;
+    }
+
     setPageRendering(true);
     try {
       const page = await pdfDocRef.current.getPage(pageNum);
       const viewport = page.getViewport({ scale: sc });
       const canvas = canvasRef.current;
+      if (!canvas) return;
       canvas.height = viewport.height;
       canvas.width = viewport.width;
       const ctx = canvas.getContext('2d')!;
-      await page.render({ canvasContext: ctx, viewport }).promise;
+      
+      const task = page.render({ canvasContext: ctx, viewport });
+      renderTaskRef.current = task;
+      await task.promise;
     } catch (e: any) {
-      setError(e.message || 'Failed to render page');
+      if (e?.name !== 'RenderingCancelledException') {
+        setError(e.message || 'Failed to render page');
+      }
     } finally {
       setPageRendering(false);
+      renderTaskRef.current = null;
     }
   }, []);
 
@@ -111,9 +127,6 @@ const PdfReader: React.FC<{ fileUrl: string }> = ({ fileUrl }) => {
         pdfDocRef.current = pdf;
         setNumPages(pdf.numPages);
         setLoading(false);
-        setTimeout(() => {
-          renderPage(1, scale);
-        }, 50);
       } catch (e: any) {
         if (!cancelled) setError(e.message || 'Failed to load PDF');
         setLoading(false);
@@ -622,6 +635,10 @@ export const DocumentReaderModal: React.FC<DocumentReaderProps> = ({
   const shortName = fileName.length > 25 ? fileName.substring(0, 22) + '...' : fileName;
 
   const renderReader = () => {
+    if (Platform.OS !== 'web') {
+      return <NativeDocReader fileUrl={fileUrl} docType={docType} />;
+    }
+
     switch (docType) {
       case 'pdf':
         return <PdfReader fileUrl={fileUrl} />;
