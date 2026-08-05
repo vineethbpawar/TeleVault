@@ -1521,10 +1521,10 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
           animationType="fade"
           onRequestClose={() => setPreviewFile(null)}
         >
-          <View style={styles.previewBackdrop}>
+          <View style={[styles.previewBackdrop, { paddingTop: insets.top > 0 ? insets.top : 0, paddingBottom: insets.bottom > 0 ? insets.bottom : 0 }]}>
             {/* Top Toolbar (Auto-fades after 3s, tap viewport to bring back) */}
             {showHeaderOverlay && (
-              <View style={[styles.previewHeader, { paddingTop: insets.top > 0 ? insets.top + 6 : 16 }]}>
+              <View style={[styles.previewHeader, { paddingTop: insets.top > 0 ? insets.top + 10 : 16 }]}>
                 <TouchableOpacity onPress={() => setPreviewFile(null)} style={styles.previewBackBtn}>
                   <ArrowLeft size={24} color="#FFFFFF" />
                 </TouchableOpacity>
