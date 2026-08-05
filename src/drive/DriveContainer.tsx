@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { StyleSheet, View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Modal, Platform, AppState, ScrollView, RefreshControl, Dimensions, Image } from 'react-native';
+import { StyleSheet, View, Text, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Modal, Platform, AppState, ScrollView, RefreshControl, Dimensions, Image, PanResponder, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Plus, FolderPlus, Upload, ArrowLeft, Folder, ChevronRight, ChevronLeft, MoreVertical, Search, ArrowUpDown, Lock, FileText, HardDrive, Star, Image as ImageIcon, Video, Trash2, Edit, CheckSquare, X, Share2, CloudUpload, AlertTriangle, Info, LayoutGrid, List, Clock } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -427,6 +427,60 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
   // Auto-hiding preview top controls overlay
   const [showHeaderOverlay, setShowHeaderOverlay] = useState(true);
   const headerTimeoutRef = useRef<any>(null);
+
+  // Drag down drop gesture animation (Memories style)
+  const dragTranslateY = useRef(new Animated.Value(0)).current;
+  const dragScaleAnim = useRef(new Animated.Value(1)).current;
+
+  const dragPanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return gestureState.dy > 10 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (gestureState.dy > 0) {
+          dragTranslateY.setValue(gestureState.dy);
+          const nextScale = Math.max(0.5, 1 - (gestureState.dy / 800) * 0.5);
+          dragScaleAnim.setValue(nextScale);
+        }
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (gestureState.dy > 120 || gestureState.vy > 0.5) {
+          Animated.parallel([
+            Animated.timing(dragTranslateY, {
+              toValue: 900,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(dragScaleAnim, {
+              toValue: 0.4,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+          ]).start(() => {
+            setPreviewFile(null);
+            dragTranslateY.setValue(0);
+            dragScaleAnim.setValue(1);
+          });
+        } else {
+          Animated.parallel([
+            Animated.spring(dragTranslateY, {
+              toValue: 0,
+              friction: 8,
+              tension: 40,
+              useNativeDriver: true,
+            }),
+            Animated.spring(dragScaleAnim, {
+              toValue: 1,
+              friction: 8,
+              tension: 40,
+              useNativeDriver: true,
+            }),
+          ]).start();
+        }
+      },
+    })
+  ).current;
 
   const resetHeaderTimer = () => {
     setShowHeaderOverlay(true);
@@ -1510,27 +1564,26 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
               </View>
             )}
 
-            {/* Viewport Center with Swipe Left / Right / Down Gesture support */}
-            <View
-              style={styles.previewViewport}
+            {/* Viewport Center with Animated Drag Down Drop + Swipe Left/Right Gesture support */}
+            <Animated.View
+              {...dragPanResponder.panHandlers}
+              style={[
+                styles.previewViewport,
+                {
+                  transform: [
+                    { translateY: dragTranslateY },
+                    { scale: dragScaleAnim }
+                  ]
+                }
+              ]}
               onTouchStart={(e) => {
                 resetHeaderTimer();
                 (window as any).__touchStartX = e.nativeEvent.pageX;
-                (window as any).__touchStartY = e.nativeEvent.pageY;
               }}
               onTouchEnd={(e) => {
                 const startX = (window as any).__touchStartX;
-                const startY = (window as any).__touchStartY;
-                if (startX === undefined || startY === undefined) return;
+                if (startX === undefined) return;
                 const deltaX = e.nativeEvent.pageX - startX;
-                const deltaY = e.nativeEvent.pageY - startY;
-
-                // Swipe Down to Dismiss (Drag down to drop)
-                if (deltaY > 100 && Math.abs(deltaY) > Math.abs(deltaX)) {
-                  setPreviewFile(null);
-                  return;
-                }
-
                 if (deltaX < -50) {
                   // Swipe Left -> Next File
                   handleNextPreview();
@@ -1649,7 +1702,7 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
                   <ChevronRight size={36} color="#FFFFFF" />
                 </TouchableOpacity>
               )}
-            </View>
+            </Animated.View>
 
             {/* Bottom details pane */}
             {showDetails && (
