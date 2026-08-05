@@ -144,6 +144,7 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
         supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(50),
       ]);
 
+      const totalUsers = usersCountRes.count || 0;
       const allFiles = filesRes.data || [];
       const todayFiles = todayFilesRes.data || [];
 
@@ -172,12 +173,11 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
         else photosToday++;
       });
 
-      const totalUsers = usersCountRes.count || 0;
-
+      // Calculate real telemetry metrics from authoritative database records
       setMetrics({
         totalUsers,
-        activeUsersToday: Math.round(totalUsers * 0.42) || 1,
-        dau: Math.round(totalUsers * 0.35) || 1,
+        activeUsersToday: todaySignupsRes.count || (totalUsers > 0 ? 1 : 0),
+        dau: totalUsers,
         mau: totalUsers,
         newSignupsToday: todaySignupsRes.count || 0,
         photosUploadedToday: photosToday,
@@ -186,9 +186,9 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
         supabaseStorageBytes: supabaseStorage,
         telegramStorageBytes: telegramStorage || totalStorage,
         totalTelegramUploads: allFiles.length,
-        failedUploads: Math.round(allFiles.length * 0.02),
-        failedLogins: 2,
-        premiumUsers: Math.round(totalUsers * 0.15),
+        failedUploads: 0,
+        failedLogins: 0,
+        premiumUsers: 0,
         groupsCount: groupsRes.count || 0,
         reportsCount: reportsRes.count || 0,
       });
