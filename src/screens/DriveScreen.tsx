@@ -19,15 +19,13 @@ export const DriveScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <Screen>
-      <ScrollView>
+      <View style={{ flex: 1 }}>
         <DriveContainer
           navigation={navigation}
           isFocused={isFocused}
           isPrivateMode={false}
         />
-        {/* AdMob Banner Placement */}
-        <AdBanner style={{ marginHorizontal: 16, marginTop: 12 }} />
-      </ScrollView>
+      </View>
     </Screen>
   );
 };

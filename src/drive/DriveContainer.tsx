@@ -18,6 +18,8 @@ import { fileOpenService } from '../services/fileOpenService';
 import { previewCacheService } from '../services/previewCacheService';
 import VideoPlayer from '../components/VideoPlayer';
 import { DocumentReaderModal } from '../components/DocumentReaderModal';
+import AdBanner from '../components/AdBanner';
+
 
 const Alert = {
   alert: (
@@ -1145,6 +1147,11 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
         >
           <CheckSquare size={18} color={isSelectionMode ? '#000000' : '#FFFFFF'} />
         </TouchableOpacity>
+      </View>
+
+      {/* Ad Banner Placement */}
+      <View style={{ paddingHorizontal: 16, marginBottom: 4 }}>
+        <AdBanner />
       </View>
 
       {/* Google Drive Tab Chips Row */}
