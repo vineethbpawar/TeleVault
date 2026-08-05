@@ -584,11 +584,39 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
         />
       </Animated.View>
 
-      {/* Instant Next/Previous Preloader (Hidden off-screen) */}
+      {/* Ultra-Fast Multi-Snap Preloader (Preloads +1, +2, +3 ahead in background) */}
       {currentIndex < localFiles.length - 1 && (
         <View style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}>
           <ViewerItem
             file={localFiles[currentIndex + 1]}
+            isActive={false}
+            isPreload={true}
+            paused={true}
+            onTapLeft={() => {}}
+            onTapRight={() => {}}
+            onHoldStart={() => {}}
+            onHoldEnd={() => {}}
+          />
+        </View>
+      )}
+      {currentIndex < localFiles.length - 2 && (
+        <View style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}>
+          <ViewerItem
+            file={localFiles[currentIndex + 2]}
+            isActive={false}
+            isPreload={true}
+            paused={true}
+            onTapLeft={() => {}}
+            onTapRight={() => {}}
+            onHoldStart={() => {}}
+            onHoldEnd={() => {}}
+          />
+        </View>
+      )}
+      {currentIndex < localFiles.length - 3 && (
+        <View style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}>
+          <ViewerItem
+            file={localFiles[currentIndex + 3]}
             isActive={false}
             isPreload={true}
             paused={true}
