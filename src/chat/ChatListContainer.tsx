@@ -11,6 +11,8 @@ import { groupService } from '../services/groupService';
 import { snapService } from '../services/snapService';
 import { supabase } from '../lib/supabase';
 import { showToast } from '../components/ToastBanner';
+import AdBanner from '../components/AdBanner';
+
 
 export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation, isFocused }) => {
   const insets = useSafeAreaInsets();
@@ -472,6 +474,11 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
                 <Text style={styles.emptyStateDesc}>Search for users to start a conversation</Text>
               </View>
             ) : null
+          }
+          ListFooterComponent={
+            <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 80 }}>
+              <AdBanner />
+            </View>
           }
         />
       )}
