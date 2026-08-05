@@ -5,4 +5,8 @@ export const ADMOB_CONFIG = {
     interstitial: process.env.EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID || 'ca-app-pub-5904116027634574/3529039247',
     rewarded: process.env.EXPO_PUBLIC_ADMOB_REWARDED_ID || 'ca-app-pub-5904116027634574/9837482638',
   },
+  adsense: {
+    client: 'ca-pub-5904116027634574',
+    bannerSlot: process.env.EXPO_PUBLIC_ADSENSE_BANNER_SLOT || '6145649637',
+  },
 };

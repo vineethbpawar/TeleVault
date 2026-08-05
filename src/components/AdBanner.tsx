@@ -18,24 +18,38 @@ if (Platform.OS === 'android' || Platform.OS === 'ios') {
     BannerAd = mobileAds.BannerAd;
     BannerAdSize = mobileAds.BannerAdSize;
   } catch (e) {
-    // Native module not linked or running on Expo Go/Web
+    // Native module not linked or running on Expo Go
   }
 }
 
 /**
  * AdBanner Component
  * Integrates Google AdMob Banner Ads on native Android devices,
- * with an aesthetic fallback card for PWA / Web.
+ * Google AdSense Banner Ads on Web / PWA,
+ * with an aesthetic fallback card if ad blockers or offline.
  */
 export const AdBanner: React.FC<AdBannerProps> = ({ unitId = ADMOB_CONFIG.adUnits.banner, style }) => {
+  const adRef = React.useRef<HTMLModElement | null>(null);
+
   const handleBannerClick = () => {
     analyticsService.trackEvent('ad_click', { ad_type: 'banner' });
   };
 
   React.useEffect(() => {
     analyticsService.trackEvent('ad_impression', { ad_type: 'banner' });
+
+    // Initialize AdSense on Web
+    if (Platform.OS === 'web') {
+      try {
+        // @ts-ignore
+        (window.adsbygoogle = window.adsbygoogle || []).push({});
+      } catch (e) {
+        console.log('AdSense push error: ', e);
+      }
+    }
   }, []);
 
+  // 1. Native Mobile (Android/iOS) AdMob Banner
   if (BannerAd && BannerAdSize && (Platform.OS === 'android' || Platform.OS === 'ios')) {
     return (
       <View style={[styles.adWrapper, style]}>
@@ -56,6 +70,25 @@ export const AdBanner: React.FC<AdBannerProps> = ({ unitId = ADMOB_CONFIG.adUnit
     );
   }
 
+  // 2. Web / PWA Google AdSense Banner Placement
+  if (Platform.OS === 'web') {
+    return (
+      <View style={[styles.adWrapper, style]}>
+        {/* @ts-ignore */}
+        <ins
+          ref={adRef}
+          className="adsbygoogle"
+          style={{ display: 'block', width: '100%', minHeight: 60 }}
+          data-ad-client={ADMOB_CONFIG.adsense.client}
+          data-ad-slot={ADMOB_CONFIG.adsense.bannerSlot}
+          data-ad-format="auto"
+          data-full-width-responsive="true"
+        />
+      </View>
+    );
+  }
+
+  // 3. Fallback Promo Card
   return (
     <TouchableOpacity
       style={[styles.container, style]}
@@ -81,6 +114,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: 8,
+    width: '100%',
+    overflow: 'hidden',
   },
   container: {
     backgroundColor: '#0F1221',
