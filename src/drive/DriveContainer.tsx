@@ -394,7 +394,7 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
 
   // Google Drive Tabs & View Layout State
   const [activeTab, setActiveTab] = useState<'my_drive' | 'recent' | 'starred' | 'offline'>('my_drive');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
 
   // Directory navigation states
   const [currentFolder, setCurrentFolder] = useState<DriveFolder | null>(null);
