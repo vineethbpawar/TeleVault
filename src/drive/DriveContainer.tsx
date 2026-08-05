@@ -422,6 +422,8 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
   // Dialog Mode (Rename / Create Folder)
   const [dialogVisible, setDialogVisible] = useState(false);
   const [dialogMode, setDialogMode] = useState<'create_folder' | 'rename_folder' | 'rename_file'>('create_folder');
+  const [dialogInput, setDialogInput] = useState('');
+
   // Auto-hiding preview top controls overlay
   const [showHeaderOverlay, setShowHeaderOverlay] = useState(true);
   const headerTimeoutRef = useRef<any>(null);
