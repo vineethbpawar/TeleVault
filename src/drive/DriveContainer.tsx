@@ -1624,6 +1624,7 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
                       <VideoPlayer
                         source={resolvedPreviewUri}
                         style={styles.previewVideo}
+                        controls={true}
                       />
                     );
                   } else if (isText && Platform.OS === 'web') {

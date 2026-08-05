@@ -8,6 +8,7 @@ interface VideoPlayerProps {
   style?: any;
   onError?: (error: any) => void;
   paused?: boolean;
+  controls?: boolean;
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
@@ -15,6 +16,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   style,
   onError,
   paused = false,
+  controls = false,
 }) => {
   const isFocused = useIsFocused();
 
@@ -61,10 +63,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       <View style={[styles.container, style]}>
         <video
           ref={videoRef}
-          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            pointerEvents: controls ? 'auto' : 'none'
+          }}
           loop
           playsInline
-          controls={true}
+          controls={controls}
         />
       </View>
     );
@@ -98,7 +105,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       <VideoView
         style={styles.video}
         player={player}
-        nativeControls={true}
+        nativeControls={controls}
         contentFit="contain"
       />
     </View>
