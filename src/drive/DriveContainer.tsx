@@ -541,9 +541,16 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
       return;
     }
 
+    const isDocOrPdf = targetFile.mime_type?.includes('pdf') ||
+      (targetFile.file_name && /\.(pdf|doc|docx|txt|json|csv|md)$/i.test(targetFile.file_name));
+
     const idx = processedFiles.findIndex(f => f.id === targetFile.id);
     setPreviewIndex(idx);
     setPreviewFile(targetFile);
+
+    if (isDocOrPdf) {
+      setDocReaderVisible(true);
+    }
   };
 
   useEffect(() => {
