@@ -294,8 +294,20 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
       const { data: profiles } = await supabase.from('profiles').select('id');
       const allUserIds = (profiles || []).map(p => p.id);
 
-      // Trigger Web Push Notification API if available in browser context
-      if (typeof window !== 'undefined' && 'Notification' in window) {
+      // 1. Android & iOS Native High-Priority Push Alerts
+      if (Platform.OS !== 'web') {
+        const Notifications = require('expo-notifications');
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: '📢 TeleVault System Broadcast',
+            body: text,
+            sound: true,
+            priority: Notifications.AndroidNotificationPriority.HIGH,
+          },
+          trigger: null,
+        });
+      } else if (typeof window !== 'undefined' && 'Notification' in window) {
+        // 2. Web PWA Notifications
         if (Notification.permission === 'granted') {
           new Notification('📢 TeleVault System Broadcast', {
             body: text,
