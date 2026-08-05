@@ -628,9 +628,9 @@ export const DocumentReaderModal: React.FC<DocumentReaderProps> = ({
       case 'docx':
         return <DocxReader fileUrl={fileUrl} />;
       case 'markdown':
-        return <MarkdownReader fileUrl={fileUrl} />;
+        return <TextReader fileUrl={fileUrl} isMarkdown={true} />;
       case 'text':
-        return <TextReader fileUrl={fileUrl} />;
+        return <TextReader fileUrl={fileUrl} isMarkdown={false} />;
       default:
         return (
           <View style={styles.centered}>
