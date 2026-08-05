@@ -1591,13 +1591,13 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
                 </View>
               )}
 
-              {/* Navigation Arrows */}
-              {previewIndex > 0 && (
+              {/* Navigation Arrows Removed for Full-Screen Google Drive Viewer */}
+              {false && (
                 <TouchableOpacity style={styles.previewArrowLeft} onPress={handlePrevPreview}>
                   <ChevronLeft size={36} color="#FFFFFF" />
                 </TouchableOpacity>
               )}
-              {previewIndex < processedFiles.length - 1 && (
+              {false && (
                 <TouchableOpacity style={styles.previewArrowRight} onPress={handleNextPreview}>
                   <ChevronRight size={36} color="#FFFFFF" />
                 </TouchableOpacity>
@@ -2064,16 +2064,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    paddingHorizontal: 40,
+    paddingHorizontal: 0,
   },
   previewImage: {
     width: '100%',
-    height: '85%',
+    height: '100%',
     alignSelf: 'stretch',
   },
   previewVideo: {
     width: '100%',
-    height: '85%',
+    height: '100%',
     alignSelf: 'stretch',
   },
   previewDocCard: {
