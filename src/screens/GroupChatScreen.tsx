@@ -11,9 +11,11 @@ import {
   ActivityIndicator,
   Alert,
   Keyboard,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Send, Camera, MoreVertical, Plus, LogOut, Users } from 'lucide-react-native';
+import { ArrowLeft, Send, Camera, MoreVertical, Plus, LogOut, Users, Shield, Edit3, UserPlus, Check, X, ShieldCheck } from 'lucide-react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../types/navigation';
 import { groupService } from '../services/groupService';
@@ -37,6 +39,11 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
   const [sending, setSending] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
+  const [groupDetails, setGroupDetails] = useState<Group | null>(null);
+  const [creatorProfile, setCreatorProfile] = useState<UserProfile | null>(null);
+  const [infoModalVisible, setInfoModalVisible] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [newGroupName, setNewGroupName] = useState(groupName);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
@@ -78,6 +85,20 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
 
       const mems = await groupService.getGroupMembers(groupId);
       setMembers(mems);
+
+      const details = await groupService.getGroupDetails(groupId);
+      if (details) {
+        setGroupDetails(details);
+        setNewGroupName(details.name);
+        if (details.creator_id) {
+          const { data: creator } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', details.creator_id)
+            .single();
+          if (creator) setCreatorProfile(creator as UserProfile);
+        }
+      }
     } catch (error) {
       console.error('Load Group Chat Error:', error);
     } finally {
@@ -121,12 +142,11 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleSnapPress = () => {
-    // Open camera screen, passing params to send to this group after capture
     navigation.navigate('Main', {
       screen: 'CameraTab',
       params: {
         sendToGroupId: groupId,
-        sendToGroupName: groupName,
+        sendToGroupName: groupDetails?.name || groupName,
       },
     } as any);
   };
@@ -134,7 +154,6 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleOpenSnap = (snap: any) => {
     if (!snap) return;
 
-    // Resolve URL and Navigate to Viewer
     setLoading(true);
     snapService.resolveTelegramUrl(snap.telegram_file_id, snap.sender_id)
       .then((mediaUrl) => {
@@ -167,7 +186,6 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
         return;
       }
 
-      // Show options dialog to pick a friend
       Alert.alert(
         'Add Member',
         'Choose a friend to add:',
@@ -195,7 +213,7 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleLeaveGroup = () => {
     Alert.alert(
       'Leave Group',
-      `Are you sure you want to leave "${groupName}"?`,
+      `Are you sure you want to leave "${groupDetails?.name || groupName}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -214,30 +232,64 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
     );
   };
 
-  const handleGroupOptions = () => {
-    const isAdmin = members.find((m) => m.user_id === currentUserId)?.role === 'admin';
-    const otherMembers = members.filter((m) => m.user_id !== currentUserId);
-
+  const handleToggleAdmin = (member: GroupMember) => {
+    const isTargetAdmin = member.role === 'admin';
+    const newRole = isTargetAdmin ? 'member' : 'admin';
     Alert.alert(
-      groupName,
-      `Group size: ${members.length} members\nRole: ${isAdmin ? 'Admin' : 'Member'}`,
+      'Change Admin Role',
+      `Make @${member.profile?.username} a ${newRole}?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'View Members', onPress: handleViewMembers },
-        { text: 'Add Member', onPress: handleAddMember },
         {
-          text: 'Leave Group',
-          style: 'destructive',
-          onPress: handleLeaveGroup,
+          text: 'Confirm',
+          onPress: async () => {
+            try {
+              await groupService.updateMemberRole(groupId, member.user_id, newRole);
+              loadData();
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to update role.');
+            }
+          },
         },
       ]
     );
   };
 
-  const handleViewMembers = () => {
-    const list = members.map((m) => `${m.profile?.full_name || 'No Name'} (@${m.profile?.username}) - ${m.role}`).join('\n');
-    Alert.alert('Group Members', list);
+  const handleRemoveMember = (member: GroupMember) => {
+    Alert.alert(
+      'Remove Member',
+      `Remove @${member.profile?.username} from group?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await groupService.removeMember(groupId, member.user_id);
+              loadData();
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to remove member.');
+            }
+          },
+        },
+      ]
+    );
   };
+
+  const handleSaveGroupName = async () => {
+    if (!newGroupName.trim()) return;
+    try {
+      await groupService.updateGroupName(groupId, newGroupName.trim());
+      setEditingName(false);
+      loadData();
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to update group name.');
+    }
+  };
+
+  const currentUserRole = members.find((m) => m.user_id === currentUserId)?.role;
+  const isCurrentUserAdmin = currentUserRole === 'admin';
 
   const formatMessageTime = (timeStr: string): string => {
     try {
@@ -389,6 +441,135 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* WhatsApp-Style Group Info & Permissions Modal */}
+        <Modal visible={infoModalVisible} animationType="slide" transparent onRequestClose={() => setInfoModalVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <TouchableOpacity onPress={() => setInfoModalVisible(false)} style={styles.modalCloseBtn}>
+                  <X size={22} color="#FFFFFF" />
+                </TouchableOpacity>
+                <Text style={styles.modalTitleText}>Group Info</Text>
+                {isCurrentUserAdmin ? (
+                  <TouchableOpacity onPress={handleAddMember} style={styles.modalAddBtn}>
+                    <UserPlus size={20} color="#FFFC00" />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={{ width: 24 }} />
+                )}
+              </View>
+
+              <ScrollView contentContainerStyle={{ padding: 20 }}>
+                {/* Group Avatar & Title */}
+                <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                  <View style={styles.groupAvatarBig}>
+                    <Users size={40} color="#FFFC00" />
+                  </View>
+                  
+                  {editingName ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
+                      <TextInput
+                        style={styles.editNameInput}
+                        value={newGroupName}
+                        onChangeText={setNewGroupName}
+                        autoFocus
+                      />
+                      <TouchableOpacity onPress={handleSaveGroupName} style={styles.saveNameBtn}>
+                        <Check size={18} color="#000000" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
+                      <Text style={styles.groupNameBig}>{groupDetails?.name || groupName}</Text>
+                      {isCurrentUserAdmin && (
+                        <TouchableOpacity onPress={() => setEditingName(true)} style={{ marginLeft: 8 }}>
+                          <Edit3 size={16} color="#8E8E93" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                  <Text style={styles.groupMetaText}>{members.length} participants</Text>
+                </View>
+
+                {/* Creator Information */}
+                <View style={styles.infoCard}>
+                  <Text style={styles.infoCardLabel}>Group Creator</Text>
+                  <Text style={styles.infoCardValue}>
+                    {creatorProfile ? `${creatorProfile.full_name || 'User'} (@${creatorProfile.username})` : 'Loading...'}
+                  </Text>
+                  <Text style={styles.infoCardSub}>Created on {groupDetails?.created_at ? new Date(groupDetails.created_at).toLocaleDateString() : 'N/A'}</Text>
+                </View>
+
+                {/* Member Permissions Header */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 12 }}>
+                  <Text style={styles.sectionHeaderTitle}>{members.length} PARTICIPANTS</Text>
+                  {isCurrentUserAdmin && (
+                    <TouchableOpacity style={styles.addMemberRowBtn} onPress={handleAddMember}>
+                      <UserPlus size={14} color="#FFFC00" style={{ marginRight: 4 }} />
+                      <Text style={styles.addMemberRowText}>Add Member</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Participants List with Admin Badges */}
+                {members.map((m) => {
+                  const isMe = m.user_id === currentUserId;
+                  const isAdmin = m.role === 'admin';
+                  const isCreator = m.user_id === groupDetails?.creator_id;
+
+                  return (
+                    <View key={m.id} style={styles.memberRow}>
+                      <UserAvatar name={m.profile?.full_name || m.profile?.username} avatarUrl={m.profile?.avatar_url} size={40} />
+                      
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={styles.memberNameText}>
+                            {m.profile?.full_name || m.profile?.username} {isMe ? '(You)' : ''}
+                          </Text>
+                          {isAdmin && (
+                            <View style={styles.adminBadge}>
+                              <ShieldCheck size={10} color="#000000" style={{ marginRight: 2 }} />
+                              <Text style={styles.adminBadgeText}>Group Admin</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={styles.memberUsernameText}>@{m.profile?.username}</Text>
+                      </View>
+
+                      {/* Admin Controls for other members */}
+                      {isCurrentUserAdmin && !isMe && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <TouchableOpacity 
+                            style={[styles.actionTag, isAdmin ? styles.demoteTag : styles.promoteTag]} 
+                            onPress={() => handleToggleAdmin(m)}
+                          >
+                            <Text style={styles.actionTagText}>{isAdmin ? 'Dismiss Admin' : 'Make Admin'}</Text>
+                          </TouchableOpacity>
+
+                          {!isCreator && (
+                            <TouchableOpacity 
+                              style={styles.removeIconBtn} 
+                              onPress={() => handleRemoveMember(m)}
+                            >
+                              <X size={16} color="#FF3B30" />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+
+                {/* Leave Group Action */}
+                <TouchableOpacity style={styles.leaveGroupBtn} onPress={handleLeaveGroup}>
+                  <LogOut size={18} color="#FF3B30" style={{ marginRight: 8 }} />
+                  <Text style={styles.leaveGroupText}>Exit Group</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </View>
     </KeyboardAvoidingView>
   );
@@ -571,6 +752,197 @@ const styles = StyleSheet.create({
   emptyText: {
     color: '#8e92af',
     fontSize: 15,
+  },
+
+  /* WhatsApp Group Info Modal Styles */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: '#0F1123',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '90%',
+    minHeight: '60%',
+    borderWidth: 1,
+    borderColor: '#1F2444',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1A1D36',
+  },
+  modalCloseBtn: {
+    padding: 6,
+  },
+  modalTitleText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  modalAddBtn: {
+    padding: 6,
+  },
+  groupAvatarBig: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 252, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFC00',
+  },
+  groupNameBig: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  editNameInput: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    backgroundColor: '#1A1D36',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#FFFC00',
+    minWidth: 180,
+  },
+  saveNameBtn: {
+    backgroundColor: '#FFFC00',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  groupMetaText: {
+    color: '#8E8E93',
+    fontSize: 13,
+    marginTop: 4,
+  },
+  infoCard: {
+    backgroundColor: '#161933',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#242952',
+    marginBottom: 10,
+  },
+  infoCardLabel: {
+    color: '#8E8E93',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  infoCardValue: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  infoCardSub: {
+    color: '#64D2FF',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  sectionHeaderTitle: {
+    color: '#8E8E93',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  addMemberRowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 252, 0, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  addMemberRowText: {
+    color: '#FFFC00',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#161933',
+    padding: 12,
+    borderRadius: 16,
+    marginBottom: 8,
+  },
+  memberNameText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  memberUsernameText: {
+    color: '#8E8E93',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  adminBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFC00',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  adminBadgeText: {
+    color: '#000000',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+  actionTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  promoteTag: {
+    backgroundColor: 'rgba(48, 209, 88, 0.15)',
+  },
+  demoteTag: {
+    backgroundColor: 'rgba(255, 159, 10, 0.15)',
+  },
+  actionTagText: {
+    color: '#30D158',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  removeIconBtn: {
+    padding: 6,
+    marginLeft: 6,
+  },
+  leaveGroupBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 59, 48, 0.12)',
+    borderRadius: 16,
+    paddingVertical: 14,
+    marginTop: 24,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 59, 48, 0.3)',
+  },
+  leaveGroupText: {
+    color: '#FF3B30',
+    fontSize: 15,
+    fontWeight: '800',
   },
 });
 

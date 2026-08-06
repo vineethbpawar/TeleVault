@@ -153,6 +153,51 @@ export const groupService = {
   },
 
   /**
+   * Get full details of a group (creator info & member list).
+   */
+  async getGroupDetails(groupId: string): Promise<Group | null> {
+    const { data, error } = await supabase
+      .from('groups')
+      .select('*')
+      .eq('id', groupId)
+      .single();
+
+    if (error) return null;
+    return data as Group;
+  },
+
+  /**
+   * Update member role (admin / member).
+   */
+  async updateMemberRole(groupId: string, userId: string, role: 'admin' | 'member'): Promise<void> {
+    const { error } = await supabase
+      .from('group_members')
+      .update({ role })
+      .eq('group_id', groupId)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Update Member Role Error:', error);
+      throw new Error(error.message || 'Failed to update member role.');
+    }
+  },
+
+  /**
+   * Update group name (Admin only).
+   */
+  async updateGroupName(groupId: string, name: string): Promise<void> {
+    const { error } = await supabase
+      .from('groups')
+      .update({ name })
+      .eq('id', groupId);
+
+    if (error) {
+      console.error('Update Group Name Error:', error);
+      throw new Error(error.message || 'Failed to update group name.');
+    }
+  },
+
+  /**
    * Remove a member from a group (Admin only).
    */
   async removeMember(groupId: string, userId: string): Promise<void> {
