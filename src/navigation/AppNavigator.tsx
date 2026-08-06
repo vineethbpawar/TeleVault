@@ -197,7 +197,7 @@ export const AppNavigator: React.FC = () => {
 
   const checkUsername = async (userId: string, email?: string) => {
     try {
-      // 4-second safety timeout for profile check to prevent hangs on startup
+      // 1.2-second safety timeout for profile check to prevent hangs on startup
       const profilePromise = supabase
         .from('profiles')
         .select('username, full_name, avatar_url')
@@ -205,7 +205,7 @@ export const AppNavigator: React.FC = () => {
         .maybeSingle();
 
       const timeoutPromise = new Promise<any>((resolve) =>
-        setTimeout(() => resolve({ data: { username: 'offline_user' }, error: null }), 4000)
+        setTimeout(() => resolve({ data: { username: 'offline_user' }, error: null }), 1200)
       );
 
       const { data, error } = await Promise.race([profilePromise, timeoutPromise]);
@@ -294,7 +294,7 @@ export const AppNavigator: React.FC = () => {
     // Fallback: if onAuthStateChange hasn't triggered within timeout, get initial session
     const sessionPromise = supabase.auth.getSession();
     const sessionTimeout = new Promise<any>((resolve) =>
-      setTimeout(() => resolve({ data: { session: null } }), 4000)
+      setTimeout(() => resolve({ data: { session: null } }), 1200)
     );
 
     Promise.race([sessionPromise, sessionTimeout])
