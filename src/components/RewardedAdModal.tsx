@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Gift, CheckCircle, Play, X } from 'lucide-react-native';
 import { showToast } from './ToastBanner';
+import AdBanner from './AdBanner';
 
 interface RewardedAdModalProps {
   visible: boolean;
@@ -80,9 +81,15 @@ export const RewardedAdModal: React.FC<RewardedAdModalProps> = ({
 
           {adState === 'watching' && (
             <View style={styles.centerBox}>
-              <ActivityIndicator size="large" color="#FFFC00" style={{ marginBottom: 16 }} />
+              <ActivityIndicator size="large" color="#FFFC00" style={{ marginBottom: 12 }} />
               <Text style={styles.watchingTitle}>Sponsor Ad Playing…</Text>
               <Text style={styles.timerText}>{countdown}s</Text>
+              
+              {/* Live Web AdSense / Mobile Banner Container */}
+              <View style={styles.adBannerBox}>
+                <AdBanner />
+              </View>
+
               <Text style={styles.subHint}>Please wait for reward confirmation</Text>
             </View>
           )}
@@ -180,7 +187,13 @@ const styles = StyleSheet.create({
     color: '#FFFC00',
     fontSize: 32,
     fontWeight: '900',
+    marginVertical: 8,
+  },
+  adBannerBox: {
+    width: '100%',
     marginVertical: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   subHint: {
     color: '#8E8E93',
