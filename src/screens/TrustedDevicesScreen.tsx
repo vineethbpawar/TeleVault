@@ -29,13 +29,14 @@ export const TrustedDevicesScreen: React.FC<Props> = ({ navigation }) => {
   const loadDevices = async () => {
     try {
       setLoading(true);
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData.user) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
+      if (!user) return;
 
       const currentId = await deviceService.getOrCreateDeviceId();
       setCurrentDeviceId(currentId);
 
-      const records = await deviceService.getTrustedDevices(authData.user.id);
+      const records = await deviceService.getTrustedDevices(user.id);
       setDevices(records);
     } catch (err) {
       console.error('[TrustedDevicesScreen] Error loading devices:', err);
@@ -86,9 +87,10 @@ export const TrustedDevicesScreen: React.FC<Props> = ({ navigation }) => {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { data: authData } = await supabase.auth.getUser();
-              if (authData.user && currentDeviceId) {
-                await deviceService.removeAllOtherDevices(authData.user.id, currentDeviceId);
+              const { data: { session } } = await supabase.auth.getSession();
+              const user = session?.user;
+              if (user && currentDeviceId) {
+                await deviceService.removeAllOtherDevices(user.id, currentDeviceId);
                 showToast('Removed all other trusted devices.');
                 loadDevices();
               }

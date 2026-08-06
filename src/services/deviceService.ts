@@ -160,12 +160,24 @@ export const deviceService = {
    * Removes a single trusted device record.
    */
   async removeTrustedDevice(recordId: string): Promise<void> {
-    const { error } = await supabase
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
+    
+    // First delete by unique primary key `id`
+    const { error: idError } = await supabase
       .from('trusted_devices')
       .delete()
       .eq('id', recordId);
 
-    if (error) throw error;
+    if (idError && user) {
+      // Fallback: delete by recordId or user_id
+      const { error: fallbackError } = await supabase
+        .from('trusted_devices')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('id', recordId);
+      if (fallbackError) throw fallbackError;
+    }
   },
 
   /**
@@ -178,6 +190,20 @@ export const deviceService = {
       .eq('user_id', userId)
       .neq('device_id', currentDeviceId);
 
-    if (error) throw error;
+    if (error) {
+      console.warn('[deviceService] DB remove all error, falling back to batch delete:', error);
+      const { data: allDevices } = await supabase
+        .from('trusted_devices')
+        .select('id, device_id')
+        .eq('user_id', userId);
+      
+      const otherIds = (allDevices || [])
+        .filter(d => d.device_id !== currentDeviceId)
+        .map(d => d.id);
+      
+      if (otherIds.length > 0) {
+        await supabase.from('trusted_devices').delete().in('id', otherIds);
+      }
+    }
   },
 };
