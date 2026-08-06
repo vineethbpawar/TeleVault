@@ -22,12 +22,12 @@ export const LegalAndSupportScreen: React.FC<Props> = ({ navigation, route }) =>
   const [activeTab, setActiveTab] = useState<'privacy' | 'terms' | 'support'>(initialTab);
 
   const handleEmailSupport = () => {
-    Linking.openURL('mailto:support@televault.app?subject=TeleVault%20Support%20Request');
+    Linking.openURL('mailto:vineethbpawar@gmail.com?subject=TeleVault%20Support%20Request');
   };
 
   const handleWebVisit = () => {
-    if (Platform.OS === 'web') {
-      window.open('https://televault.app', '_blank');
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.open(window.location.origin, '_blank');
     } else {
       Linking.openURL('https://televault.app');
     }
@@ -188,7 +188,7 @@ export const LegalAndSupportScreen: React.FC<Props> = ({ navigation, route }) =>
                 </View>
                 <View style={styles.supportOptionMeta}>
                   <Text style={styles.supportOptionTitle}>Email Support</Text>
-                  <Text style={styles.supportOptionSub}>support@televault.app</Text>
+                  <Text style={styles.supportOptionSub}>vineethbpawar@gmail.com</Text>
                 </View>
               </View>
               <ExternalLink size={18} color="#8E8E93" />
