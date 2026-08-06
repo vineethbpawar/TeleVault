@@ -19,6 +19,7 @@ import AppHeader from '../components/AppHeader';
 import AppInput from '../components/AppInput';
 import AppButton from '../components/AppButton';
 import UserAvatar from '../components/UserAvatar';
+import { showToast } from '../components/ToastBanner';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'CreateGroup'>;
 
@@ -67,18 +68,14 @@ export const CreateGroupScreen: React.FC<Props> = ({ navigation }) => {
     setCreating(true);
     try {
       const group = await groupService.createGroup(name, selectedIds);
-      Alert.alert('Success', `Group "${group.name}" created!`, [
-        {
-          text: 'OK',
-          onPress: () => {
-            navigation.navigate('GroupChat', {
-              groupId: group.id,
-              groupName: group.name,
-            });
-          },
-        },
-      ]);
+      showToast(`Group "${group.name}" created!`);
+      navigation.replace('GroupChat', {
+        groupId: group.id,
+        groupName: group.name,
+      });
     } catch (err: any) {
+      console.error('[CreateGroup] Error:', err);
+      showToast(err.message || 'Failed to create group.');
       Alert.alert('Error', err.message || 'Failed to create group.');
     } finally {
       setCreating(false);
