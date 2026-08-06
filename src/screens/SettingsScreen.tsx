@@ -87,6 +87,7 @@ import { StorageManagerModal } from '../components/StorageManagerModal';
 import { AdminAuthModal } from '../components/AdminAuthModal';
 import { autoSyncService } from '../services/autoSyncService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { RewardedAdModal } from '../components/RewardedAdModal';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'SettingsTab'>,
@@ -107,12 +108,13 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [adminAuthModalVisible, setAdminAuthModalVisible] = useState(false);
   const [adminTapCount, setAdminTapCount] = useState(0);
 
-  // Profile States
+  // Profile States & Rewarded Ad
   const [username, setUsername] = useState('');
   const [fullName, setFullName] = useState('');
   const [userRole, setUserRole] = useState('user');
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [profileRewardedAdVisible, setProfileRewardedAdVisible] = useState(false);
 
   // Privacy States
   const [privacyMessageMe, setPrivacyMessageMe] = useState('friends');
@@ -350,12 +352,15 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [isFocused]);
 
-  const handleSaveProfile = async () => {
+  const handleSaveProfile = () => {
     if (!username.trim()) {
       Alert.alert('Error', 'Username is required.');
       return;
     }
+    setProfileRewardedAdVisible(true);
+  };
 
+  const executeSaveProfile = async () => {
     setSavingProfile(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -1644,13 +1649,22 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 {nukeLoading ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.confirmButtonText}>Delete Everything</Text>
+                  <Text style={styles.confirmButtonText}>Permanently Delete</Text>
                 )}
               </TouchableOpacity>
             </View>
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Rewarded Video Ad Modal for Profile Changes */}
+      <RewardedAdModal
+        visible={profileRewardedAdVisible}
+        onClose={() => setProfileRewardedAdVisible(false)}
+        onRewardEarned={executeSaveProfile}
+        rewardTitle="Unlock Profile Identity Update"
+        rewardDescription="Watch a short 5-second sponsor video to update your display name & username for free!"
+      />
 
       {/* Upload Queue Overlay */}
       <UploadProgress visible={queueModalVisible} onClose={() => setQueueModalVisible(false)} />
