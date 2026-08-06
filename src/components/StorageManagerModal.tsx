@@ -12,6 +12,7 @@ import {
 import { Database, Trash2, HardDrive } from 'lucide-react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import AppButton from './AppButton';
+import { RewardedAdModal } from './RewardedAdModal';
 
 interface Props {
   visible: boolean;
@@ -21,6 +22,7 @@ interface Props {
 export const StorageManagerModal: React.FC<Props> = ({ visible, onClose }) => {
   const [cacheSize, setCacheSize] = useState<string>('Calculating...');
   const [loading, setLoading] = useState(false);
+  const [rewardedAdVisible, setRewardedAdVisible] = useState(false);
 
   const calculateCacheSize = async () => {
     if (Platform.OS === 'web') {
@@ -100,8 +102,8 @@ export const StorageManagerModal: React.FC<Props> = ({ visible, onClose }) => {
           </View>
 
           <AppButton
-            title="Clear Cache"
-            onPress={handleClearCache}
+            title="Clear Cache & Deep Clean"
+            onPress={() => setRewardedAdVisible(true)}
             loading={loading}
             style={styles.clearBtn}
           />
@@ -111,6 +113,14 @@ export const StorageManagerModal: React.FC<Props> = ({ visible, onClose }) => {
           </TouchableOpacity>
         </View>
       </View>
+
+      <RewardedAdModal
+        visible={rewardedAdVisible}
+        onClose={() => setRewardedAdVisible(false)}
+        onRewardEarned={handleClearCache}
+        rewardTitle="Unlock Premium Cache Cleanup"
+        rewardDescription="Watch a short 5-second sponsor video to execute deep storage cleanup & reclaim disk space for free!"
+      />
     </Modal>
   );
 };
