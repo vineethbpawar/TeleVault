@@ -182,8 +182,10 @@ export const notificationService = {
                   title: title,
                   body: body,
                   data: dataPayload,
+                  sound: 'default',
                   channelId: 'default',
-                  priority: 'normal',
+                  priority: 'high',
+                  _displayInForeground: true,
                 }),
               });
             } catch (err) {

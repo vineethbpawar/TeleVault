@@ -294,7 +294,30 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
       const { data: profiles } = await supabase.from('profiles').select('id');
       const allUserIds = (profiles || []).map(p => p.id);
 
-      // 1. Android & iOS Native High-Priority Push Alerts
+      // Fetch registered background device push tokens from Supabase user_push_tokens table
+      const { data: tokenRows } = await supabase.from('user_push_tokens').select('token');
+      if (tokenRows && tokenRows.length > 0) {
+        const pushPayloads = tokenRows.map(row => ({
+          to: row.token,
+          title: '📢 TeleVault System Broadcast',
+          body: text,
+          sound: 'default',
+          priority: 'high',
+          channelId: 'default',
+          _displayInForeground: true,
+        }));
+        await fetch('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Accept-encoding': 'gzip, deflate',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(pushPayloads),
+        }).catch(e => console.warn('Background push dispatch failed:', e));
+      }
+
+      // Local immediate alert fallback
       if (Platform.OS !== 'web') {
         const Notifications = require('expo-notifications');
         await Notifications.scheduleNotificationAsync({
@@ -307,20 +330,10 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
           trigger: null,
         });
       } else if (typeof window !== 'undefined' && 'Notification' in window) {
-        // 2. Web PWA Notifications
         if (Notification.permission === 'granted') {
           new Notification('📢 TeleVault System Broadcast', {
             body: text,
             icon: '/icon-192.png',
-          });
-        } else if (Notification.permission !== 'denied') {
-          Notification.requestPermission().then(perm => {
-            if (perm === 'granted') {
-              new Notification('📢 TeleVault System Broadcast', {
-                body: text,
-                icon: '/icon-192.png',
-              });
-            }
           });
         }
       }
