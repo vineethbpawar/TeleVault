@@ -21,7 +21,7 @@ import { ImageViewer } from '../viewer/ImageViewer';
 import { DocumentReaderModal } from '../components/DocumentReaderModal';
 import AdBanner from '../components/AdBanner';
 import { UploadQueueBadge } from '../components/UploadQueueBadge';
-
+import { RewardedAdModal } from '../components/RewardedAdModal';
 
 
 const Alert = {
@@ -429,6 +429,10 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
   const [showHeaderOverlay, setShowHeaderOverlay] = useState(true);
   const headerTimeoutRef = useRef<any>(null);
 
+  // Rewarded Ad states
+  const [rewardedAdVisible, setRewardedAdVisible] = useState(false);
+  const [pendingDownloadFile, setPendingDownloadFile] = useState<DriveFile | null>(null);
+
   // Drag down drop gesture animation (Memories style)
   const dragTranslateY = useRef(new Animated.Value(0)).current;
   const dragScaleAnim = useRef(new Animated.Value(1)).current;
@@ -786,6 +790,13 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
       Alert.alert('Error', 'File not found in current view.');
       return;
     }
+    setPendingDownloadFile(driveFile);
+    setRewardedAdVisible(true);
+  };
+
+  const handleExecutePendingDownload = async () => {
+    if (!pendingDownloadFile) return;
+    const driveFile = pendingDownloadFile;
     setOpeningDoc(true);
     try {
       await fileOpenService.openDocument(driveFile as any);
@@ -793,6 +804,7 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
       Alert.alert('Error', err.message || 'Failed to download file.');
     } finally {
       setOpeningDoc(false);
+      setPendingDownloadFile(null);
     }
   };
 
@@ -1747,6 +1759,15 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
           mimeType={previewFile.mime_type}
         />
       )}
+
+      {/* Rewarded Video Ad Modal for Premium Downloads */}
+      <RewardedAdModal
+        visible={rewardedAdVisible}
+        onClose={() => setRewardedAdVisible(false)}
+        onRewardEarned={handleExecutePendingDownload}
+        rewardTitle="Unlock Premium File Download"
+        rewardDescription="Watch a quick 5-second sponsor video to unlock unlimited cloud storage downloads for free!"
+      />
     </View>
   );
 };
