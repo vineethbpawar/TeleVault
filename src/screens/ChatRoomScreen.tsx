@@ -352,13 +352,14 @@ export const ChatRoomScreen: React.FC<Props> = ({ navigation, route }) => {
           const exists = prev.some((m) => m.id === newMsg.id);
           if (exists) return prev;
 
-          // Merge optimistic local message if they have the same text
+          // Merge optimistic local message if sent by current user
           if (newMsg.sender_id === currentUserId) {
             const tempIndex = prev.findIndex(
               (m) =>
                 m.id.startsWith('temp-') &&
-                m.message_text === newMsg.message_text &&
-                Math.abs(new Date(m.created_at).getTime() - new Date(newMsg.created_at).getTime()) < 30000
+                (m.snap_id === newMsg.snap_id ||
+                  (m.message_type === 'snap' && newMsg.message_type === 'snap') ||
+                  m.message_text === newMsg.message_text)
             );
             if (tempIndex !== -1) {
               const updated = [...prev];

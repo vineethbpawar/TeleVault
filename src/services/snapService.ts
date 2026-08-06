@@ -17,7 +17,8 @@ export const snapService = {
     overlayMetadata: any = [],
     conversationId: string | null = null
   ): Promise<Snap> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) throw new Error('Not logged in.');
 
     // Check block list
@@ -29,7 +30,7 @@ export const snapService = {
     // Check friendship based on recipient setting
     const { data: recipientProfile } = await supabase
       .from('profiles')
-      .select('privacy_send_snaps')
+      .select('username, privacy_send_snaps')
       .eq('id', receiverId)
       .maybeSingle();
 
@@ -41,14 +42,15 @@ export const snapService = {
       }
     }
 
-    // Fetch usernames for Telegram logging metadata
-    const [senderProfile, receiverProfile] = await Promise.all([
-      supabase.from('profiles').select('username').eq('id', user.id).single(),
-      supabase.from('profiles').select('username').eq('id', receiverId).single(),
-    ]);
+    // Fetch sender username
+    const { data: senderProfile } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('id', user.id)
+      .maybeSingle();
 
-    const senderUsername = senderProfile.data?.username || 'unknown';
-    const receiverUsername = receiverProfile.data?.username || 'unknown';
+    const senderUsername = senderProfile?.username || 'user';
+    const receiverUsername = recipientProfile?.username || 'friend';
 
     // 1. Upload media to Telegram
     const tgUpload = await telegramService.sendSnapToTelegram({
