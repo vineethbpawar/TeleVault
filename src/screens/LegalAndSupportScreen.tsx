@@ -22,7 +22,7 @@ export const LegalAndSupportScreen: React.FC<Props> = ({ navigation, route }) =>
   const [activeTab, setActiveTab] = useState<'privacy' | 'terms' | 'support'>(initialTab);
 
   const handleEmailSupport = () => {
-    Linking.openURL('mailto:vineethbpawar@gmail.com?subject=TeleVault%20Support%20Request');
+    Linking.openURL('mailto:televault.biz@gmail.com?subject=TeleVault%20Support%20Request');
   };
 
   const handleWebVisit = () => {
@@ -188,7 +188,7 @@ export const LegalAndSupportScreen: React.FC<Props> = ({ navigation, route }) =>
                 </View>
                 <View style={styles.supportOptionMeta}>
                   <Text style={styles.supportOptionTitle}>Email Support</Text>
-                  <Text style={styles.supportOptionSub}>vineethbpawar@gmail.com</Text>
+                  <Text style={styles.supportOptionSub}>televault.biz@gmail.com</Text>
                 </View>
               </View>
               <ExternalLink size={18} color="#8E8E93" />
