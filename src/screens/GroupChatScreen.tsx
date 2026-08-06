@@ -21,7 +21,7 @@ import { AppStackParamList } from '../types/navigation';
 import { groupService } from '../services/groupService';
 import { friendService } from '../services/friendService';
 import { snapService } from '../services/snapService';
-import { GroupMessage, GroupMember } from '../types/groups';
+import { GroupMessage, GroupMember, Group } from '../types/groups';
 import { UserProfile } from '../types/chat';
 import { supabase } from '../lib/supabase';
 import AppHeader from '../components/AppHeader';
@@ -378,7 +378,7 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
               <TouchableOpacity style={styles.headerCameraBtn} onPress={handleSnapPress}>
                 <Camera size={22} color="#FFFC00" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.headerOptionsBtn} onPress={handleGroupOptions}>
+              <TouchableOpacity style={styles.headerOptionsBtn} onPress={() => setInfoModalVisible(true)}>
                 <MoreVertical size={22} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
