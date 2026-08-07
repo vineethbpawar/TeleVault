@@ -35,6 +35,8 @@ export const AdBanner: React.FC<AdBannerProps> = ({ unitId = ADMOB_CONFIG.adUnit
     analyticsService.trackEvent('ad_click', { ad_type: 'banner' });
   };
 
+  const [adFailed, setAdFailed] = useState(false);
+
   useEffect(() => {
     analyticsService.trackEvent('ad_impression', { ad_type: 'banner' });
 
@@ -50,7 +52,7 @@ export const AdBanner: React.FC<AdBannerProps> = ({ unitId = ADMOB_CONFIG.adUnit
   }, []);
 
   // 1. Native Mobile (Android/iOS) AdMob Banner
-  if (BannerAd && BannerAdSize && (Platform.OS === 'android' || Platform.OS === 'ios')) {
+  if (BannerAd && BannerAdSize && !adFailed && (Platform.OS === 'android' || Platform.OS === 'ios')) {
     return (
       <View style={[styles.adWrapper, style]}>
         <BannerAd
@@ -64,6 +66,7 @@ export const AdBanner: React.FC<AdBannerProps> = ({ unitId = ADMOB_CONFIG.adUnit
           }}
           onAdFailedToLoad={(error: any) => {
             console.log('AdMob banner failed to load: ', error);
+            setAdFailed(true);
           }}
         />
       </View>
@@ -112,33 +115,34 @@ const styles = StyleSheet.create({
   adWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: 4,
+    marginVertical: 2,
     width: '100%',
-    minHeight: 60,
+    minHeight: 50,
     overflow: 'hidden',
   },
   container: {
     backgroundColor: '#0F1221',
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#1C1C1E',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginVertical: 4,
+    marginVertical: 2,
+    height: 40,
   },
   badge: {
     backgroundColor: 'rgba(255, 252, 0, 0.15)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginRight: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+    marginRight: 6,
   },
   badgeText: {
     color: '#FFFC00',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '800',
     textTransform: 'uppercase',
   },
@@ -149,7 +153,7 @@ const styles = StyleSheet.create({
   },
   adText: {
     color: '#D1D1D6',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
   },
 });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Audio } from 'expo-av';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Play, Pause } from 'lucide-react-native';
 import { snapService } from '../services/snapService';
 
@@ -12,50 +12,27 @@ interface VoicePlayerProps {
 }
 
 export const VoicePlayer: React.FC<VoicePlayerProps> = ({ fileId, durationMs, isMe, localUri }) => {
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [position, setPosition] = useState(0);
+  const [audioUri, setAudioUri] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  
+  const player = useAudioPlayer(audioUri ? { uri: audioUri } : null);
+  const status = useAudioPlayerStatus(player);
+
   const textColor = isMe ? '#000000' : '#FFFFFF';
   const iconColor = isMe ? '#000000' : '#FFFFFF';
   const trackColor = isMe ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.2)';
   const progressColor = isMe ? '#000000' : '#FFFFFF';
 
-  useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
-      }
-    };
-  }, []);
-
-  const onPlaybackStatusUpdate = (status: any) => {
-    if (status.isLoaded) {
-      setPosition(status.positionMillis);
-      setIsPlaying(status.isPlaying);
-      if (status.didJustFinish) {
-        setPosition(0);
-        setIsPlaying(false);
-        soundRef.current?.setPositionAsync(0).catch(() => {});
-      }
-    }
-  };
+  const isPlaying = status.playing ?? false;
+  const positionMs = (status.currentTime ?? 0) * 1000;
+  const progress = durationMs > 0 ? (positionMs / durationMs) * 100 : 0;
+  const currentDuration = positionMs > 0 ? positionMs : durationMs;
 
   const handlePlayPause = async () => {
     if (isLoading) return;
 
     try {
-      if (sound) {
-        if (isPlaying) {
-          await sound.pauseAsync();
-        } else {
-          await sound.playAsync();
-        }
-      } else {
+      if (!audioUri) {
         setIsLoading(true);
-        // Load the audio file
         let url = '';
         if (fileId === 'temp') {
           if (localUri) {
@@ -67,23 +44,16 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({ fileId, durationMs, is
         } else {
           url = await snapService.resolveTelegramUrl(fileId);
         }
-
-        // Request correct audio output settings for playback
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-        });
-
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: url },
-          { shouldPlay: true },
-          onPlaybackStatusUpdate
-        );
-        soundRef.current = newSound;
-        setSound(newSound);
-        setIsPlaying(true);
+        setAudioUri(url);
         setIsLoading(false);
+        // player will auto-load once audioUri is set
+        setTimeout(() => player.play(), 300);
+      } else {
+        if (isPlaying) {
+          player.pause();
+        } else {
+          player.play();
+        }
       }
     } catch (err) {
       console.error('Failed to play voice note', err);
@@ -97,9 +67,6 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({ fileId, durationMs, is
     const seconds = totalSeconds % 60;
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
-
-  const currentDuration = position > 0 ? position : durationMs;
-  const progress = durationMs > 0 ? (position / durationMs) * 100 : 0;
 
   return (
     <View style={styles.container}>

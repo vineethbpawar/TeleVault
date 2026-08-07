@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "311441035826",
+    "project_id": "televault-biz",
+    "storage_bucket": "televault-biz.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:311441035826:android:7976a304ff8d3c4372e22b",
+        "android_client_info": {
+          "package_name": "com.anonymous.TeleVault"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAZrzKu3Qia_ovpsHYwpMn64z5oSscmRBY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

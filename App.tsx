@@ -64,6 +64,16 @@ export default function App() {
     };
   }, []);
 
+  // Guarantee native splash screen hides after 2.5s even if auth or network is delayed
+  useEffect(() => {
+    if (Platform.OS !== 'web') {
+      const splashTimer = setTimeout(() => {
+        ExpoSplash.hideAsync().catch(() => {});
+      }, 2500);
+      return () => clearTimeout(splashTimer);
+    }
+  }, []);
+
   // Custom iOS swipe-to-go-back gesture for Web PWA
   useEffect(() => {
     if (Platform.OS !== 'web') return;

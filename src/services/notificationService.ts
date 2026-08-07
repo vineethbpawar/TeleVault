@@ -35,13 +35,19 @@ export const notificationService = {
         return null;
       }
 
-      // Get Expo push token
-      // Note: projectId is required when using Expo Go, but is automatically set in app.json if configured.
-      const tokenData = await Notifications.getExpoPushTokenAsync();
-      const token = tokenData.data;
+      // Get Expo push token — requires Firebase (google-services.json) on Android
+      let token: string | null = null;
+      try {
+        const tokenData = await Notifications.getExpoPushTokenAsync();
+        token = tokenData.data;
+      } catch (fcmError: any) {
+        // Firebase not configured yet — push tokens unavailable, skip silently
+        console.log('[Notifications] Firebase not configured, skipping push token registration.');
+        return null;
+      }
 
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
+      if (user && token) {
         // Upsert push token into supabase
         const { error } = await supabase
           .from('user_push_tokens')

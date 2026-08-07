@@ -26,6 +26,7 @@
     },
     "android": {
       "jsEngine": "hermes",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#0B0E1B",
         "foregroundImage": "./assets/android-icon-foreground.png"
@@ -53,6 +54,14 @@
       "expo-sharing",
       "expo-video",
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0B0E1B",
+          "androidMode": "default"
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
@@ -65,7 +74,8 @@
         {
           "androidAppId": "ca-app-pub-5904116027634574~3205339681"
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "extra": {
       "eas": {

@@ -45,6 +45,11 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
   const [editingName, setEditingName] = useState(false);
   const [newGroupName, setNewGroupName] = useState(groupName);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  
+  // Add Members Custom Modal State
+  const [addMembersModalVisible, setAddMembersModalVisible] = useState(false);
+  const [friendsList, setFriendsList] = useState<UserProfile[]>([]);
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -142,12 +147,9 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleSnapPress = () => {
-    navigation.navigate('Main', {
-      screen: 'CameraTab',
-      params: {
-        sendToGroupId: groupId,
-        sendToGroupName: groupDetails?.name || groupName,
-      },
+    navigation.navigate('ChatCamera', {
+      sendToGroupId: groupId,
+      sendToGroupName: groupDetails?.name || groupName,
     } as any);
   };
 
@@ -177,36 +179,25 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleAddMember = async () => {
     try {
+      setLoading(true);
       const friends = await friendService.getFriends();
-      const currentMemberIds = members.map((m) => m.user_id);
-      const addableFriends = friends.filter((f) => !currentMemberIds.includes(f.id));
-
-      if (addableFriends.length === 0) {
-        Alert.alert('No friends to add', 'All your friends are already in this group or you have no friends yet.');
-        return;
-      }
-
-      Alert.alert(
-        'Add Member',
-        'Choose a friend to add:',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          ...addableFriends.map((f) => ({
-            text: `@${f.username}`,
-            onPress: async () => {
-              try {
-                await groupService.addMembers(groupId, [f.id]);
-                Alert.alert('Success', `@${f.username} added to the group.`);
-                loadData();
-              } catch (err: any) {
-                Alert.alert('Error', err.message || 'Failed to add member.');
-              }
-            },
-          })),
-        ]
-      );
+      setFriendsList(friends as any);
+      setAddMembersModalVisible(true);
     } catch (error) {
       Alert.alert('Error', 'Failed to retrieve friends list.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectFriendToAdd = async (friendId: string, friendUsername: string) => {
+    try {
+      await groupService.addMembers(groupId, [friendId]);
+      Alert.alert('Success', `@${friendUsername} has been added.`);
+      setAddMembersModalVisible(false);
+      loadData();
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to add member.');
     }
   };
 
@@ -566,6 +557,73 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
                   <LogOut size={18} color="#FF3B30" style={{ marginRight: 8 }} />
                   <Text style={styles.leaveGroupText}>Exit Group</Text>
                 </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+        
+        {/* Custom Add Members Modal */}
+        <Modal 
+          visible={addMembersModalVisible} 
+          animationType="slide" 
+          transparent 
+          onRequestClose={() => setAddMembersModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalCard, { height: '80%', minHeight: '50%' }]}>
+              <View style={styles.modalHeader}>
+                <TouchableOpacity onPress={() => setAddMembersModalVisible(false)} style={styles.modalCloseBtn}>
+                  <X size={22} color="#FFFFFF" />
+                </TouchableOpacity>
+                <Text style={styles.modalTitleText}>Add Members</Text>
+                <View style={{ width: 24 }} />
+              </View>
+
+              <View style={{ paddingHorizontal: 20, paddingTop: 16 }}>
+                <TextInput
+                  style={styles.searchInputCustom}
+                  placeholder="Search friends..."
+                  placeholderTextColor="#8E8E93"
+                  value={memberSearchQuery}
+                  onChangeText={setMemberSearchQuery}
+                />
+              </View>
+
+              <ScrollView contentContainerStyle={{ padding: 20 }}>
+                {(() => {
+                  const currentMemberIds = members.map((m) => m.user_id);
+                  const addableFriends = friendsList.filter(
+                    (f) => !currentMemberIds.includes(f.id) &&
+                    (f.username?.toLowerCase().includes(memberSearchQuery.toLowerCase()) ||
+                     f.full_name?.toLowerCase().includes(memberSearchQuery.toLowerCase()))
+                  );
+
+                  if (addableFriends.length === 0) {
+                    return (
+                      <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                        <Users size={32} color="#8E8E93" style={{ marginBottom: 12 }} />
+                        <Text style={{ color: '#8E8E93', fontSize: 14 }}>No addable friends found.</Text>
+                      </View>
+                    );
+                  }
+
+                  return addableFriends.map((f) => (
+                    <TouchableOpacity 
+                      key={f.id} 
+                      style={styles.memberRow}
+                      onPress={() => handleSelectFriendToAdd(f.id, f.username || 'user')}
+                    >
+                      <UserAvatar name={f.full_name || f.username} avatarUrl={f.avatar_url} size={40} />
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={styles.memberNameText}>{f.full_name || f.username}</Text>
+                        <Text style={styles.memberUsernameText}>@{f.username}</Text>
+                      </View>
+                      <View style={styles.addIconContainer}>
+                        <Plus size={16} color="#000000" />
+                      </View>
+                    </TouchableOpacity>
+                  ));
+                })()}
               </ScrollView>
             </View>
           </View>
@@ -943,6 +1001,25 @@ const styles = StyleSheet.create({
     color: '#FF3B30',
     fontSize: 15,
     fontWeight: '800',
+  },
+  searchInputCustom: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    backgroundColor: '#161933',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#242952',
+  },
+  addIconContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FFFC00',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
   },
 });
 

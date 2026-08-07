@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Audio } from 'expo-av';
+import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
 import {
   StyleSheet,
   View,
@@ -38,7 +38,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const [text, setText] = useState('');
   const [showTools, setShowTools] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [recordDuration, setRecordDuration] = useState(0);
   const recordingTimerRef = useRef<any>(null);
   const sendScale = useRef(new Animated.Value(0)).current;
@@ -99,24 +99,16 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
   const startRecording = async () => {
     try {
-      const permission = await Audio.requestPermissionsAsync();
-      if (permission.status === 'granted') {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-        });
-        const { recording: newRecording } = await Audio.Recording.createAsync(
-          Audio.RecordingOptionsPresets.HIGH_QUALITY
-        );
-        setRecording(newRecording);
+      const permission = await AudioModule.requestRecordingPermissionsAsync();
+      if (permission.granted) {
+        await audioRecorder.prepareToRecordAsync();
+        audioRecorder.record();
         setIsRecording(true);
         setRecordDuration(0);
-        
+
         recordingTimerRef.current = setInterval(() => {
           setRecordDuration((prev) => prev + 1);
         }, 1000);
-      } else {
-        // Handle permission denied
       }
     } catch (err) {
       console.error('Failed to start recording', err);
@@ -129,18 +121,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         clearInterval(recordingTimerRef.current);
       }
       setIsRecording(false);
-      
-      if (recording) {
-        await recording.stopAndUnloadAsync();
-        const uri = recording.getURI();
-        
-        if (send && uri && onVoiceSend) {
-          // Pass the duration in ms
-          onVoiceSend(uri, recordDuration * 1000);
-        }
-        setRecording(null);
-        setRecordDuration(0);
+
+      const uri = await audioRecorder.stopRecording();
+
+      if (send && uri && onVoiceSend) {
+        onVoiceSend(uri, recordDuration * 1000);
       }
+      setRecordDuration(0);
     } catch (err) {
       console.error('Failed to stop recording', err);
     }
