@@ -122,7 +122,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       }
       setIsRecording(false);
 
-      const uri = await audioRecorder.stopRecording();
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
 
       if (send && uri && onVoiceSend) {
         onVoiceSend(uri, recordDuration * 1000);

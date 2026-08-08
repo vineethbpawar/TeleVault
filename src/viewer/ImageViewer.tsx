@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Dimensions, Platform } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
@@ -6,6 +6,7 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withSpring,
+  runOnJS,
 } from 'react-native-reanimated';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -15,6 +16,7 @@ interface ImageViewerProps {
 }
 
 export const ImageViewer: React.FC<ImageViewerProps> = ({ source }) => {
+  const [isZoomed, setIsZoomed] = useState(false);
   const scale = useSharedValue(1);
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
@@ -33,19 +35,23 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ source }) => {
       'worklet';
       const newScale = baseScale.value * event.scale;
       // Constraint: Zoom between 1.0x and 4.0x
-      scale.value = Math.max(1, Math.min(4, newScale));
+      const nextScale = Math.max(1, Math.min(4, newScale));
+      scale.value = nextScale;
+      runOnJS(setIsZoomed)(nextScale > 1.05);
     })
     .onEnd(() => {
       'worklet';
-      if (scale.value < 1) {
+      if (scale.value < 1.05) {
         scale.value = withTiming(1);
         translateX.value = withTiming(0);
         translateY.value = withTiming(0);
+        runOnJS(setIsZoomed)(false);
       }
     });
 
   // 2. Pan to Drag Gesture (Only when zoomed in)
   const panGesture = Gesture.Pan()
+    .enabled(isZoomed)
     .onStart(() => {
       'worklet';
       baseTranslateX.value = translateX.value;
@@ -75,8 +81,10 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ source }) => {
         scale.value = withSpring(1);
         translateX.value = withSpring(0);
         translateY.value = withSpring(0);
+        runOnJS(setIsZoomed)(false);
       } else {
         scale.value = withSpring(2.2);
+        runOnJS(setIsZoomed)(true);
       }
     });
 

@@ -241,17 +241,13 @@ CREATE POLICY "groups_delete" ON public.groups
 -- 8. group_members policies
 DROP POLICY IF EXISTS "group_members_select" ON public.group_members;
 CREATE POLICY "group_members_select" ON public.group_members
-    FOR SELECT TO authenticated USING (
-        EXISTS (SELECT 1 FROM public.group_members WHERE group_id = group_members.group_id AND user_id = auth.uid()) OR
-        EXISTS (SELECT 1 FROM public.groups WHERE id = group_members.group_id AND creator_id = auth.uid())
-    );
+    FOR SELECT TO authenticated USING (true);
 
 DROP POLICY IF EXISTS "group_members_insert" ON public.group_members;
 CREATE POLICY "group_members_insert" ON public.group_members
     FOR INSERT TO authenticated WITH CHECK (
         auth.uid() = user_id OR
-        EXISTS (SELECT 1 FROM public.group_members WHERE group_id = group_members.group_id AND user_id = auth.uid() AND role = 'admin') OR
-        EXISTS (SELECT 1 FROM public.groups WHERE id = group_members.group_id AND creator_id = auth.uid())
+        EXISTS (SELECT 1 FROM public.groups WHERE id = group_id AND creator_id = auth.uid())
     );
 
 DROP POLICY IF EXISTS "group_members_update" ON public.group_members;
@@ -308,3 +304,23 @@ CREATE POLICY "group_snaps_delete" ON public.group_snaps
     FOR DELETE TO authenticated USING (
         EXISTS (SELECT 1 FROM public.group_members WHERE group_id = group_snaps.group_id AND user_id = auth.uid() AND role = 'admin')
     );
+
+-- PART 4: CREATE PERFORMANCE INDEXES
+CREATE INDEX IF NOT EXISTS idx_files_user_id ON public.files(user_id);
+CREATE INDEX IF NOT EXISTS idx_files_folder_id ON public.files(folder_id);
+CREATE INDEX IF NOT EXISTS idx_files_created_at ON public.files(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_group_members_group_id ON public.group_members(group_id);
+CREATE INDEX IF NOT EXISTS idx_group_members_user_id ON public.group_members(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_group_messages_group_id ON public.group_messages(group_id);
+CREATE INDEX IF NOT EXISTS idx_group_messages_created_at ON public.group_messages(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_friendships_user_a ON public.friendships(user_a);
+CREATE INDEX IF NOT EXISTS idx_friendships_user_b ON public.friendships(user_b);
+
+CREATE INDEX IF NOT EXISTS idx_friend_requests_receiver_id ON public.friend_requests(receiver_id);
+CREATE INDEX IF NOT EXISTS idx_friend_requests_sender_id ON public.friend_requests(sender_id);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON public.notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON public.notifications(is_read);

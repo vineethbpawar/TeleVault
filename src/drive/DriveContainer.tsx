@@ -1172,36 +1172,54 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
         {/* Folders Section */}
         {processedFolders.length > 0 && (
           <View>
-            <Text style={styles.sectionTitle}>Folders</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.foldersScroll}
-            >
-              {processedFolders.map(folder => (
-                <TouchableOpacity
-                  key={folder.id}
-                  style={styles.gridFolderCard}
-                  onPress={() => handleEnterFolder(folder)}
-                  onLongPress={() => handleSelectItemOption('folder', folder.id, folder.name)}
-                >
-                  <Folder size={18} color="#FFFC00" style={{ marginRight: 8 }} />
-                  <Text style={styles.gridFolderName} numberOfLines={1}>{folder.name}</Text>
+            <Text style={[styles.sectionTitle, { marginHorizontal: 0 }]}>Folders</Text>
+            {viewMode === 'list' ? (
+              <View style={styles.foldersListContainer}>
+                {processedFolders.map(folder => (
                   <TouchableOpacity
-                    style={styles.gridFolderMore}
-                    onPress={() => handleSelectItemOption('folder', folder.id, folder.name)}
+                    key={folder.id}
+                    style={styles.listFolderCard}
+                    onPress={() => handleEnterFolder(folder)}
+                    onLongPress={() => handleSelectItemOption('folder', folder.id, folder.name)}
                   >
-                    <MoreVertical size={14} color="#8E8E93" />
+                    <Folder size={18} color="#FFFC00" style={{ marginRight: 12 }} />
+                    <Text style={styles.gridFolderName} numberOfLines={1}>{folder.name}</Text>
+                    <TouchableOpacity
+                      style={styles.gridFolderMore}
+                      onPress={() => handleSelectItemOption('folder', folder.id, folder.name)}
+                    >
+                      <MoreVertical size={14} color="#8E8E93" />
+                    </TouchableOpacity>
                   </TouchableOpacity>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.foldersGridContainer}>
+                {processedFolders.map(folder => (
+                  <TouchableOpacity
+                    key={folder.id}
+                    style={styles.gridFolderCardVertical}
+                    onPress={() => handleEnterFolder(folder)}
+                    onLongPress={() => handleSelectItemOption('folder', folder.id, folder.name)}
+                  >
+                    <Folder size={18} color="#FFFC00" style={{ marginRight: 8 }} />
+                    <Text style={styles.gridFolderName} numberOfLines={1}>{folder.name}</Text>
+                    <TouchableOpacity
+                      style={styles.gridFolderMore}
+                      onPress={() => handleSelectItemOption('folder', folder.id, folder.name)}
+                    >
+                      <MoreVertical size={14} color="#8E8E93" />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
         {/* Files Section Title */}
         {processedFiles.length > 0 && (
-          <Text style={styles.sectionTitle}>Files</Text>
+          <Text style={[styles.sectionTitle, { marginHorizontal: 0 }]}>Files</Text>
         )}
       </View>
     );
@@ -2035,6 +2053,42 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 12,
     fontWeight: '800',
+  },
+  foldersListContainer: {
+    flexDirection: 'column',
+    width: '100%',
+    marginBottom: 8,
+  },
+  listFolderCard: {
+    height: 48,
+    backgroundColor: '#1E1E1E',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    width: '100%',
+  },
+  foldersGridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 8,
+  },
+  gridFolderCardVertical: {
+    width: '48.5%',
+    height: 48,
+    backgroundColor: '#1E1E1E',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    marginBottom: 10,
   },
   gridFolderCard: {
     width: 140,
