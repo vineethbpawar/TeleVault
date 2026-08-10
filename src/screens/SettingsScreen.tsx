@@ -108,6 +108,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [adminAuthModalVisible, setAdminAuthModalVisible] = useState(false);
   const [adminTapCount, setAdminTapCount] = useState(0);
   const [demoTapCount, setDemoTapCount] = useState(0);
+  const [demoModeActive, setDemoModeActive] = useState(false);
 
   // Profile States & Rewarded Ad
   const [username, setUsername] = useState('');
@@ -352,6 +353,13 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       loadSettingsData();
     }
   }, [isFocused]);
+
+  useEffect(() => {
+    try {
+      const { isMarketingMode } = require('../marketing/MarketingMode');
+      setDemoModeActive(isMarketingMode());
+    } catch (_) {}
+  }, []);
 
   const handleSaveProfile = () => {
     if (!username.trim()) {
@@ -1416,8 +1424,10 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                       setDemoTapCount(0);
                       const { isMarketingMode, setRuntimeMarketingMode } = require('../marketing/MarketingMode');
                       const currentlyOn = isMarketingMode();
-                      await setRuntimeMarketingMode(!currentlyOn);
-                      showToast(!currentlyOn ? 'Demo Mode Activated!' : 'Demo Mode Deactivated!');
+                      const nextVal = !currentlyOn;
+                      await setRuntimeMarketingMode(nextVal);
+                      setDemoModeActive(nextVal);
+                      showToast(nextVal ? 'Demo Mode Activated!' : 'Demo Mode Deactivated!');
                     } else {
                       setDemoTapCount(nextCount);
                     }
@@ -1429,14 +1439,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 <View style={styles.itemMeta}>
                   <Text style={styles.itemTitle}>TeleVault</Text>
                   <Text style={styles.itemSubtitle}>
-                    Version 1.0.0 {(() => {
-                      try {
-                        const { isMarketingMode } = require('../marketing/MarketingMode');
-                        return isMarketingMode() ? '(Demo Mode)' : '(Production Release)';
-                      } catch (_) {
-                        return '(Production Release)';
-                      }
-                    })()}
+                    Version 1.0.0 {demoModeActive ? '(Demo Mode)' : '(Production Release)'}
                   </Text>
                   <Text style={styles.aboutText}>
                     TeleVault is a Snapchat-inspired camera, memories, and drive vault app powered by your own private Telegram cloud storage bot. Built with React Native & Expo.
