@@ -65,7 +65,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       } else {
         video.pause();
       }
-    }, [isFocused, paused]);
+    }, [isFocused, paused, source]);
 
     return (
       <View style={[styles.container, style]}>
