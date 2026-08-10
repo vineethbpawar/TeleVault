@@ -52,6 +52,11 @@ export const fileService = {
   },
 
   async fetchMemories(): Promise<TeleVaultFile[]> {
+    if (process.env.EXPO_PUBLIC_MARKETING_MODE === 'true') {
+      const { getMarketingMemories } = require('../marketing/MarketingMode');
+      return getMarketingMemories();
+    }
+
     console.log("FETCHMEMORIES: fetchMemories starting");
     const { data: { session } } = await supabase.auth.getSession();
     const user = session?.user;
@@ -73,6 +78,11 @@ export const fileService = {
   },
 
   async fetchDriveFiles(folderId: string | null): Promise<TeleVaultFile[]> {
+    if (process.env.EXPO_PUBLIC_MARKETING_MODE === 'true') {
+      const { getMarketingDriveFiles } = require('../marketing/MarketingMode');
+      return getMarketingDriveFiles();
+    }
+
     const { data: { session } } = await supabase.auth.getSession();
     const user = session?.user;
     if (!user) throw new Error('Not logged in.');
@@ -100,6 +110,19 @@ export const fileService = {
   },
 
   async fetchDriveFolders(parentFolderId: string | null): Promise<TeleVaultFolder[]> {
+    if (process.env.EXPO_PUBLIC_MARKETING_MODE === 'true') {
+      return [
+        {
+          id: 'demo-folder-1',
+          user_id: 'demo-user-id',
+          name: 'Private Memories',
+          parent_folder_id: null,
+          is_private: true,
+          created_at: new Date().toISOString()
+        }
+      ] as any[];
+    }
+
     const { data: { session } } = await supabase.auth.getSession();
     const user = session?.user;
     if (!user) throw new Error('Not logged in.');

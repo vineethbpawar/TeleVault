@@ -62,7 +62,10 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "export:web": "expo export --platform web && cp public/manifest.json dist/ && cp public/_redirects dist/ && cp public/icon-192.png dist/ && cp public/icon-512.png dist/ && cp public/ads.txt dist/ && npx tsc public/sw.ts --outDir dist --lib webworker,es2022 --skipLibCheck --target es2022 --noEmit false --ignoreConfig"
+    "export:web": "expo export --platform web && cp public/manifest.json dist/ && cp public/_redirects dist/ && cp public/icon-192.png dist/ && cp public/icon-512.png dist/ && cp public/ads.txt dist/ && npx tsc public/sw.ts --outDir dist --lib webworker,es2022 --skipLibCheck --target es2022 --noEmit false --ignoreConfig",
+    "marketing:setup": "node scripts/marketingSetup.js",
+    "marketing:reset": "node scripts/marketingReset.js",
+    "marketing:check": "node scripts/marketingCheck.js"
   },
   "private": true
 }
