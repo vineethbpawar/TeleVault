@@ -20,62 +20,15 @@ const { width, height } = Dimensions.get('window');
 const ViewerItem = React.memo<{
   file: any;
   isActive: boolean;
-  isPreload: boolean;
+  resolvedUri: string | null;
+  mediaError: string | null;
   paused: boolean;
   onTapLeft: () => void;
   onTapRight: () => void;
   onHoldStart: () => void;
   onHoldEnd: () => void;
-}>(({ file, isActive, isPreload, paused, onTapLeft, onTapRight, onHoldStart, onHoldEnd }) => {
-  const [resolvedUri, setResolvedUri] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [mediaError, setMediaError] = useState<string | null>(null);
-
-
-
-  const lastFileIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-
-    if (!isActive && !isPreload) {
-      setLoading(true);
-      setResolvedUri(null);
-      lastFileIdRef.current = null;
-      return;
-    }
-
-    // If the file is the same and we already have resolved it, do not reload
-    if (resolvedUri && file.id === lastFileIdRef.current) {
-      setLoading(false);
-      return;
-    }
-
-    // Reset state for new file
-    if (file.id !== lastFileIdRef.current) {
-      setResolvedUri(null);
-      setLoading(true);
-    }
-    setMediaError(null);
-    lastFileIdRef.current = file.id;
-
-    previewCacheService.resolveFilePreview(file).then(res => {
-      if (active) {
-        const uri = res.playableUri || res.previewUri;
-        if (uri) {
-          setResolvedUri(uri);
-          console.log(`[SINGLE_SUBSYSTEM_LOG] RESOLVED | file_id=${file.id} uri=${uri.slice(0, 60)}`);
-        } else if ((res as any).error) {
-          setMediaError((res as any).error);
-        }
-        setLoading(false);
-      }
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [file.id, isActive, isPreload, resolvedUri]);
+}>(({ file, isActive, resolvedUri, mediaError, paused, onTapLeft, onTapRight, onHoldStart, onHoldEnd }) => {
+  const loading = !resolvedUri && !mediaError;
 
   const renderPressableContent = (content: React.ReactNode) => {
     return (
@@ -213,6 +166,8 @@ const ViewerItem = React.memo<{
 }, (prev, next) => {
   return prev.file.id === next.file.id &&
          prev.isActive === next.isActive &&
+         prev.resolvedUri === next.resolvedUri &&
+         prev.mediaError === next.mediaError &&
          prev.paused === next.paused;
 });
 
@@ -254,6 +209,46 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showInterstitialModal, setShowInterstitialModal] = useState(false);
+
+  const [resolvedUris, setResolvedUris] = useState<Record<string, string>>({});
+  const [mediaErrors, setMediaErrors] = useState<Record<string, string>>({});
+  const resolvedUrisRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    const toResolve = [
+      localFiles[currentIndex],
+      localFiles[currentIndex + 1],
+      localFiles[currentIndex + 2],
+      localFiles[currentIndex + 3],
+      localFiles[currentIndex - 1],
+    ].filter(Boolean);
+
+    toResolve.forEach(file => {
+      if (resolvedUrisRef.current[file.id]) return; // already resolved/resolving
+      resolvedUrisRef.current[file.id] = 'pending';
+
+      previewCacheService.resolveFilePreview(file).then(res => {
+        const uri = res.playableUri || res.previewUri;
+        if (uri) {
+          resolvedUrisRef.current[file.id] = uri;
+          setResolvedUris(prev => ({
+            ...prev,
+            [file.id]: uri
+          }));
+        } else if ((res as any).error) {
+          resolvedUrisRef.current[file.id] = 'error';
+          setMediaErrors(prev => ({
+            ...prev,
+            [file.id]: (res as any).error
+          }));
+        } else {
+          delete resolvedUrisRef.current[file.id];
+        }
+      }).catch(err => {
+        delete resolvedUrisRef.current[file.id];
+      });
+    });
+  }, [currentIndex, localFiles]);
 
   useEffect(() => {
     const { adService } = require('../services/adService');
@@ -590,7 +585,8 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
         <ViewerItem
           file={activeFile}
           isActive={true}
-          isPreload={false}
+          resolvedUri={resolvedUris[activeFile.id] || null}
+          mediaError={mediaErrors[activeFile.id] || null}
           paused={isHoldActive || isMenuOpen || showInterstitialModal}
           onTapLeft={goToPrevious}
           onTapRight={goToNext}
@@ -598,64 +594,6 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
           onHoldEnd={() => setIsHoldActive(false)}
         />
       </Animated.View>
-
-      {/* Ultra-Fast Multi-Snap Preloader (Preloads +1, +2, +3 ahead in background) */}
-      {currentIndex < localFiles.length - 1 && (
-        <View style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}>
-          <ViewerItem
-            file={localFiles[currentIndex + 1]}
-            isActive={false}
-            isPreload={true}
-            paused={true}
-            onTapLeft={() => {}}
-            onTapRight={() => {}}
-            onHoldStart={() => {}}
-            onHoldEnd={() => {}}
-          />
-        </View>
-      )}
-      {currentIndex < localFiles.length - 2 && (
-        <View style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}>
-          <ViewerItem
-            file={localFiles[currentIndex + 2]}
-            isActive={false}
-            isPreload={true}
-            paused={true}
-            onTapLeft={() => {}}
-            onTapRight={() => {}}
-            onHoldStart={() => {}}
-            onHoldEnd={() => {}}
-          />
-        </View>
-      )}
-      {currentIndex < localFiles.length - 3 && (
-        <View style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}>
-          <ViewerItem
-            file={localFiles[currentIndex + 3]}
-            isActive={false}
-            isPreload={true}
-            paused={true}
-            onTapLeft={() => {}}
-            onTapRight={() => {}}
-            onHoldStart={() => {}}
-            onHoldEnd={() => {}}
-          />
-        </View>
-      )}
-      {currentIndex > 0 && (
-        <View style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}>
-          <ViewerItem
-            file={localFiles[currentIndex - 1]}
-            isActive={false}
-            isPreload={true}
-            paused={true}
-            onTapLeft={() => {}}
-            onTapRight={() => {}}
-            onHoldStart={() => {}}
-            onHoldEnd={() => {}}
-          />
-        </View>
-      )}
 
       {/* Top HUD (Details and close button) */}
       {!isHoldActive && !isMenuOpen && (
