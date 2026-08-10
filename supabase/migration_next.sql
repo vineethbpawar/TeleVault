@@ -220,7 +220,7 @@ DROP POLICY IF EXISTS "groups_select" ON public.groups;
 CREATE POLICY "groups_select" ON public.groups
     FOR SELECT TO authenticated USING (
         auth.uid() = creator_id OR 
-        EXISTS (SELECT 1 FROM public.group_members WHERE group_id = id AND user_id = auth.uid())
+        EXISTS (SELECT 1 FROM public.group_members WHERE group_id = groups.id AND user_id = auth.uid())
     );
 
 DROP POLICY IF EXISTS "groups_insert" ON public.groups;
@@ -231,7 +231,7 @@ DROP POLICY IF EXISTS "groups_update" ON public.groups;
 CREATE POLICY "groups_update" ON public.groups
     FOR UPDATE TO authenticated USING (
         auth.uid() = creator_id OR 
-        EXISTS (SELECT 1 FROM public.group_members WHERE group_id = id AND user_id = auth.uid() AND role = 'admin')
+        EXISTS (SELECT 1 FROM public.group_members WHERE group_id = groups.id AND user_id = auth.uid() AND role = 'admin')
     );
 
 DROP POLICY IF EXISTS "groups_delete" ON public.groups;
