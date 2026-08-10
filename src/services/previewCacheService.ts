@@ -134,13 +134,9 @@ export const previewCacheService = {
    * Call this early (on app start / tab focus) so MemoryItem gets instant
    * thumbnails without waiting for resolveFilePreview to run.
    */
-  async prewarmFromIndexedDB(files: { id: string; telegram_file_id?: string | null; large_file_id?: string | null }[]): Promise<void> {
-    if (Platform.OS !== 'web') return;
+  async prewarmBatch(files: { id: string; telegram_file_id?: string | null; large_file_id?: string | null }[]): Promise<void> {
     const { getWebBlob } = require('./webBlobStore');
-    // Only pre-warm the top 45 items to prevent IndexedDB transaction bottlenecks with large galleries
-    const limitedFiles = files.slice(0, 45);
-    const tasks = limitedFiles.map(async (file) => {
-      // Skip files already in memory cache
+    const tasks = files.map(async (file) => {
       const cacheKey = file.id;
       if (inMemoryBlobCache.has(cacheKey)) return;
 
@@ -177,6 +173,28 @@ export const previewCacheService = {
     for (let i = 0; i < tasks.length; i += BATCH) {
       await Promise.allSettled(tasks.slice(i, i + BATCH));
     }
+  },
+
+  async prewarmFromIndexedDB(files: { id: string; telegram_file_id?: string | null; large_file_id?: string | null }[]): Promise<void> {
+    if (Platform.OS !== 'web') return;
+    
+    // 1. Immediately prewarm the top 45 files for instant initial view render
+    const initialBatch = files.slice(0, 45);
+    await this.prewarmBatch(initialBatch);
+
+    // 2. Lazily prewarm the rest in chunks of 50, spaced out to prevent database queue blocks
+    const remaining = files.slice(45);
+    if (remaining.length === 0) return;
+
+    (async () => {
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < remaining.length; i += CHUNK_SIZE) {
+        const chunk = remaining.slice(i, i + CHUNK_SIZE);
+        // Wait 1.5 seconds between chunks to avoid UI/IndexedDB concurrency bottleneck
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        await this.prewarmBatch(chunk);
+      }
+    })();
   },
 
   async getCachedPreview(fileId: string): Promise<string | null> {

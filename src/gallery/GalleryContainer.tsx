@@ -102,8 +102,7 @@ export const GalleryContainer: React.FC<GalleryContainerProps> = ({ navigation, 
       // Pre-warm IndexedDB → in-memory blob cache BEFORE setState so MemoryItem
       // gets instant thumbnails on first render (locally-saved snaps only, no network)
       if (Platform.OS === 'web' && data.length > 0) {
-        const toPrewarm = data.slice(0, 45);
-        previewCacheService.prewarmFromIndexedDB(toPrewarm).catch(() => {});
+        previewCacheService.prewarmFromIndexedDB(data).catch(() => {});
       }
 
       setItems(data);
