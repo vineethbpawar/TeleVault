@@ -125,7 +125,7 @@ export const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
 
     return () => {
       if (subscription) {
-        subscription.unsubscribe();
+        supabase.removeChannel(subscription);
       }
     };
   }, [groupId]);
