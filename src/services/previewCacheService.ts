@@ -512,10 +512,23 @@ export const previewCacheService = {
 
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
-          if (file.telegram_file_id && typeof resolvedLocalUri === 'string' && resolvedLocalUri.startsWith('blob:')) {
+          if (typeof resolvedLocalUri === 'string' && resolvedLocalUri.startsWith('blob:')) {
             resolvedLocalUri = null;
           }
         }
+      }
+
+      if (!resolvedLocalUri && Platform.OS === 'web' && file.id) {
+        try {
+          const cached = await this.getCachedPreview(file.id);
+          if (cached) {
+            return {
+              type: 'image',
+              previewUri: cached,
+              fallbackIcon,
+            };
+          }
+        } catch (_) {}
       }
 
       if (resolvedLocalUri) {
@@ -648,10 +661,19 @@ export const previewCacheService = {
       let resolvedLocalUri = file.local_uri || file.overlay_metadata?.local_uri;
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
-          if (file.telegram_file_id && typeof resolvedLocalUri === 'string' && resolvedLocalUri.startsWith('blob:')) {
+          if (typeof resolvedLocalUri === 'string' && resolvedLocalUri.startsWith('blob:')) {
             resolvedLocalUri = null;
           }
         }
+      }
+
+      if (!resolvedLocalUri && Platform.OS === 'web' && file.id) {
+        try {
+          const cached = await this.getCachedPreview(file.id);
+          if (cached) {
+            playableUri = cached;
+          }
+        } catch (_) {}
       }
       if (resolvedLocalUri) {
         if (Platform.OS === 'web') {
