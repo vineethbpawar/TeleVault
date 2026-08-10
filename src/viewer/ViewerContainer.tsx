@@ -33,16 +33,31 @@ const ViewerItem = React.memo<{
 
 
 
+  const lastFileIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     let active = true;
 
     if (!isActive && !isPreload) {
       setLoading(true);
+      setResolvedUri(null);
+      lastFileIdRef.current = null;
       return;
     }
 
-    setLoading(true);
+    // If the file is the same and we already have resolved it, do not reload
+    if (resolvedUri && file.id === lastFileIdRef.current) {
+      setLoading(false);
+      return;
+    }
+
+    // Reset state for new file
+    if (file.id !== lastFileIdRef.current) {
+      setResolvedUri(null);
+      setLoading(true);
+    }
     setMediaError(null);
+    lastFileIdRef.current = file.id;
 
     previewCacheService.resolveFilePreview(file).then(res => {
       if (active) {
@@ -60,7 +75,7 @@ const ViewerItem = React.memo<{
     return () => {
       active = false;
     };
-  }, [file, isActive, isPreload]);
+  }, [file.id, isActive, isPreload, resolvedUri]);
 
   const renderPressableContent = (content: React.ReactNode) => {
     return (
