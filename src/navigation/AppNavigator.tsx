@@ -384,7 +384,6 @@ export const AppNavigator: React.FC = () => {
 
               <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
               <Stack.Screen name="TrustedDevices" component={TrustedDevicesScreen} />
-              <Stack.Screen name="LegalAndSupport" component={LegalAndSupportScreen} />
               <Stack.Screen
                 name="MemoriesViewer"
                 component={MemoriesViewerScreen}
@@ -400,6 +399,7 @@ export const AppNavigator: React.FC = () => {
         ) : (
           <Stack.Screen name="Auth" component={AuthNavigator} />
         )}
+        <Stack.Screen name="LegalAndSupport" component={LegalAndSupportScreen} />
       </Stack.Navigator>
       </Suspense>
 

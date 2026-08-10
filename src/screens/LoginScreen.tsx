@@ -112,6 +112,16 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.signupText}>Sign Up</Text>
             </TouchableOpacity>
           </View>
+
+          <View style={styles.legalFooter}>
+            <TouchableOpacity onPress={() => (navigation.getParent() as any)?.navigate('LegalAndSupport', { initialTab: 'privacy' })}>
+              <Text style={styles.legalLinkText}>Privacy Policy</Text>
+            </TouchableOpacity>
+            <Text style={styles.legalSeparator}>•</Text>
+            <TouchableOpacity onPress={() => (navigation.getParent() as any)?.navigate('LegalAndSupport', { initialTab: 'terms' })}>
+              <Text style={styles.legalLinkText}>Terms of Service</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -184,7 +194,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  forgotPasswordContainer: {
+   forgotPasswordContainer: {
     alignSelf: 'flex-end',
     marginTop: 8,
     marginBottom: 16,
@@ -193,6 +203,23 @@ const styles = StyleSheet.create({
     color: '#FFFC00',
     fontSize: 13,
     fontWeight: '600',
+  },
+  legalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 24,
+    opacity: 0.65,
+  },
+  legalLinkText: {
+    color: '#8E8E93',
+    fontSize: 12,
+    textDecorationLine: 'underline',
+  },
+  legalSeparator: {
+    color: '#8E8E93',
+    marginHorizontal: 8,
+    fontSize: 12,
   },
 });
 
