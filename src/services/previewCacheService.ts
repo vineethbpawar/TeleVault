@@ -252,18 +252,46 @@ export const previewCacheService = {
     }
   },
 
-  async setCachedPreview(fileId: string, url: string): Promise<void> {
+  async setCachedPreview(fileId: string, url: string, dbId?: string): Promise<void> {
     try {
       if (Platform.OS === 'web') {
-        if (url && url.startsWith('blob:')) {
+        if (url) {
           inMemoryBlobCache.set(fileId, url);
-          try {
-            const res = await fetch(url);
-            const blob = await res.blob();
-            const { setWebBlob } = require('./webBlobStore');
-            await setWebBlob(fileId, blob);
-            await setWebBlob('preview_' + fileId, blob);
-          } catch (_) {}
+          if (dbId) {
+            inMemoryBlobCache.set(dbId, url);
+          }
+          if (url.startsWith('blob:')) {
+            try {
+              const res = await fetch(url);
+              const blob = await res.blob();
+              const { setWebBlob } = require('./webBlobStore');
+              await setWebBlob(fileId, blob);
+              await setWebBlob('preview_' + fileId, blob);
+              if (dbId) {
+                await setWebBlob(dbId, blob);
+                await setWebBlob('preview_' + dbId, blob);
+              }
+            } catch (_) {}
+          } else if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/')) {
+            try {
+              const res = await fetch(url);
+              if (res.ok) {
+                const blob = await res.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                inMemoryBlobCache.set(fileId, blobUrl);
+                if (dbId) {
+                  inMemoryBlobCache.set(dbId, blobUrl);
+                }
+                const { setWebBlob } = require('./webBlobStore');
+                await setWebBlob(fileId, blob);
+                await setWebBlob('preview_' + fileId, blob);
+                if (dbId) {
+                  await setWebBlob(dbId, blob);
+                  await setWebBlob('preview_' + dbId, blob);
+                }
+              }
+            } catch (_) {}
+          }
         }
         return;
       }
@@ -371,7 +399,7 @@ export const previewCacheService = {
       try {
         const url = await telegramService.getTelegramFileDownloadUrl(file.telegram_file_id, signal);
         if (url) {
-          await this.setCachedPreview(file.telegram_file_id, url);
+          await this.setCachedPreview(file.telegram_file_id, url, file.id);
           return url;
         }
       } catch (err) {
@@ -438,6 +466,23 @@ export const previewCacheService = {
           }
           if (previewUri) {
             await cacheSetItem(cacheKey, previewUri);
+            if (Platform.OS === 'web' && file.id) {
+              try {
+                const res = await fetch(previewUri);
+                if (res.ok) {
+                  const blob = await res.blob();
+                  const { setWebBlob } = require('./webBlobStore');
+                  await setWebBlob(file.id, blob);
+                  await setWebBlob('thumb_' + file.id, blob);
+                  const blobUrl = URL.createObjectURL(blob);
+                  inMemoryBlobCache.set(file.id, blobUrl);
+                  if (file.telegram_file_id) {
+                    inMemoryBlobCache.set(file.telegram_file_id, blobUrl);
+                  }
+                  previewUri = blobUrl;
+                }
+              } catch (_) {}
+            }
             return { type: 'image', previewUri, fallbackIcon };
           }
         } catch (e) {
@@ -524,7 +569,7 @@ export const previewCacheService = {
               file.mime_type
             );
             if (rebuildResult.success && rebuildResult.localUri) {
-              await this.setCachedPreview(file.telegram_file_id, rebuildResult.localUri);
+              await this.setCachedPreview(file.telegram_file_id, rebuildResult.localUri, file.id);
               return {
                 type: 'image',
                 previewUri: rebuildResult.localUri,
@@ -559,7 +604,7 @@ export const previewCacheService = {
               previewUri = localCachePath;
             }
           }
-          await this.setCachedPreview(file.telegram_file_id, previewUri);
+          await this.setCachedPreview(file.telegram_file_id, previewUri, file.id);
           return {
             type: 'image',
             previewUri: previewUri,
@@ -629,7 +674,7 @@ export const previewCacheService = {
           if (rebuildResult.success && rebuildResult.localUri) {
             playableUri = rebuildResult.localUri;
             if (file.telegram_file_id && playableUri) {
-              await this.setCachedPreview(file.telegram_file_id, playableUri);
+              await this.setCachedPreview(file.telegram_file_id, playableUri, file.id);
             }
           }
         } catch (e) {
@@ -672,7 +717,7 @@ export const previewCacheService = {
                 }
               }
               if (playableUri) {
-                await this.setCachedPreview(file.telegram_file_id, playableUri);
+                await this.setCachedPreview(file.telegram_file_id, playableUri, file.id);
               }
             }
           }
@@ -727,6 +772,23 @@ export const previewCacheService = {
               }
               if (previewUri) {
                 await cacheSetItem(cacheKey, previewUri);
+                if (Platform.OS === 'web' && file.id) {
+                  try {
+                    const res = await fetch(previewUri);
+                    if (res.ok) {
+                      const blob = await res.blob();
+                      const { setWebBlob } = require('./webBlobStore');
+                      await setWebBlob(file.id, blob);
+                      await setWebBlob('thumb_' + file.id, blob);
+                      const blobUrl = URL.createObjectURL(blob);
+                      inMemoryBlobCache.set(file.id, blobUrl);
+                      if (file.telegram_file_id) {
+                        inMemoryBlobCache.set(file.telegram_file_id, blobUrl);
+                      }
+                      previewUri = blobUrl;
+                    }
+                  } catch (_) {}
+                }
                 hasLocalThumb = true;
               }
             }
@@ -804,6 +866,20 @@ export const previewCacheService = {
               const thumbDataUrl = await getWebVideoThumbnail(playableUri!);
               if (file.id) {
                 await cacheSetItem(`televault_vid_thumb_${file.id}`, thumbDataUrl);
+                try {
+                  const res = await fetch(thumbDataUrl);
+                  if (res.ok) {
+                    const blob = await res.blob();
+                    const { setWebBlob } = require('./webBlobStore');
+                    await setWebBlob(file.id, blob);
+                    await setWebBlob('thumb_' + file.id, blob);
+                    const blobUrl = URL.createObjectURL(blob);
+                    inMemoryBlobCache.set(file.id, blobUrl);
+                    if (file.telegram_file_id) {
+                      inMemoryBlobCache.set(file.telegram_file_id, blobUrl);
+                    }
+                  }
+                } catch (_) {}
               }
               generatedUri = thumbDataUrl;
             } else {
@@ -933,7 +1009,7 @@ export const previewCacheService = {
               previewUri = localCachePath;
             }
           }
-          await this.setCachedPreview(file.telegram_file_id, previewUri);
+          await this.setCachedPreview(file.telegram_file_id, previewUri, file.id);
           return {
             type: fileType,
             previewUri: previewUri,
