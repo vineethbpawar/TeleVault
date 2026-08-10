@@ -24,6 +24,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   if (Platform.OS === 'web') {
     const videoRef = useRef<HTMLVideoElement>(null);
 
+    // 1. Source loading & cleanup effect (runs only when source changes)
     useEffect(() => {
       const video = videoRef.current;
       if (!video) return;
@@ -34,19 +35,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       video.addEventListener('error', handleError);
 
-      if (isFocused && !paused) {
-        if (video.src !== source) {
-          video.src = source;
-          video.load();
-        }
-        video.muted = false;
-        video.play().catch(() => {
-          // Auto-fallback to muted if blocked
-          video.muted = true;
-          video.play().catch(() => {});
-        });
-      } else {
-        video.pause();
+      if (video.src !== source) {
+        video.src = source;
+        video.load();
       }
 
       return () => {
@@ -57,7 +48,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           video.load();
         } catch (_) {}
       };
-    }, [source, isFocused, paused]);
+    }, [source]);
+
+    // 2. Play / pause control effect (runs when isFocused or paused changes)
+    useEffect(() => {
+      const video = videoRef.current;
+      if (!video) return;
+
+      if (isFocused && !paused) {
+        video.muted = false;
+        video.play().catch(() => {
+          // Auto-fallback to muted if blocked
+          video.muted = true;
+          video.play().catch(() => {});
+        });
+      } else {
+        video.pause();
+      }
+    }, [isFocused, paused]);
 
     return (
       <View style={[styles.container, style]}>
@@ -82,6 +90,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     playerInstance.loop = true;
   });
 
+  // 1. Play / pause control effect (runs when player instance, isFocused, or paused changes)
   useEffect(() => {
     if (!player) return;
 
@@ -90,15 +99,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     } else {
       player.pause();
     }
+  }, [player, isFocused, paused]);
 
+  // 2. Cleanup / unload stream on unmount or when source changes
+  useEffect(() => {
     return () => {
-      try {
-        player.pause();
-        player.muted = true;
-        player.replace(null); // Unload stream resources instantly
-      } catch (_) {}
+      if (player) {
+        try {
+          player.pause();
+          player.muted = true;
+          player.replace(null); // Unload stream resources instantly
+        } catch (_) {}
+      }
     };
-  }, [player, source, isFocused, paused]);
+  }, [player, source]);
 
   return (
     <View style={[styles.container, style]}>
