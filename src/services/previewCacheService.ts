@@ -137,7 +137,9 @@ export const previewCacheService = {
   async prewarmFromIndexedDB(files: { id: string; telegram_file_id?: string | null; large_file_id?: string | null }[]): Promise<void> {
     if (Platform.OS !== 'web') return;
     const { getWebBlob } = require('./webBlobStore');
-    const tasks = files.map(async (file) => {
+    // Only pre-warm the top 45 items to prevent IndexedDB transaction bottlenecks with large galleries
+    const limitedFiles = files.slice(0, 45);
+    const tasks = limitedFiles.map(async (file) => {
       // Skip files already in memory cache
       const cacheKey = file.id;
       if (inMemoryBlobCache.has(cacheKey)) return;
