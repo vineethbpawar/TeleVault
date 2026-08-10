@@ -1409,35 +1409,35 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.card}>
             <View style={styles.itemRowNoPress}>
               <View style={styles.itemLeft}>
-                <TeleVaultLogo size={24} style={{ marginRight: 4 }} />
+                <TouchableOpacity
+                  onPress={async () => {
+                    const nextCount = demoTapCount + 1;
+                    if (nextCount >= 5) {
+                      setDemoTapCount(0);
+                      const { isMarketingMode, setRuntimeMarketingMode } = require('../marketing/MarketingMode');
+                      const currentlyOn = isMarketingMode();
+                      await setRuntimeMarketingMode(!currentlyOn);
+                      showToast(!currentlyOn ? 'Demo Mode Activated!' : 'Demo Mode Deactivated!');
+                    } else {
+                      setDemoTapCount(nextCount);
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <TeleVaultLogo size={24} style={{ marginRight: 4 }} />
+                </TouchableOpacity>
                 <View style={styles.itemMeta}>
                   <Text style={styles.itemTitle}>TeleVault</Text>
-                  <TouchableOpacity
-                    onPress={async () => {
-                      const nextCount = demoTapCount + 1;
-                      if (nextCount >= 5) {
-                        setDemoTapCount(0);
-                        const { isMarketingMode, setRuntimeMarketingMode } = require('../marketing/MarketingMode');
-                        const currentlyOn = isMarketingMode();
-                        await setRuntimeMarketingMode(!currentlyOn);
-                        showToast(!currentlyOn ? 'Demo Mode Activated!' : 'Demo Mode Deactivated!');
-                      } else {
-                        setDemoTapCount(nextCount);
+                  <Text style={styles.itemSubtitle}>
+                    Version 1.0.0 {(() => {
+                      try {
+                        const { isMarketingMode } = require('../marketing/MarketingMode');
+                        return isMarketingMode() ? '(Demo Mode)' : '(Production Release)';
+                      } catch (_) {
+                        return '(Production Release)';
                       }
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.itemSubtitle}>
-                      Version 1.0.0 {(() => {
-                        try {
-                          const { isMarketingMode } = require('../marketing/MarketingMode');
-                          return isMarketingMode() ? '(Demo Mode)' : '(Production Release)';
-                        } catch (_) {
-                          return '(Production Release)';
-                        }
-                      })()}
-                    </Text>
-                  </TouchableOpacity>
+                    })()}
+                  </Text>
                   <Text style={styles.aboutText}>
                     TeleVault is a Snapchat-inspired camera, memories, and drive vault app powered by your own private Telegram cloud storage bot. Built with React Native & Expo.
                   </Text>
