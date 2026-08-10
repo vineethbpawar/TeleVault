@@ -52,8 +52,8 @@ export const fileService = {
   },
 
   async fetchMemories(): Promise<TeleVaultFile[]> {
-    if (process.env.EXPO_PUBLIC_MARKETING_MODE === 'true') {
-      const { getMarketingMemories } = require('../marketing/MarketingMode');
+    const { isMarketingMode, getMarketingMemories } = require('../marketing/MarketingMode');
+    if (isMarketingMode()) {
       return getMarketingMemories();
     }
 
@@ -78,8 +78,8 @@ export const fileService = {
   },
 
   async fetchDriveFiles(folderId: string | null): Promise<TeleVaultFile[]> {
-    if (process.env.EXPO_PUBLIC_MARKETING_MODE === 'true') {
-      const { getMarketingDriveFiles } = require('../marketing/MarketingMode');
+    const { isMarketingMode, getMarketingDriveFiles } = require('../marketing/MarketingMode');
+    if (isMarketingMode()) {
       return getMarketingDriveFiles();
     }
 
@@ -110,7 +110,8 @@ export const fileService = {
   },
 
   async fetchDriveFolders(parentFolderId: string | null): Promise<TeleVaultFolder[]> {
-    if (process.env.EXPO_PUBLIC_MARKETING_MODE === 'true') {
+    const { isMarketingMode } = require('../marketing/MarketingMode');
+    if (isMarketingMode()) {
       return [
         {
           id: 'demo-folder-1',

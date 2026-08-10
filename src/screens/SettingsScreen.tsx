@@ -107,6 +107,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
   const [adminAuthModalVisible, setAdminAuthModalVisible] = useState(false);
   const [adminTapCount, setAdminTapCount] = useState(0);
+  const [demoTapCount, setDemoTapCount] = useState(0);
 
   // Profile States & Rewarded Ad
   const [username, setUsername] = useState('');
@@ -1411,7 +1412,32 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 <TeleVaultLogo size={24} style={{ marginRight: 4 }} />
                 <View style={styles.itemMeta}>
                   <Text style={styles.itemTitle}>TeleVault</Text>
-                  <Text style={styles.itemSubtitle}>Version 1.0.0 (Production Release)</Text>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      const nextCount = demoTapCount + 1;
+                      if (nextCount >= 5) {
+                        setDemoTapCount(0);
+                        const { isMarketingMode, setRuntimeMarketingMode } = require('../marketing/MarketingMode');
+                        const currentlyOn = isMarketingMode();
+                        await setRuntimeMarketingMode(!currentlyOn);
+                        showToast(!currentlyOn ? 'Demo Mode Activated!' : 'Demo Mode Deactivated!');
+                      } else {
+                        setDemoTapCount(nextCount);
+                      }
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.itemSubtitle}>
+                      Version 1.0.0 {(() => {
+                        try {
+                          const { isMarketingMode } = require('../marketing/MarketingMode');
+                          return isMarketingMode() ? '(Demo Mode)' : '(Production Release)';
+                        } catch (_) {
+                          return '(Production Release)';
+                        }
+                      })()}
+                    </Text>
+                  </TouchableOpacity>
                   <Text style={styles.aboutText}>
                     TeleVault is a Snapchat-inspired camera, memories, and drive vault app powered by your own private Telegram cloud storage bot. Built with React Native & Expo.
                   </Text>

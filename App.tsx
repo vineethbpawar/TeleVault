@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastBanner } from './src/components/ToastBanner';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as ExpoSplash from 'expo-splash-screen';
+import { initMarketingMode } from './src/marketing/MarketingMode';
 
 // Keep the native splash screen visible while auth state loads (Native only).
 if (Platform.OS !== 'web') {
@@ -26,6 +27,8 @@ const linking = {
 
 export default function App() {
   useEffect(() => {
+    initMarketingMode().catch(() => {});
+    
     // Defer non-critical background initialization to improve PWA startup speed
     const timer = setTimeout(() => {
       // Initialize Google Mobile Ads SDK on native platforms
