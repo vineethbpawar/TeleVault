@@ -9,7 +9,6 @@ import { previewCacheService } from '../services/previewCacheService';
 import { fileService } from '../services/fileService';
 import { showToast } from '../components/ToastBanner';
 import { supabase } from '../lib/supabase';
-import AdBanner from '../components/AdBanner';
 
 
 const { width, height } = Dimensions.get('window');
@@ -208,7 +207,6 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
   const [isHoldActive, setIsHoldActive] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
-  const [showInterstitialModal, setShowInterstitialModal] = useState(false);
 
   const [resolvedUris, setResolvedUris] = useState<Record<string, string>>({});
   const [mediaErrors, setMediaErrors] = useState<Record<string, string>>({});
@@ -250,15 +248,7 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
     });
   }, [currentIndex, localFiles]);
 
-  useEffect(() => {
-    const { adService } = require('../services/adService');
-    const unsubscribe = adService.subscribe((shouldShow: boolean) => {
-      if (shouldShow) {
-        setShowInterstitialModal(true);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
+
 
   // Swipe-down-to-dismiss gesture setup
   const translateX = useRef(new Animated.Value(0)).current;
@@ -740,38 +730,6 @@ export const ViewerContainer: React.FC<ViewerContainerProps> = ({ files, initial
         </TouchableOpacity>
       </Modal>
 
-      {/* 15-Snap Interstitial Ad Modal */}
-      <Modal transparent visible={showInterstitialModal} animationType="fade">
-        <View style={styles.interstitialOverlay}>
-          <View style={styles.interstitialContent}>
-            <View style={styles.interstitialHeader}>
-              <View style={styles.adTag}>
-                <Text style={styles.adTagText}>SPONSORED</Text>
-              </View>
-              <TouchableOpacity 
-                style={styles.interstitialCloseBtn} 
-                onPress={() => setShowInterstitialModal(false)}
-              >
-                <X size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.interstitialTitle}>TeleVault Cloud Vault</Text>
-            <Text style={styles.interstitialSub}>Unlimited encrypted media cloud storage powered by Telegram</Text>
-
-            <View style={styles.interstitialBody}>
-              <AdBanner style={{ width: '100%' }} />
-            </View>
-
-            <TouchableOpacity 
-              style={styles.interstitialCtaBtn}
-              onPress={() => setShowInterstitialModal(false)}
-            >
-              <Text style={styles.interstitialCtaText}>Skip Ad & Continue Snaps</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </Animated.View>
     </View>
   );

@@ -19,7 +19,6 @@ import { previewCacheService } from '../services/previewCacheService';
 import VideoPlayer from '../components/VideoPlayer';
 import { ImageViewer } from '../viewer/ImageViewer';
 import { DocumentReaderModal } from '../components/DocumentReaderModal';
-import AdBanner from '../components/AdBanner';
 import { UploadQueueBadge } from '../components/UploadQueueBadge';
 import { RewardedAdModal } from '../components/RewardedAdModal';
 
@@ -1256,11 +1255,6 @@ export const DriveContainer: React.FC<DriveContainerProps> = ({ navigation, isFo
         >
           <CheckSquare size={18} color={isSelectionMode ? '#000000' : '#FFFFFF'} />
         </TouchableOpacity>
-      </View>
-
-      {/* Ad Banner Placement */}
-      <View style={{ paddingHorizontal: 16, marginBottom: 4 }}>
-        <AdBanner />
       </View>
 
       {/* Google Drive Tab Chips Row */}
