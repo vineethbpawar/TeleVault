@@ -28,32 +28,6 @@ export default function App() {
   useEffect(() => {
     // Defer non-critical background initialization to improve PWA startup speed
     const timer = setTimeout(() => {
-      // Initialize Google Mobile Ads SDK on native platforms
-      if (Platform.OS !== 'web') {
-        try {
-          const mobileAds = require('react-native-google-mobile-ads').default;
-          mobileAds().initialize().then((adapterStatuses: any) => {
-            console.log('[ADMOB] SDK initialized successfully:', adapterStatuses);
-          }).catch((err: any) => {
-            console.warn('[ADMOB] Initialization error:', err);
-          });
-        } catch (e) {
-          console.warn('[ADMOB] Failed to load react-native-google-mobile-ads:', e);
-        }
-      } else {
-        // Load Google AdSense script on Web/PWA dynamically to improve loading speed
-        try {
-          const script = document.createElement('script');
-          script.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5904116027634574";
-          script.async = true;
-          script.crossOrigin = "anonymous";
-          document.head.appendChild(script);
-          console.log('[ADSENSE] Script injected in background');
-        } catch (e) {
-          console.warn('[ADSENSE] Failed to inject AdSense script:', e);
-        }
-      }
-
       Promise.all([
         import('./src/services/backgroundUploadTask'),
         import('./src/services/uploadQueueService'),

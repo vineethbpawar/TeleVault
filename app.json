@@ -69,12 +69,6 @@
           "backgroundColor": "#0B0E1B"
         }
       ],
-      [
-        "react-native-google-mobile-ads",
-        {
-          "androidAppId": "ca-app-pub-5904116027634574~3205339681"
-        }
-      ],
       "expo-audio"
     ],
     "extra": {

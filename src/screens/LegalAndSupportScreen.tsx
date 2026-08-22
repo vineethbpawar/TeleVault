@@ -117,12 +117,7 @@ export const LegalAndSupportScreen: React.FC<Props> = ({ navigation, route }) =>
               All user uploaded media files are processed locally on your device and transmitted securely via encrypted Telegram Bot API channels. File metadata is indexed securely via Supabase PostgreSQL.
             </Text>
 
-            <Text style={styles.sectionHeading}>5. Advertising & Analytics</Text>
-            <Text style={styles.paragraph}>
-              If Google AdMob or third-party ad networks are integrated, anonymized ad IDs may be used to serve non-personalized or personalized ads in compliance with user consent preferences.
-            </Text>
-
-            <Text style={styles.sectionHeading}>6. Your Rights & Data Deletion</Text>
+            <Text style={styles.sectionHeading}>5. Your Rights & Data Deletion</Text>
             <Text style={styles.paragraph}>
               You have the right to request deletion of all your account data at any time directly through the "Delete All Data (Danger Zone)" option in TeleVault Settings or by contacting support@televault.app.
             </Text>
