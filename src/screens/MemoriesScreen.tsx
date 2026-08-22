@@ -7,7 +7,6 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MainTabParamList, AppStackParamList } from '../types/navigation';
 import { GalleryContainer } from '../gallery/GalleryContainer';
 import Screen from '../components/Screen';
-import AdBanner from '../components/AdBanner';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'MemoriesTab'>,

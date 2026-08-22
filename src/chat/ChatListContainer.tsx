@@ -11,7 +11,6 @@ import { groupService } from '../services/groupService';
 import { snapService } from '../services/snapService';
 import { supabase } from '../lib/supabase';
 import { showToast } from '../components/ToastBanner';
-import AdBanner from '../components/AdBanner';
 
 
 export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation, isFocused }) => {
@@ -382,11 +381,6 @@ export const ChatListContainer: React.FC<ChatListContainerProps> = ({ navigation
           </ScrollView>
         </View>
       )}
-
-      {/* Permanent Snapchat-style Ad Banner placement */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
-        <AdBanner />
-      </View>
 
       {/* Navigation tabs row */}
       <View style={styles.tabContainer}>
